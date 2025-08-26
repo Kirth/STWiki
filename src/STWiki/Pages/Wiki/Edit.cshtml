@@ -1,0 +1,117 @@
+@page "/wiki/{slug?}/edit"
+@model STWiki.Pages.Wiki.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "Create New Page" : $"Edit {Model.Title}";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>@(Model.IsNew ? "Create New Page" : "Edit Page")</h1>
+        <div>
+            @if (!Model.IsNew)
+            {
+                <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">Cancel</a>
+            }
+            else
+            {
+                <a asp-page="/Wiki/Index" class="btn btn-outline-secondary">Cancel</a>
+            }
+        </div>
+    </div>
+
+    @if (!ModelState.IsValid)
+    {
+        <div class="alert alert-danger">
+            <div asp-validation-summary="All"></div>
+        </div>
+    }
+
+    <form method="post" class="mb-4">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="mb-3">
+                    <label asp-for="Title" class="form-label">Page Title</label>
+                    <input asp-for="Title" class="form-control" placeholder="Enter page title..." />
+                    <span asp-validation-for="Title" class="text-danger"></span>
+                </div>
+
+                @if (Model.IsNew)
+                {
+                    <div class="mb-3">
+                        <label asp-for="Slug" class="form-label">URL Slug</label>
+                        <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                        <div class="form-text">Leave blank to auto-generate from title</div>
+                        <span asp-validation-for="Slug" class="text-danger"></span>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label asp-for="Summary" class="form-label">Summary (Optional)</label>
+                    <input asp-for="Summary" class="form-control" placeholder="Brief description of this page..." />
+                    <span asp-validation-for="Summary" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="BodyFormat" class="form-label">Content Format</label>
+                    <select asp-for="BodyFormat" class="form-select">
+                        <option value="markdown">Markdown</option>
+                        <option value="html">HTML</option>
+                        <option value="prosemirror">Rich Text (ProseMirror)</option>
+                    </select>
+                    <span asp-validation-for="BodyFormat" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Body" class="form-label">Content</label>
+                    @if (Model.BodyFormat == "prosemirror")
+                    {
+                        <div id="editor-container">
+                            <component type="typeof(STWiki.Components.Editor)" render-mode="ServerPrerendered" />
+                        </div>
+                        <textarea asp-for="Body" class="form-control d-none" rows="20"></textarea>
+                    }
+                    else
+                    {
+                        <textarea asp-for="Body" class="form-control" rows="20" placeholder="Enter your content here..."></textarea>
+                    }
+                    <span asp-validation-for="Body" class="text-danger"></span>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title">Page Information</h6>
+                        @if (!Model.IsNew)
+                        {
+                            <p class="small text-muted">
+                                <strong>Created:</strong> @Model.CreatedAt?.ToString("yyyy-MM-dd HH:mm")<br/>
+                                <strong>Last Updated:</strong> @Model.UpdatedAt?.ToString("yyyy-MM-dd HH:mm")<br/>
+                                <strong>Updated By:</strong> @Model.UpdatedBy
+                            </p>
+                        }
+                        
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-success">
+                                @(Model.IsNew ? "Create Page" : "Save Changes")
+                            </button>
+                            @if (!Model.IsNew)
+                            {
+                                <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm">View History</a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    @if (Model.BodyFormat == "prosemirror")
+    {
+        <script src="_framework/blazor.server.js"></script>
+        <script src="~/js/editor.bundle.js"></script>
+    }
+}

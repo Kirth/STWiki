@@ -1,0 +1,35 @@
+@page "/wiki"
+@model STWiki.Pages.Wiki.IndexModel
+@{
+    ViewData["Title"] = "Wiki Home";
+}
+
+<div class="wiki-container">
+    <h1>Wiki Home</h1>
+    
+    <div class="mb-3">
+        <a asp-page="/Wiki/View" asp-route-slug="main-page" class="btn btn-primary">Main Page</a>
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <a asp-page="/Wiki/New" class="btn btn-success">New Page</a>
+        }
+    </div>
+    
+    @if (Model.RecentPages?.Any() == true)
+    {
+        <h3>Recent Pages</h3>
+        <ul class="list-group">
+            @foreach (var wikiPage in Model.RecentPages)
+            {
+                <li class="list-group-item">
+                    <a asp-page="/Wiki/View" asp-route-slug="@wikiPage.Slug">@wikiPage.Title</a>
+                    <small class="text-muted">Updated @wikiPage.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</small>
+                </li>
+            }
+        </ul>
+    }
+    else
+    {
+        <p>No pages yet. <a asp-page="/Wiki/New">Create the first page!</a></p>
+    }
+</div>

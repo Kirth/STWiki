@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: stwiki
+      POSTGRES_USER: stwiki
+      POSTGRES_PASSWORD: stwiki
+    ports: ["5434:5432"]
+    volumes: ["pg_data:/var/lib/postgresql/data"]
+    networks:
+      - stwiki-network
+
+  dex:
+    image: ghcr.io/dexidp/dex:v2.37.0
+    command: ["dex", "serve", "/etc/dex/config.yaml", "--web-http-addr", "0.0.0.0:5556"]
+    volumes: 
+      - "./docker/dex/config.yaml:/etc/dex/config.yaml:ro"
+    ports: ["5556:5556"]
+    networks:
+      - stwiki-network
+
+  app:
+    build:
+      context: ./src/STWiki
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:5031
+      ConnectionStrings__Default: "Host=localhost:5434;Database=stwiki;Username=stwiki;Password=stwiki"
+      Auth__Authority: "http://localhost:5556/dex"
+    network_mode: host
+    volumes:
+      # Mount source for development
+      - ./src/STWiki:/src:cached
+      # NuGet package cache
+      - nuget_cache:/root/.nuget/packages
+    depends_on:
+      - db
+      - dex
+
+volumes:
+  pg_data:
+  nuget_cache:
+
+networks:
+  stwiki-network:
+    driver: bridge

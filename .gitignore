@@ -1,2 +1,91 @@
-*/bin/* 
-*/obj/*
+# .NET
+bin/
+obj/
+out/
+*.user
+*.suo
+*.cache
+*.docstates
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+[Bb]in/
+[Oo]bj/
+build/
+[Bb]uild.log
+[Bb]uild.wrn
+[Bb]uild.err
+
+# Visual Studio
+.vs/
+*.vscode/
+
+# User-specific files
+*.userprefs
+*.pidb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.DS_Store
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+!**/packages/repositories.config
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Docker
+.dockerignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Node.js (if any frontend build tools are added)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+*.coverage
+*.coveragexml
+
+# Secrets and credentials
+credentials.txt
+appsettings.Production.json
+*.pfx
+*.p12
+*.key
+*.pem

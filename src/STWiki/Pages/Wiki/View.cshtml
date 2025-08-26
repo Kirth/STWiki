@@ -1,0 +1,45 @@
+@page "/wiki/{slug}"
+@model STWiki.Pages.Wiki.ViewModel
+@{
+    ViewData["Title"] = Model.Page?.Title ?? "Page Not Found";
+}
+
+@if (Model.Page == null)
+{
+    <div class="alert alert-warning">
+        <h4>Page Not Found</h4>
+        <p>The page "@Model.Slug" does not exist.</p>
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <a asp-page="/Wiki/Edit" asp-route-slug="@Model.Slug" class="btn btn-primary">Create Page</a>
+        }
+    </div>
+}
+else
+{
+    <div class="wiki-page">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1>@Model.Page.Title</h1>
+            <div>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a asp-page="/Wiki/Edit" asp-route-slug="@Model.Slug" class="btn btn-sm btn-outline-primary">Edit</a>
+                }
+                <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-sm btn-outline-secondary">History</a>
+            </div>
+        </div>
+        
+        @if (!string.IsNullOrEmpty(Model.Page.Summary))
+        {
+            <p class="lead text-muted">@Model.Page.Summary</p>
+        }
+        
+        <div class="wiki-content">
+            @Html.Raw(Model.RenderedContent)
+        </div>
+        
+        <footer class="mt-4 pt-3 border-top text-muted small">
+            Last updated @Model.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Model.Page.UpdatedBy
+        </footer>
+    </div>
+}

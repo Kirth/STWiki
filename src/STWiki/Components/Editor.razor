@@ -1,0 +1,174 @@
+@using Microsoft.JSInterop
+@using System.Text.Json
+@using System.Text
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject HttpClient HttpClient
+
+<div class="editor-container">
+    <div class="editor-toolbar mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary" @onclick="SaveDraft" disabled="@(!IsReady)">
+                    Save Draft
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="CommitChanges" disabled="@(!IsReady)">
+                    Commit Changes
+                </button>
+            </div>
+            <div class="editor-status">
+                @if (IsReady)
+                {
+                    <span class="badge bg-success">Connected</span>
+                }
+                else
+                {
+                    <span class="badge bg-warning">Connecting...</span>
+                }
+            </div>
+        </div>
+    </div>
+    
+    <div id="@EditorElementId" class="editor-content border rounded p-3" style="min-height: 400px;">
+        Loading editor...
+    </div>
+    
+    @if (ConnectedUsers.Any())
+    {
+        <div class="editor-presence mt-2">
+            <small class="text-muted">
+                Connected: @string.Join(", ", ConnectedUsers)
+            </small>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid PageId { get; set; }
+    [Parameter] public string InitialContent { get; set; } = "";
+    [Parameter] public string YjsRoom { get; set; } = "";
+
+    private string EditorElementId = $"editor-{Guid.NewGuid()}";
+    private bool IsReady = false;
+    private List<string> ConnectedUsers = new();
+    private Timer? AutosaveTimer;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("initEditor", 
+                    EditorElementId, 
+                    InitialContent, 
+                    YjsRoom,
+                    "ws://localhost:1234",
+                    new { name = "User", email = "user@example.com" });
+                
+                IsReady = true;
+                StateHasChanged();
+                
+                // Start autosave timer
+                AutosaveTimer = new Timer(async _ => await AutoSave(), null, 
+                    TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(20));
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Editor initialization failed: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task SaveDraft()
+    {
+        if (!IsReady) return;
+        
+        try
+        {
+            var content = await JS.InvokeAsync<string>("getSnapshot");
+            var request = new { Content = content };
+            var json = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/autosave", httpContent);
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("Draft saved successfully");
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Draft save failed: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Save draft failed: {ex.Message}");
+        }
+    }
+
+    private async Task CommitChanges()
+    {
+        if (!IsReady) return;
+        
+        try
+        {
+            var content = await JS.InvokeAsync<string>("getSnapshot");
+            var request = new { Content = content, Summary = "Updated via editor" };
+            var json = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/commit", httpContent);
+            if (response.IsSuccessStatusCode)
+            {
+                Console.WriteLine("Changes committed successfully");
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"Commit failed: {error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Commit failed: {ex.Message}");
+        }
+    }
+
+    private async Task AutoSave()
+    {
+        if (!IsReady) return;
+        
+        try
+        {
+            var content = await JS.InvokeAsync<string>("getSnapshot");
+            var request = new { Content = content };
+            var json = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            await HttpClient.PostAsync($"/api/wiki/{PageId}/autosave", httpContent);
+        }
+        catch
+        {
+            // Silent fail for autosave
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        AutosaveTimer?.Dispose();
+        
+        try
+        {
+            if (IsReady)
+            {
+                await JS.InvokeVoidAsync("destroyEditor");
+            }
+        }
+        catch
+        {
+            // Best effort cleanup
+        }
+    }
+}

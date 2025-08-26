@@ -1,0 +1,129 @@
+@page "/wiki/{slug}/history"
+@model STWiki.Pages.Wiki.HistoryModel
+@{
+    ViewData["Title"] = $"History - {Model.Page?.Title ?? Model.Slug}";
+}
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1>Page History</h1>
+        <div>
+            <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-primary">View Page</a>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a asp-page="/Wiki/Edit" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">Edit Page</a>
+            }
+        </div>
+    </div>
+
+    @if (Model.Page == null)
+    {
+        <div class="alert alert-warning">
+            <h4>Page Not Found</h4>
+            <p>The page "@Model.Slug" does not exist.</p>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a asp-page="/Wiki/Edit" asp-route-slug="@Model.Slug" class="btn btn-primary">Create Page</a>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="mb-3">
+            <h3>@Model.Page.Title</h3>
+            <p class="text-muted">Created @Model.Page.CreatedAt.ToString("yyyy-MM-dd HH:mm") • Last updated @Model.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</p>
+        </div>
+
+        @if (Model.Revisions?.Any() == true)
+        {
+            <div class="card">
+                <div class="card-header">
+                    <h5>Revision History</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Author</th>
+                                    <th>Note</th>
+                                    <th>Format</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var revision in Model.Revisions)
+                                {
+                                    <tr>
+                                        <td>@revision.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                        <td>@revision.Author</td>
+                                        <td>@(revision.Note ?? "No notes")</td>
+                                        <td>
+                                            <span class="badge bg-secondary">@revision.Format</span>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm">
+                                                <a asp-page-handler="ViewRevision" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" 
+                                                   class="btn btn-outline-primary btn-sm">View</a>
+                                                @if (User.Identity?.IsAuthenticated == true)
+                                                {
+                                                    <form method="post" asp-page-handler="Restore" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" style="display:inline">
+                                                        <button type="submit" class="btn btn-outline-warning btn-sm" 
+                                                                onclick="return confirm('Are you sure you want to restore this revision? This will create a new revision with the restored content.')">
+                                                            Restore
+                                                        </button>
+                                                    </form>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <p><strong>No revision history available.</strong></p>
+                <p>This page may have been created before revision tracking was enabled, or the revision history may have been cleared.</p>
+            </div>
+        }
+
+        @if (Model.SelectedRevision != null)
+        {
+            <div class="mt-4">
+                <h5>
+                    Revision from @Model.SelectedRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                    <small class="text-muted">by @Model.SelectedRevision.Author</small>
+                </h5>
+                @if (!string.IsNullOrWhiteSpace(Model.SelectedRevision.Note))
+                {
+                    <p class="text-muted mb-3"><strong>Note:</strong> @Model.SelectedRevision.Note</p>
+                }
+                <div class="card">
+                    <div class="card-body">
+                        <div class="wiki-content">
+                            @Html.Raw(Model.SelectedRevisionContent)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="mt-4">
+            <h5>Current Version</h5>
+            <div class="card">
+                <div class="card-body">
+                    <div class="wiki-content">
+                        @Html.Raw(Model.RenderedContent)
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+

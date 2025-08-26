@@ -1,0 +1,67 @@
+@page "/search"
+@model STWiki.Pages.SearchModel
+@{
+    ViewData["Title"] = "Search";
+}
+
+<div class="wiki-container">
+    <h1>Search Wiki</h1>
+    
+    <form method="get" class="mb-4">
+        <div class="input-group">
+            <input type="text" class="form-control" name="q" value="@Model.Query" placeholder="Search pages and content..." />
+            <button class="btn btn-primary" type="submit">
+                <i class="bi bi-search"></i> Search
+            </button>
+        </div>
+    </form>
+    
+    @if (!string.IsNullOrWhiteSpace(Model.Query))
+    {
+        @if (Model.Results?.Any() == true)
+        {
+            <h3>Search Results (@Model.Results.Count)</h3>
+            <div class="list-group">
+                @foreach (var result in Model.Results)
+                {
+                    <div class="list-group-item">
+                        <h5 class="mb-1">
+                            <a asp-page="/Wiki/View" asp-route-slug="@result.Slug" class="text-decoration-none">
+                                @result.Title
+                            </a>
+                        </h5>
+                        @if (!string.IsNullOrWhiteSpace(result.Summary))
+                        {
+                            <p class="mb-1 text-muted">@result.Summary</p>
+                        }
+                        <small class="text-muted">
+                            Updated @result.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.UpdatedBy
+                        </small>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <h4>No results found</h4>
+                <p>No pages found matching "<strong>@Model.Query</strong>".</p>
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <p>You can <a asp-page="/Wiki/New" class="alert-link">create a new page</a> with this title.</p>
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <div class="alert alert-secondary">
+            <h4>Search Tips</h4>
+            <ul>
+                <li>Search looks through page titles and content</li>
+                <li>Use specific keywords for better results</li>
+                <li>Search is case-insensitive</li>
+            </ul>
+        </div>
+    }
+</div>

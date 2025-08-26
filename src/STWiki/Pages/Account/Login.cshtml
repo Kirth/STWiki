@@ -1,0 +1,12 @@
+@page
+@model STWiki.Pages.Account.LoginModel
+
+@{
+    ViewData["Title"] = "Login";
+}
+
+<div class="text-center">
+    <h1>Login to STWiki</h1>
+    <p>You need to login to edit pages.</p>
+    <a asp-page-handler="Challenge" class="btn btn-primary btn-lg">Login with Dex</a>
+</div>

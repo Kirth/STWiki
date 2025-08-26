@@ -1,0 +1,21 @@
+# Development override for hot reload
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ./src/STWiki
+      dockerfile: Dockerfile
+      target: build  # Stop at build stage for development
+    volumes:
+      # Mount source for hot reload
+      - ./src/STWiki:/src:cached
+      # NuGet package cache
+      - nuget_cache:/root/.nuget/packages
+    working_dir: /src
+    # Override entrypoint for development with hot reload
+    entrypoint: ["dotnet", "watch", "run"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:5000
+      DOTNET_USE_POLLING_FILE_WATCHER: 1
