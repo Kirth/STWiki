@@ -1,4 +1,4 @@
-@page "/wiki/{slug?}/edit"
+@page "/{slug}/edit"
 @model STWiki.Pages.Wiki.EditModel
 @{
     ViewData["Title"] = Model.IsNew ? "Create New Page" : $"Edit {Model.Title}";
@@ -56,19 +56,35 @@
                     <select asp-for="BodyFormat" class="form-select">
                         <option value="markdown">Markdown</option>
                         <option value="html">HTML</option>
-                        <option value="prosemirror">Rich Text (ProseMirror)</option>
                     </select>
                     <span asp-validation-for="BodyFormat" class="text-danger"></span>
                 </div>
 
                 <div class="mb-3">
                     <label asp-for="Body" class="form-label">Content</label>
-                    @if (Model.BodyFormat == "prosemirror")
+                    @if (Model.BodyFormat == "markdown")
                     {
                         <div id="editor-container">
-                            <component type="typeof(STWiki.Components.Editor)" render-mode="ServerPrerendered" />
+                            @{
+                                // Debug logging before component render
+                                var debugPageId = Model.PageId ?? Guid.Empty;
+                                var debugInitialContent = Model.Body ?? "";
+                                var debugYjsRoom = Model.Slug ?? "new-page";
+                                
+                                System.Console.WriteLine("=== EDIT.CSHTML - About to render EditorSimple component ===");
+                                System.Console.WriteLine($"PageId parameter: {debugPageId}");
+                                System.Console.WriteLine($"InitialContent parameter length: {debugInitialContent.Length}");
+                                System.Console.WriteLine($"YjsRoom parameter: '{debugYjsRoom}'");
+                                System.Console.WriteLine($"InitialContent preview: '{debugInitialContent.Substring(0, Math.Min(debugInitialContent.Length, 100))}'");
+                                System.Console.WriteLine("=== END EDIT.CSHTML DEBUG ===");
+                            }
+                            <component type="typeof(STWiki.Components.EditorSimple)" 
+                                       render-mode="Server"
+                                       param-PageId="@(Model.PageId ?? Guid.Empty)"
+                                       param-InitialContent="@Model.Body"
+                                       param-YjsRoom="@(Model.Slug ?? "new-page")" />
                         </div>
-                        <textarea asp-for="Body" class="form-control d-none" rows="20"></textarea>
+                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
                     }
                     else
                     {
@@ -109,9 +125,33 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    @if (Model.BodyFormat == "prosemirror")
+    @if (Model.BodyFormat == "markdown")
     {
         <script src="_framework/blazor.server.js"></script>
-        <script src="~/js/editor.bundle.js"></script>
+        <script src="~/js/editor-enhanced.js"></script>
+        <script>
+            // Sync editor content with hidden textarea on form submission
+            document.addEventListener('DOMContentLoaded', function() {
+                const form = document.querySelector('form');
+                if (form) {
+                    form.addEventListener('submit', function(e) {
+                        try {
+                            // Find the active editor
+                            const editors = Array.from(document.querySelectorAll('textarea[id*="simple-editor-"]'));
+                            if (editors.length > 0) {
+                                const activeEditor = editors[0];
+                                const bodyTextarea = document.getElementById('body-textarea');
+                                if (bodyTextarea && activeEditor) {
+                                    bodyTextarea.value = activeEditor.value;
+                                    console.log('Synced editor content to form textarea');
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error syncing editor content:', error);
+                        }
+                    });
+                }
+            });
+        </script>
     }
 }

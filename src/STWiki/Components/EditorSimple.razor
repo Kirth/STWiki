@@ -1,0 +1,367 @@
+@using Microsoft.JSInterop
+@using System.Text.Json
+@using System.Text
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject HttpClient HttpClient
+
+<div class="editor-container">
+    <div class="editor-toolbar mb-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary" @onclick="SaveDraft" disabled="@(!IsReady)">
+                    Save Draft
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="CommitChanges" disabled="@(!IsReady)">
+                    Commit Changes
+                </button>
+            </div>
+            <div class="editor-status">
+                @if (IsReady)
+                {
+                    <span class="badge bg-success">Ready</span>
+                }
+                else
+                {
+                    <span class="badge bg-warning">Loading...</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">Editor</h6>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown('**', '**')" title="Bold (Ctrl+B)">
+                                <strong>B</strong>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown('*', '*')" title="Italic (Ctrl+I)">
+                                <em>I</em>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown("`", "`")" title="Inline Code">
+                                <code>&lt;/&gt;</code>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"```\\n\", \"\\n```\")" title="Code Block">
+                                <code>{ }</code>
+                            </button>
+                        </div>
+                        <div class="btn-group btn-group-sm ms-2" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"# \", \"\")" title="Header 1">
+                                H1
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"## \", \"\")" title="Header 2">
+                                H2
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"### \", \"\")" title="Header 3">
+                                H3
+                            </button>
+                        </div>
+                        <div class="btn-group btn-group-sm ms-2" role="group">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"- \", \"\")" title="Unordered List">
+                                List
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"1. \", \"\")" title="Ordered List">
+                                1. List
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"> \", \"\")" title="Blockquote">
+                                Quote
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => InsertMarkdown(\"[\", \"](url)\")" title="Link">
+                                Link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <textarea id="@EditorElementId" 
+                              class="form-control border-0" 
+                              rows="20" 
+                              placeholder="Start writing your wiki content in Markdown..."
+                              style="resize: vertical; min-height: 400px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 14px; line-height: 1.5;">@InitialContent</textarea>
+                </div>
+                <div class="card-footer py-2">
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">
+                            <span id="word-count">0 words</span> | 
+                            <span id="char-count">0 characters</span>
+                        </small>
+                        <small class="text-muted">
+                            <span id="status-text">Ready</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header py-2">
+                    <h6 class="mb-0">Preview</h6>
+                </div>
+                <div class="card-body" style="min-height: 400px; max-height: 500px; overflow-y: auto;">
+                    <div id="preview-content" class="markdown-content">
+                        <em>Preview will appear here...</em>
+                    </div>
+                </div>
+                <div class="card-footer py-2">
+                    <small class="text-muted">
+                        Collaboration: <span id="presence-status" class="badge bg-secondary">Offline</span>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid PageId { get; set; }
+    [Parameter] public string InitialContent { get; set; } = "";
+    [Parameter] public string YjsRoom { get; set; } = "";
+
+    private string EditorElementId = $"simple-editor-{Guid.NewGuid():N}";
+    private bool IsReady = false;
+    private bool IsNewPage => PageId == Guid.Empty;
+    private Timer? AutosaveTimer = null;
+
+    protected override void OnInitialized()
+    {
+        Console.WriteLine("=== EDITOR SIMPLE - OnInitialized START ===");
+        Console.WriteLine($"PageId: {PageId}");
+        Console.WriteLine($"InitialContent length: {InitialContent?.Length ?? 0}");
+        Console.WriteLine($"YjsRoom: '{YjsRoom}'");
+        Console.WriteLine($"EditorElementId: {EditorElementId}");
+        Console.WriteLine($"IsNewPage: {IsNewPage}");
+        Console.WriteLine("=== EDITOR SIMPLE - OnInitialized END ===");
+        base.OnInitialized();
+    }
+
+    protected override void OnParametersSet()
+    {
+        Console.WriteLine("=== EDITOR SIMPLE - OnParametersSet START ===");
+        Console.WriteLine($"PageId: {PageId}");
+        Console.WriteLine($"InitialContent: '{InitialContent?.Substring(0, Math.Min(InitialContent?.Length ?? 0, 50)) ?? "NULL"}'");
+        if ((InitialContent?.Length ?? 0) > 50)
+        {
+            Console.WriteLine($"InitialContent (truncated, full length: {InitialContent?.Length})");
+        }
+        Console.WriteLine($"YjsRoom: '{YjsRoom}'");
+        
+        // Check for problematic characters in InitialContent
+        if (!string.IsNullOrEmpty(InitialContent))
+        {
+            var hasNonAscii = InitialContent.Any(c => c > 127);
+            var hasControlChars = InitialContent.Any(c => char.IsControl(c) && c != '\t' && c != '\n' && c != '\r');
+            Console.WriteLine($"InitialContent has non-ASCII: {hasNonAscii}");
+            Console.WriteLine($"InitialContent has control chars: {hasControlChars}");
+            
+            if (hasNonAscii || hasControlChars)
+            {
+                var problematicChars = InitialContent.Where(c => c > 127 || (char.IsControl(c) && c != '\t' && c != '\n' && c != '\r'))
+                                                   .Take(10)
+                                                   .Select(c => $"U+{(int)c:X4}")
+                                                   .ToArray();
+                Console.WriteLine($"Problematic characters: {string.Join(", ", problematicChars)}");
+            }
+        }
+        
+        Console.WriteLine("=== EDITOR SIMPLE - OnParametersSet END ===");
+        base.OnParametersSet();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        Console.WriteLine($"=== EDITOR SIMPLE - OnAfterRender (firstRender: {firstRender}) START ===");
+        Console.WriteLine($"IsReady: {IsReady}");
+        Console.WriteLine("=== EDITOR SIMPLE - OnAfterRender END ===");
+        base.OnAfterRender(firstRender);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                Console.WriteLine($"Initializing enhanced editor with ID: {EditorElementId}");
+                
+                // Clean and sanitize initial content to prevent JavaScript serialization issues
+                var safeContent = (InitialContent ?? "")
+                    .Replace("\0", "") // Remove null characters
+                    .Replace("\uFEFF", "") // Remove BOM
+                    .Trim();
+                
+                Console.WriteLine($"Safe content length: {safeContent.Length}");
+                
+                // Initialize enhanced markdown editor
+                var success = await JS.InvokeAsync<bool>("initEnhancedEditor", 
+                    EditorElementId, 
+                    safeContent);
+                
+                if (success)
+                {
+                    IsReady = true;
+                    Console.WriteLine("Enhanced editor initialized successfully");
+                    
+                    // Only start autosave timer for existing pages (not new pages)
+                    if (!IsNewPage)
+                    {
+                        AutosaveTimer = new Timer(async _ => await AutoSave(), null, 
+                            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+                        Console.WriteLine("Autosave timer started for existing page");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Autosave disabled for new page (PageId is empty)");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Enhanced editor initialization returned false");
+                    IsReady = false;
+                }
+                
+                StateHasChanged();
+                    
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Enhanced editor initialization failed: {ex.GetType().Name}: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                IsReady = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SaveDraft()
+    {
+        if (!IsReady) return;
+        
+        if (IsNewPage)
+        {
+            await JS.InvokeVoidAsync("showEditorStatus", "Save not available for new pages");
+            return;
+        }
+        
+        try
+        {
+            var content = await JS.InvokeAsync<string>("getEnhancedEditorContent", EditorElementId);
+            var request = new { Content = content };
+            var json = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/autosave", httpContent);
+            if (response.IsSuccessStatusCode)
+            {
+                await JS.InvokeVoidAsync("showEditorStatus", "Draft saved");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("showEditorStatus", $"Save failed: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("showEditorStatus", $"Save failed: {ex.Message}");
+        }
+    }
+
+    private async Task CommitChanges()
+    {
+        if (!IsReady) return;
+        
+        if (IsNewPage)
+        {
+            await JS.InvokeVoidAsync("showEditorStatus", "Use the main Save button to create new pages");
+            return;
+        }
+        
+        try
+        {
+            var content = await JS.InvokeAsync<string>("getEnhancedEditorContent", EditorElementId);
+            var request = new { Content = content, Summary = "Updated via enhanced editor" };
+            var json = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/commit", httpContent);
+            if (response.IsSuccessStatusCode)
+            {
+                await JS.InvokeVoidAsync("showEditorStatus", "Changes committed");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("showEditorStatus", $"Commit failed: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("showEditorStatus", $"Commit failed: {ex.Message}");
+        }
+    }
+
+    private async Task AutoSave()
+    {
+        if (!IsReady || IsNewPage) return;
+        
+        try
+        {
+            var content = await JS.InvokeAsync<string>("getEnhancedEditorContent", EditorElementId);
+            if (string.IsNullOrEmpty(content))
+            {
+                Console.WriteLine("Autosave skipped - no content");
+                return;
+            }
+            
+            var request = new { Content = content };
+            var json = JsonSerializer.Serialize(request);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+            
+            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/autosave", httpContent);
+            if (response.IsSuccessStatusCode)
+            {
+                await JS.InvokeVoidAsync("showEditorStatus", "Auto-saved");
+            }
+            else
+            {
+                Console.WriteLine($"Autosave failed with status: {response.StatusCode}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Autosave error: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        AutosaveTimer?.Dispose();
+        
+        try
+        {
+            if (IsReady)
+            {
+                await JS.InvokeVoidAsync("destroyEnhancedEditor", EditorElementId);
+            }
+        }
+        catch
+        {
+            // Best effort cleanup
+        }
+    }
+
+    private async Task InsertMarkdown(string before, string after)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("insertMarkdown", before, after);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error inserting markdown: {ex.Message}");
+        }
+    }
+}

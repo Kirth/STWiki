@@ -35,7 +35,6 @@ public class ViewModel : PageModel
             {
                 "markdown" => _markdownService.RenderToHtml(Page.Body),
                 "html" => Page.Body, // Raw HTML (should be sanitized in production)
-                "prosemirror" => Page.Body, // ProseMirror JSON - for now treat as raw
                 _ => $"<pre>{Page.Body}</pre>" // Plain text fallback
             };
         }

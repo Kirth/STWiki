@@ -40,16 +40,18 @@ public class EditModel : PageModel
     public string BodyFormat { get; set; } = "markdown";
 
     public bool IsNew { get; set; }
+    public Guid? PageId { get; set; }
     public DateTimeOffset? CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string? slug)
     {
-        if (string.IsNullOrEmpty(slug))
+        if (string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             // New page mode
             IsNew = true;
+            Body = ""; // Initialize with empty string instead of null
             BodyFormat = "markdown";
             return Page();
         }
@@ -64,12 +66,14 @@ public class EditModel : PageModel
             IsNew = true;
             Slug = slug;
             Title = slug.Replace("-", " ").ToTitleCase();
+            Body = ""; // Initialize with empty string instead of null
             BodyFormat = "markdown";
             return Page();
         }
 
         // Load existing page for editing
         IsNew = false;
+        PageId = existingPage.Id;
         Title = existingPage.Title;
         Slug = existingPage.Slug;
         Summary = existingPage.Summary;
@@ -79,6 +83,32 @@ public class EditModel : PageModel
         UpdatedAt = existingPage.UpdatedAt;
         UpdatedBy = existingPage.UpdatedBy;
 
+        // Debug logging for character analysis
+        Console.WriteLine("=== EDIT PAGE MODEL - OnGetAsync ===");
+        Console.WriteLine($"Slug: '{slug}'");
+        Console.WriteLine($"PageId: {PageId}");
+        Console.WriteLine($"Body length: {Body?.Length ?? 0}");
+        Console.WriteLine($"BodyFormat: {BodyFormat}");
+        
+        if (!string.IsNullOrEmpty(Body))
+        {
+            var hasNonAscii = Body.Any(c => c > 127);
+            var hasControlChars = Body.Any(c => char.IsControl(c) && c != '\t' && c != '\n' && c != '\r');
+            Console.WriteLine($"Body has non-ASCII: {hasNonAscii}");
+            Console.WriteLine($"Body has control chars: {hasControlChars}");
+            
+            if (hasNonAscii || hasControlChars)
+            {
+                var problematicChars = Body.Where(c => c > 127 || (char.IsControl(c) && c != '\t' && c != '\n' && c != '\r'))
+                                          .Take(10)
+                                          .Select(c => $"U+{(int)c:X4} ({c})")
+                                          .ToArray();
+                Console.WriteLine($"Problematic characters in Body: {string.Join(", ", problematicChars)}");
+            }
+        }
+        
+        Console.WriteLine("=== END EDIT PAGE MODEL DEBUG ===");
+
         return Page();
     }
 
@@ -86,15 +116,15 @@ public class EditModel : PageModel
     {
         if (!ModelState.IsValid)
         {
-            IsNew = string.IsNullOrEmpty(slug);
+            IsNew = string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase);
             return Page();
         }
 
         var currentUser = User.Identity?.Name ?? "Unknown";
         var now = DateTime.UtcNow;
 
-        // Generate slug if creating new page
-        if (string.IsNullOrEmpty(slug))
+        // Generate slug if creating new page (slug is empty or "new")
+        if (string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             IsNew = true;
             if (string.IsNullOrWhiteSpace(Slug))
@@ -149,6 +179,7 @@ public class EditModel : PageModel
             _context.Revisions.Add(initialRevision);
             await _context.SaveChangesAsync();
 
+            // Redirect to the actual generated slug, not "new"
             return RedirectToPage("/Wiki/View", new { slug = Slug });
         }
         else

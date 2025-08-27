@@ -16,9 +16,11 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddControllers();
+builder.Services.AddHttpContextAccessor();
 
 // Add custom services
 builder.Services.AddSingleton<STWiki.Services.MarkdownService>();
+builder.Services.AddSingleton<STWiki.Services.DiffService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
@@ -133,7 +135,8 @@ app.MapRazorPages();
 app.MapBlazorHub();
 app.MapControllers();
 
-// Default redirect
-app.MapGet("/", () => Results.Redirect("/wiki"));
+// Default redirect to home page
+app.MapGet("/", () => Results.Redirect("/home"));
+
 
 app.Run();

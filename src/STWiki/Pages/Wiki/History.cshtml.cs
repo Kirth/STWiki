@@ -12,11 +12,13 @@ public class HistoryModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly MarkdownService _markdownService;
+    private readonly DiffService _diffService;
 
-    public HistoryModel(AppDbContext context, MarkdownService markdownService)
+    public HistoryModel(AppDbContext context, MarkdownService markdownService, DiffService diffService)
     {
         _context = context;
         _markdownService = markdownService;
+        _diffService = diffService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
@@ -27,6 +29,11 @@ public class HistoryModel : PageModel
     // For revision viewing
     public Revision? SelectedRevision { get; set; }
     public string SelectedRevisionContent { get; set; } = string.Empty;
+    
+    // For diff viewing
+    public Revision? CompareFromRevision { get; set; }
+    public Revision? CompareToRevision { get; set; }
+    public string DiffHtml { get; set; } = string.Empty;
 
     public async Task<IActionResult> OnGetAsync(string slug)
     {
@@ -48,7 +55,6 @@ public class HistoryModel : PageModel
             {
                 "markdown" => _markdownService.RenderToHtml(Page.Body),
                 "html" => Page.Body,
-                "prosemirror" => Page.Body,
                 _ => $"<pre>{Page.Body}</pre>"
             };
         }
@@ -83,7 +89,6 @@ public class HistoryModel : PageModel
             {
                 "markdown" => _markdownService.RenderToHtml(SelectedRevision.Snapshot),
                 "html" => SelectedRevision.Snapshot,
-                "prosemirror" => SelectedRevision.Snapshot,
                 _ => $"<pre>{System.Web.HttpUtility.HtmlEncode(SelectedRevision.Snapshot)}</pre>"
             };
         }
@@ -93,7 +98,6 @@ public class HistoryModel : PageModel
         {
             "markdown" => _markdownService.RenderToHtml(Page.Body),
             "html" => Page.Body,
-            "prosemirror" => Page.Body,
             _ => $"<pre>{Page.Body}</pre>"
         };
 
@@ -149,5 +153,47 @@ public class HistoryModel : PageModel
         await _context.SaveChangesAsync();
 
         return RedirectToPage("/Wiki/View", new { slug });
+    }
+
+    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId)
+    {
+        Slug = slug;
+        
+        Page = await _context.Pages
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+
+        if (Page == null)
+            return NotFound();
+
+        // Load all revisions for navigation
+        Revisions = await _context.Revisions
+            .Where(r => r.PageId == Page.Id)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        // Load the two revisions to compare
+        CompareFromRevision = await _context.Revisions
+            .FirstOrDefaultAsync(r => r.Id == fromRevisionId && r.PageId == Page.Id);
+
+        CompareToRevision = await _context.Revisions
+            .FirstOrDefaultAsync(r => r.Id == toRevisionId && r.PageId == Page.Id);
+
+        if (CompareFromRevision != null && CompareToRevision != null)
+        {
+            // Generate diff HTML
+            DiffHtml = _diffService.GenerateHtmlDiff(
+                CompareFromRevision.Snapshot, 
+                CompareToRevision.Snapshot);
+        }
+
+        // Render current content for reference
+        RenderedContent = Page.BodyFormat switch
+        {
+            "markdown" => _markdownService.RenderToHtml(Page.Body),
+            "html" => Page.Body,
+            _ => $"<pre>{Page.Body}</pre>"
+        };
+
+        return Page();
     }
 }

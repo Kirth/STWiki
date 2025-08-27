@@ -1,4 +1,4 @@
-@page "/wiki/{slug}/history"
+@page "/{slug}/history"
 @model STWiki.Pages.Wiki.HistoryModel
 @{
     ViewData["Title"] = $"History - {Model.Page?.Title ?? Model.Slug}";
@@ -66,6 +66,40 @@
                                             <div class="btn-group btn-group-sm">
                                                 <a asp-page-handler="ViewRevision" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" 
                                                    class="btn btn-outline-primary btn-sm">View</a>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                        Diff
+                                                    </button>
+                                                    <ul class="dropdown-menu">
+                                                        @{
+                                                            var previousRevision = Model.Revisions
+                                                                .SkipWhile(r => r.Id != revision.Id)
+                                                                .Skip(1)
+                                                                .FirstOrDefault();
+                                                        }
+                                                        @if (previousRevision != null)
+                                                        {
+                                                            <li>
+                                                                <a class="dropdown-item" 
+                                                                   asp-page-handler="Diff" 
+                                                                   asp-route-slug="@Model.Slug" 
+                                                                   asp-route-fromRevisionId="@previousRevision.Id" 
+                                                                   asp-route-toRevisionId="@revision.Id">
+                                                                    vs Previous
+                                                                </a>
+                                                            </li>
+                                                        }
+                                                        <li>
+                                                            <a class="dropdown-item" 
+                                                               asp-page-handler="Diff" 
+                                                               asp-route-slug="@Model.Slug" 
+                                                               asp-route-fromRevisionId="@revision.Id" 
+                                                               asp-route-toRevisionId="@Model.Revisions.First().Id">
+                                                                vs Current
+                                                            </a>
+                                                        </li>
+                                                    </ul>
+                                                </div>
                                                 @if (User.Identity?.IsAuthenticated == true)
                                                 {
                                                     <form method="post" asp-page-handler="Restore" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" style="display:inline">
@@ -93,7 +127,35 @@
             </div>
         }
 
-        @if (Model.SelectedRevision != null)
+        @if (Model.CompareFromRevision != null && Model.CompareToRevision != null)
+        {
+            <div class="mt-4">
+                <h5>
+                    Diff: Comparing Changes
+                    <small class="text-muted">
+                        from @Model.CompareFromRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm") 
+                        to @Model.CompareToRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                    </small>
+                </h5>
+                <div class="d-flex gap-2 mb-3">
+                    <div class="badge bg-info">
+                        From: @Model.CompareFromRevision.Author (@Model.CompareFromRevision.CreatedAt.ToString("MMM d, HH:mm"))
+                    </div>
+                    <div class="badge bg-success">
+                        To: @Model.CompareToRevision.Author (@Model.CompareToRevision.CreatedAt.ToString("MMM d, HH:mm"))
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">Content Changes</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        @Html.Raw(Model.DiffHtml)
+                    </div>
+                </div>
+            </div>
+        }
+        else if (Model.SelectedRevision != null)
         {
             <div class="mt-4">
                 <h5>
