@@ -4,7 +4,7 @@
 let editorInstances = new Map();
 
 // Initialize the enhanced markdown editor
-window.initEnhancedEditor = function(editorId, initialContent) {
+window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
     try {
         console.log('Initializing enhanced editor:', editorId);
         
@@ -12,6 +12,13 @@ window.initEnhancedEditor = function(editorId, initialContent) {
         if (!textarea) {
             console.error('Editor textarea not found:', editorId);
             return false;
+        }
+
+        // Find the editor container and store the component reference
+        const editorContainer = textarea.closest('.editor-container');
+        if (editorContainer && componentRef) {
+            editorContainer._blazorComponentRef = componentRef;
+            console.log('Stored component reference on editor container');
         }
 
         // Create editor instance with safe element lookups
@@ -22,7 +29,8 @@ window.initEnhancedEditor = function(editorId, initialContent) {
             charCountElement: document.getElementById('char-count') || null,
             statusElement: document.getElementById('status-text') || null,
             lastContent: initialContent || '',
-            updateTimeout: null
+            updateTimeout: null,
+            componentRef: componentRef
         };
 
         editorInstances.set(editorId, instance);

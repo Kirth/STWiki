@@ -65,24 +65,11 @@
                     @if (Model.BodyFormat == "markdown")
                     {
                         <div id="editor-container">
-                            @{
-                                // Debug logging before component render
-                                var debugPageId = Model.PageId ?? Guid.Empty;
-                                var debugInitialContent = Model.Body ?? "";
-                                var debugYjsRoom = Model.Slug ?? "new-page";
-                                
-                                System.Console.WriteLine("=== EDIT.CSHTML - About to render EditorSimple component ===");
-                                System.Console.WriteLine($"PageId parameter: {debugPageId}");
-                                System.Console.WriteLine($"InitialContent parameter length: {debugInitialContent.Length}");
-                                System.Console.WriteLine($"YjsRoom parameter: '{debugYjsRoom}'");
-                                System.Console.WriteLine($"InitialContent preview: '{debugInitialContent.Substring(0, Math.Min(debugInitialContent.Length, 100))}'");
-                                System.Console.WriteLine("=== END EDIT.CSHTML DEBUG ===");
-                            }
                             <component type="typeof(STWiki.Components.EditorSimple)" 
                                        render-mode="Server"
                                        param-PageId="@(Model.PageId ?? Guid.Empty)"
-                                       param-InitialContent="@Model.Body"
-                                       param-YjsRoom="@(Model.Slug ?? "new-page")" />
+                                       param-InitialContentRaw="@Model.Body"
+                                       param-YjsRoomRaw="@(Model.Slug ?? "new-page")" />
                         </div>
                         <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
                     }
@@ -128,30 +115,230 @@
     @if (Model.BodyFormat == "markdown")
     {
         <script src="_framework/blazor.server.js"></script>
+        <script>
+            // Blazor connection diagnostics and state monitoring
+            (function() {
+                console.log('🔧 Blazor diagnostics: Starting connection monitoring...');
+                
+                function logBlazorState() {
+                    const state = {
+                        blazor: typeof Blazor !== 'undefined' ? 'loaded' : 'not loaded',
+                        signalR: typeof signalR !== 'undefined' ? 'loaded' : 'not loaded',
+                        connection: null,
+                        circuit: null,
+                        connected: false
+                    };
+                    
+                    if (typeof Blazor !== 'undefined') {
+                        try {
+                            // Better detection: Blazor is connected if it exists and has handlers
+                            // The presence of Blazor object itself usually means it's functional
+                            state.circuit = 'available';
+                            state.connected = true;
+                            
+                            // Also check if we can access the internal circuit (optional)
+                            if (Blazor.defaultReconnectionHandler) {
+                                state.connection = 'with reconnection handler';
+                            }
+                        } catch (e) {
+                            state.circuit = 'error: ' + e.message;
+                            state.connected = false;
+                        }
+                    }
+                    
+                    console.log('🔧 Blazor State:', state);
+                    return state.connected;
+                }
+                
+                // Log initial state
+                document.addEventListener('DOMContentLoaded', () => {
+                    console.log('🔧 DOM loaded, checking Blazor state...');
+                    logBlazorState();
+                });
+                
+                // Monitor Blazor connection events - DON'T call Blazor.start() as it auto-starts
+                if (typeof Blazor !== 'undefined') {
+                    console.log('✅ Blazor already available');
+                    logBlazorState();
+                } else {
+                    // Blazor not ready yet, wait for it
+                    let attempts = 0;
+                    const waitForBlazor = setInterval(() => {
+                        attempts++;
+                        if (typeof Blazor !== 'undefined') {
+                            console.log(`✅ Blazor available after ${attempts} attempts`);
+                            clearInterval(waitForBlazor);
+                            logBlazorState();
+                        } else if (attempts > 50) { // 5 seconds max
+                            console.error('❌ Blazor failed to load after 5 seconds');
+                            clearInterval(waitForBlazor);
+                            logBlazorState();
+                        }
+                    }, 100);
+                }
+                
+                // Add a function for components to check connection
+                window.checkBlazorConnection = function() {
+                    const isConnected = logBlazorState();
+                    console.log('🔗 Connection check requested, result:', isConnected);
+                    return isConnected;
+                };
+                
+                window.blazorDiagnostics = { logBlazorState, checkBlazorConnection };
+            })();
+        </script>
         <script src="~/js/editor-enhanced.js"></script>
         <script>
-            // Sync editor content with hidden textarea on form submission
+            // Handle EditorSimple button clicks via event delegation
+            document.addEventListener('click', function(e) {
+                const button = e.target.closest('button[data-action]');
+                if (!button || button.disabled) {
+                    console.log('Button click ignored - no action or disabled:', button);
+                    return;
+                }
+                
+                const action = button.dataset.action;
+                console.log('🔘 Button clicked with action:', action);
+                
+                const editorContainer = button.closest('.editor-container');
+                if (!editorContainer) {
+                    console.error('Editor container not found');
+                    return;
+                }
+                
+                // Find the .NET component reference (set by initEnhancedEditor)
+                const componentRef = editorContainer._blazorComponentRef;
+                if (!componentRef) {
+                    console.error('EditorSimple component reference not found');
+                    return;
+                }
+                
+                console.log('🚀 Calling .NET method for action:', action);
+                
+                // Call the appropriate .NET method
+                switch (action) {
+                    case 'save-draft':
+                        componentRef.invokeMethodAsync('HandleSaveDraft')
+                            .then(() => console.log('✅ HandleSaveDraft completed'))
+                            .catch(err => console.error('❌ HandleSaveDraft failed:', err));
+                        break;
+                    case 'commit-changes':
+                        componentRef.invokeMethodAsync('HandleCommitChanges')
+                            .then(() => console.log('✅ HandleCommitChanges completed'))
+                            .catch(err => console.error('❌ HandleCommitChanges failed:', err));
+                        break;
+                    case 'insert-bold':
+                        componentRef.invokeMethodAsync('HandleInsertBold')
+                            .then(() => console.log('✅ HandleInsertBold completed'))
+                            .catch(err => console.error('❌ HandleInsertBold failed:', err));
+                        break;
+                    default:
+                        console.warn('Unknown action:', action);
+                }
+            });
+        </script>
+        <script>
+            // Sync editor content with hidden textarea on form submission  
             document.addEventListener('DOMContentLoaded', function() {
                 const form = document.querySelector('form');
                 if (form) {
                     form.addEventListener('submit', function(e) {
                         try {
-                            // Find the active editor
-                            const editors = Array.from(document.querySelectorAll('textarea[id*="simple-editor-"]'));
-                            if (editors.length > 0) {
-                                const activeEditor = editors[0];
-                                const bodyTextarea = document.getElementById('body-textarea');
-                                if (bodyTextarea && activeEditor) {
+                            console.log('🔄 Form submission detected, syncing editor content...');
+                            
+                            // Find the active enhanced editor (look for any textarea in .editor-container)
+                            const editorContainer = document.querySelector('.editor-container');
+                            const bodyTextarea = document.getElementById('body-textarea');
+                            
+                            if (editorContainer && bodyTextarea) {
+                                const activeEditor = editorContainer.querySelector('textarea[id*="simple-editor-"]');
+                                if (activeEditor) {
                                     bodyTextarea.value = activeEditor.value;
-                                    console.log('Synced editor content to form textarea');
+                                    console.log('✅ Synced editor content to form textarea:', activeEditor.value.length, 'characters');
+                                } else {
+                                    console.warn('⚠️ Enhanced editor textarea not found in container');
                                 }
+                            } else {
+                                console.warn('⚠️ Editor container or body textarea not found');
+                                console.log('Editor container:', !!editorContainer);
+                                console.log('Body textarea:', !!bodyTextarea);
                             }
                         } catch (error) {
-                            console.error('Error syncing editor content:', error);
+                            console.error('❌ Error syncing editor content:', error);
                         }
                     });
                 }
             });
+        </script>
+        <script>
+            // DOM trap script - runs after Blazor initialization
+            (function(){
+                console.log('🔧 Installing DOM operation traps...');
+                
+                function hexify(s){
+                    if (typeof s !== "string") return s;
+                    return [...s].map(c => `U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')}(${c})`).join(' ');
+                }
+                function logFail(kind, obj){
+                    const pretty = {};
+                    for (const [k,v] of Object.entries(obj)) pretty[k] = typeof v === 'string' ? `${v}  [${hexify(v)}]` : v;
+                    console.error(`[trap] ${kind} failed`, pretty);
+                    
+                    // Also log Blazor state when errors occur
+                    if (window.blazorDiagnostics) {
+                        console.error('[trap] Blazor state at failure:', window.blazorDiagnostics.logBlazorState());
+                    }
+                }
+
+                const _sa  = Element.prototype.setAttribute;
+                Element.prototype.setAttribute = function(name, value){
+                    try { return _sa.call(this, name, value); }
+                    catch(e){ logFail('setAttribute', {el:this, name, value, e}); throw e; }
+                };
+
+                const _sans = Element.prototype.setAttributeNS;
+                Element.prototype.setAttributeNS = function(ns, name, value){
+                    try { return _sans.call(this, ns, name, value); }
+                    catch(e){ logFail('setAttributeNS', {el:this, ns, name, value, e}); throw e; }
+                };
+
+                const _ca = Document.prototype.createAttribute;
+                Document.prototype.createAttribute = function(name){
+                    try { return _ca.call(this, name); }
+                    catch(e){ logFail('createAttribute', {name, e}); throw e; }
+                };
+
+                const _ce = Document.prototype.createElement;
+                Document.prototype.createElement = function(name){
+                    try { return _ce.call(this, name); }
+                    catch(e){ logFail('createElement', {name, e}); throw e; }
+                };
+
+                const _cc = Document.prototype.createComment;
+                Document.prototype.createComment = function(data){
+                    try { return _cc.call(this, data); }
+                    catch(e){ logFail('createComment', {data, e}); throw e; }
+                };
+
+                const _add = DOMTokenList.prototype.add;
+                DOMTokenList.prototype.add = function(...tokens){
+                    try { return _add.apply(this, tokens); }
+                    catch(e){ logFail('classList.add', {el:this, tokens: tokens.map(t => `${t}  [${hexify(t)}]`), e}); throw e; }
+                };
+
+                // Optional: catch innerHTML too (invalid markup can also throw)
+                const _inner = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
+                Object.defineProperty(Element.prototype, "innerHTML", {
+                    set(html){ try { return _inner.set.call(this, html); }
+                        catch(e){ logFail('innerHTML', {el:this, html, e}); throw e; } },
+                    get(){ return _inner.get.call(this); }
+                });
+
+                window.addEventListener('error', ev => console.error('[trap] window.error', ev.error || ev));
+                window.addEventListener('unhandledrejection', ev => console.error('[trap] unhandledrejection', ev.reason || ev));
+                
+                console.log('✅ DOM operation traps installed');
+            })();
         </script>
     }
 }
