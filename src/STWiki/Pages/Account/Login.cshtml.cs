@@ -10,7 +10,7 @@ public class LoginModel : PageModel
     {
         if (User.Identity?.IsAuthenticated == true)
         {
-            return Redirect("/home");
+            return Redirect("/main");
         }
         
         return Page();
@@ -20,7 +20,7 @@ public class LoginModel : PageModel
     {
         return Challenge(new AuthenticationProperties
         {
-            RedirectUri = "/home"
+            RedirectUri = "/main"
         }, "oidc");
     }
 
@@ -28,7 +28,7 @@ public class LoginModel : PageModel
     {
         return Challenge(new AuthenticationProperties
         {
-            RedirectUri = "/home"
+            RedirectUri = "/main"
         }, "oidc");
     }
 }

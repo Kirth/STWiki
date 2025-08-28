@@ -343,7 +343,25 @@ window.showEditorStatus = function(message) {
         }
     }
     
-    console.log('Editor status:', message);
+    console.log('🔥 DETAILED EDITOR RESPONSE:', message);
+    
+    // If it's a response message, try to parse and show more details
+    if (message.includes('Response:')) {
+        try {
+            const responsePart = message.split('Response: ')[1];
+            if (responsePart) {
+                console.log('🔥 RAW RESPONSE CONTENT:', responsePart);
+                try {
+                    const parsedResponse = JSON.parse(responsePart);
+                    console.log('🔥 PARSED JSON RESPONSE:', parsedResponse);
+                } catch (e) {
+                    console.log('🔥 RESPONSE IS NOT JSON, RAW TEXT:', responsePart);
+                }
+            }
+        } catch (e) {
+            console.log('🔥 ERROR PARSING RESPONSE:', e);
+        }
+    }
 };
 
 // Clean up editor instance

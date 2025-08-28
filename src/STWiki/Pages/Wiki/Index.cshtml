@@ -1,35 +1,135 @@
-@page "/home"
+@page "/main"
 @model STWiki.Pages.Wiki.IndexModel
 @{
     ViewData["Title"] = "Wiki Home";
 }
 
-<div class="wiki-container">
-    <h1>Wiki Home</h1>
-    
-    <div class="mb-3">
-        <a asp-page="/Wiki/View" asp-route-slug="main-page" class="btn btn-primary">Main Page</a>
-        @if (User.Identity?.IsAuthenticated == true)
-        {
-            <a asp-page="/Wiki/New" class="btn btn-success">New Page</a>
-        }
+<div class="hero-section bg-gradient-primary text-white py-5 mb-5 rounded">
+    <div class="container text-center">
+        <h1 class="display-4 fw-bold mb-3">📚 STWiki</h1>
+        <p class="lead mb-4">Your personal knowledge hub - organize, share, and discover information</p>
+        <div class="d-flex gap-3 justify-content-center flex-wrap">
+            <a asp-page="/Wiki/View" asp-route-slug="main-page" class="btn btn-light btn-lg px-4">
+                <i class="bi bi-house"></i> Main Page
+            </a>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a asp-page="/Wiki/New" class="btn btn-success btn-lg px-4">
+                    <i class="bi bi-plus-circle"></i> Create Page
+                </a>
+            }
+        </div>
     </div>
-    
+</div>
+
+<div class="wiki-container">
     @if (Model.RecentPages?.Any() == true)
     {
-        <h3>Recent Pages</h3>
-        <ul class="list-group">
-            @foreach (var wikiPage in Model.RecentPages)
-            {
-                <li class="list-group-item">
-                    <a asp-page="/Wiki/View" asp-route-slug="@wikiPage.Slug">@wikiPage.Title</a>
-                    <small class="text-muted">Updated @wikiPage.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</small>
-                </li>
-            }
-        </ul>
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h3 class="card-title mb-0">
+                            <i class="bi bi-clock-history text-primary"></i> Recent Activity
+                        </h3>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush">
+                            @foreach (var wikiPage in Model.RecentPages)
+                            {
+                                <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1">
+                                            <a asp-page="/Wiki/View" asp-route-slug="@wikiPage.Slug" class="text-decoration-none">
+                                                <i class="bi bi-file-text text-muted me-2"></i>@wikiPage.Title
+                                            </a>
+                                        </h6>
+                                        <small class="text-muted">
+                                            <i class="bi bi-calendar3"></i> Updated @wikiPage.UpdatedAt.ToString("MMM dd, yyyy 'at' HH:mm")
+                                        </small>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">View</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-light">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-info-circle text-info"></i> Quick Stats
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="bg-primary rounded-circle p-2 me-3">
+                                <i class="bi bi-files text-white"></i>
+                            </div>
+                            <div>
+                                <h6 class="mb-0">@Model.RecentPages.Count()</h6>
+                                <small class="text-muted">Recent Pages</small>
+                            </div>
+                        </div>
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            <div class="d-grid">
+                                <a asp-page="/Wiki/New" class="btn btn-outline-success">
+                                    <i class="bi bi-plus"></i> New Page
+                                </a>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                <small><i class="bi bi-lock"></i> Sign in to create pages</small>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
     }
     else
     {
-        <p>No pages yet. <a asp-page="/Wiki/New">Create the first page!</a></p>
+        <div class="text-center py-5">
+            <div class="mb-4">
+                <i class="bi bi-journal-x display-1 text-muted"></i>
+            </div>
+            <h3 class="text-muted mb-3">No pages yet!</h3>
+            <p class="lead text-muted mb-4">Start building your wiki by creating your first page.</p>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <a asp-page="/Wiki/New" class="btn btn-primary btn-lg">
+                    <i class="bi bi-plus-circle"></i> Create First Page
+                </a>
+            }
+            else
+            {
+                <div class="alert alert-info d-inline-block">
+                    <i class="bi bi-info-circle"></i> Please sign in to create pages
+                </div>
+            }
+        </div>
     }
 </div>
+
+<style>
+    .bg-gradient-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .hero-section {
+        border: none;
+    }
+    .card {
+        border: none;
+        transition: transform 0.2s ease-in-out;
+    }
+    .card:hover {
+        transform: translateY(-2px);
+    }
+    .list-group-item-action:hover {
+        background-color: #f8f9fa;
+    }
+</style>

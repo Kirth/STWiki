@@ -18,32 +18,32 @@ public class ClaimsTransformation : IClaimsTransformation
             return Task.FromResult(principal);
 
         var identity = (ClaimsIdentity)principal.Identity;
-        
+
         // Log all received claims for debugging
-        _logger.LogInformation("=== CLAIMS TRANSFORMATION ===");
+        // _logger.LogInformation("=== CLAIMS TRANSFORMATION ===");
         foreach (var claim in principal.Claims)
         {
-            _logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
+            // _logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
         }
 
         // Ensure we have a proper Name claim
         if (!principal.HasClaim(ClaimTypes.Name, ""))
         {
-            var emailClaim = principal.FindFirst(ClaimTypes.Email) 
+            var emailClaim = principal.FindFirst(ClaimTypes.Email)
                           ?? principal.FindFirst("email");
-            
-            var usernameClaim = principal.FindFirst("preferred_username") 
+
+            var usernameClaim = principal.FindFirst("preferred_username")
                              ?? principal.FindFirst("username");
 
             if (emailClaim != null)
             {
                 identity.AddClaim(new Claim(ClaimTypes.Name, emailClaim.Value));
-                _logger.LogInformation("Added Name claim from email: {Email}", emailClaim.Value);
+                // _logger.LogInformation("Added Name claim from email: {Email}", emailClaim.Value);
             }
             else if (usernameClaim != null)
             {
                 identity.AddClaim(new Claim(ClaimTypes.Name, usernameClaim.Value));
-                _logger.LogInformation("Added Name claim from username: {Username}", usernameClaim.Value);
+                // _logger.LogInformation("Added Name claim from username: {Username}", usernameClaim.Value);
             }
         }
 
@@ -53,7 +53,7 @@ public class ClaimsTransformation : IClaimsTransformation
         {
             foreach (var groupClaim in groupsClaims)
             {
-                _logger.LogInformation("Found groups claim: {Group}", groupClaim.Value);
+                // _logger.LogInformation("Found groups claim: {Group}", groupClaim.Value);
             }
         }
         else
@@ -61,8 +61,8 @@ public class ClaimsTransformation : IClaimsTransformation
             _logger.LogWarning("No groups claims found!");
         }
 
-        _logger.LogInformation("=== END CLAIMS TRANSFORMATION ===");
-        
+        // _logger.LogInformation("=== END CLAIMS TRANSFORMATION ===");
+
         return Task.FromResult(principal);
     }
 }

@@ -21,6 +21,7 @@ builder.Services.AddHttpContextAccessor();
 // Add custom services
 builder.Services.AddSingleton<STWiki.Services.MarkdownService>();
 builder.Services.AddSingleton<STWiki.Services.DiffService>();
+builder.Services.AddScoped<STWiki.Services.TemplateService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
@@ -136,7 +137,7 @@ app.MapBlazorHub();
 app.MapControllers();
 
 // Default redirect to home page
-app.MapGet("/", () => Results.Redirect("/home"));
+app.MapGet("/", () => Results.Redirect("/main-page"));
 
 
 app.Run();

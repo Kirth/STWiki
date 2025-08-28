@@ -20,4 +20,18 @@ public class MarkdownService
 
         return Markdown.ToHtml(markdown, _pipeline);
     }
+
+    public async Task<string> RenderToHtmlAsync(string markdown, TemplateService? templateService = null)
+    {
+        if (string.IsNullOrEmpty(markdown))
+            return string.Empty;
+
+        // Process templates first if template service is provided
+        if (templateService != null)
+        {
+            markdown = await templateService.ProcessTemplatesAsync(markdown);
+        }
+
+        return Markdown.ToHtml(markdown, _pipeline);
+    }
 }

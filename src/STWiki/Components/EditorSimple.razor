@@ -4,6 +4,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject HttpClient HttpClient
+@inject IHttpContextAccessor HttpContextAccessor
 
 <div class="editor-container">
     <div class="editor-toolbar mb-2">
@@ -240,18 +241,30 @@
             var json = JsonSerializer.Serialize(request);
             var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             
-            // Ensure HttpClient has base address for relative URLs
-            if (HttpClient.BaseAddress == null)
+            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/autosave", httpContent);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            
+            // Check if we got redirected to login page (auth failure)
+            bool isLoginPage = responseContent.Contains("<title>dex</title>") || 
+                              responseContent.Contains("Log in to Your Account") ||
+                              responseContent.Contains("/dex/auth/");
+            
+            if (response.IsSuccessStatusCode && !isLoginPage)
             {
-                var baseUrl = await JS.InvokeAsync<string>("eval", "window.location.origin");
-                HttpClient.BaseAddress = new Uri(baseUrl);
+                // Try to parse as JSON to verify it's a real API response
+                try
+                {
+                    using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
+                    await JS.InvokeVoidAsync("showEditorStatus", "Draft saved");
+                }
+                catch
+                {
+                    await JS.InvokeVoidAsync("showEditorStatus", "Save failed - unexpected response format");
+                }
             }
-            
-            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/autosave", httpContent);
-            
-            if (response.IsSuccessStatusCode)
+            else if (isLoginPage)
             {
-                await JS.InvokeVoidAsync("showEditorStatus", "Draft saved");
+                await JS.InvokeVoidAsync("showEditorStatus", "Save failed - authentication required");
             }
             else
             {
@@ -280,22 +293,37 @@
             var json = JsonSerializer.Serialize(request);
             var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             
-            // Ensure HttpClient has base address for relative URLs
-            if (HttpClient.BaseAddress == null)
+            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/commit", httpContent);
+            var responseContent = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"CommitChanges() response status: {response.StatusCode}");
+            Console.WriteLine($"CommitChanges() response content: {responseContent}");
+            
+            // Check if we got redirected to login page (auth failure)
+            bool isLoginPage = responseContent.Contains("<title>dex</title>") || 
+                              responseContent.Contains("Log in to Your Account") ||
+                              responseContent.Contains("/dex/auth/");
+            
+            if (response.IsSuccessStatusCode && !isLoginPage)
             {
-                var baseUrl = await JS.InvokeAsync<string>("eval", "window.location.origin");
-                HttpClient.BaseAddress = new Uri(baseUrl);
+                // Try to parse as JSON to verify it's a real API response
+                try
+                {
+                    using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
+                    await JS.InvokeVoidAsync("showEditorStatus", "Changes committed successfully");
+                }
+                catch
+                {
+                    // Not JSON, probably HTML - treat as error even with 200 status
+                    await JS.InvokeVoidAsync("showEditorStatus", "Commit failed - unexpected response format");
+                }
             }
-            
-            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/commit", httpContent);
-            
-            if (response.IsSuccessStatusCode)
+            else if (isLoginPage)
             {
-                await JS.InvokeVoidAsync("showEditorStatus", "Changes committed");
+                await JS.InvokeVoidAsync("showEditorStatus", "Commit failed - authentication required. Please refresh and log in again.");
             }
             else
             {
-                await JS.InvokeVoidAsync("showEditorStatus", $"Commit failed: {response.StatusCode}");
+                await JS.InvokeVoidAsync("showEditorStatus", $"Commit failed: {response.StatusCode} - {responseContent}");
             }
         }
         catch (Exception ex)
@@ -322,17 +350,30 @@
             var json = JsonSerializer.Serialize(request);
             var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             
-            // Ensure HttpClient has base address for relative URLs  
-            if (HttpClient.BaseAddress == null)
-            {
-                var baseUrl = await JS.InvokeAsync<string>("eval", "window.location.origin");
-                HttpClient.BaseAddress = new Uri(baseUrl);
-            }
+            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/autosave", httpContent);
+            var responseContent = await response.Content.ReadAsStringAsync();
             
-            var response = await HttpClient.PostAsync($"/api/wiki/{PageId}/autosave", httpContent);
-            if (response.IsSuccessStatusCode)
+            // Check if we got redirected to login page (auth failure)
+            bool isLoginPage = responseContent.Contains("<title>dex</title>") || 
+                              responseContent.Contains("Log in to Your Account") ||
+                              responseContent.Contains("/dex/auth/");
+            
+            if (response.IsSuccessStatusCode && !isLoginPage)
             {
-                await JS.InvokeVoidAsync("showEditorStatus", "Auto-saved");
+                // Try to parse as JSON to verify it's a real API response
+                try
+                {
+                    using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
+                    await JS.InvokeVoidAsync("showEditorStatus", "Auto-saved");
+                }
+                catch
+                {
+                    Console.WriteLine("Autosave failed - unexpected response format");
+                }
+            }
+            else if (isLoginPage)
+            {
+                Console.WriteLine("Autosave failed - authentication required");
             }
             else
             {
@@ -360,6 +401,45 @@
         {
             // Best effort cleanup
         }
+    }
+
+    // Helper method to make authenticated HTTP requests with cookies
+    private async Task<HttpResponseMessage> MakeAuthenticatedRequest(string url, HttpContent content)
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext == null)
+        {
+            // Fallback to regular HttpClient if no context available
+            return await HttpClient.PostAsync(url, content);
+        }
+
+        // Create a new HttpClient that includes authentication cookies
+        var handler = new HttpClientHandler()
+        {
+            UseCookies = true
+        };
+
+        using var authenticatedClient = new HttpClient(handler);
+        
+        // Set base URL
+        var baseUrl = await JS.InvokeAsync<string>("eval", "window.location.origin");
+        authenticatedClient.BaseAddress = new Uri(baseUrl);
+        
+        // Copy authentication cookies from current request
+        var cookieHeader = httpContext.Request.Headers["Cookie"].ToString();
+        if (!string.IsNullOrEmpty(cookieHeader))
+        {
+            authenticatedClient.DefaultRequestHeaders.Add("Cookie", cookieHeader);
+        }
+        
+        // Copy authorization headers if present
+        if (httpContext.Request.Headers.ContainsKey("Authorization"))
+        {
+            var authHeader = httpContext.Request.Headers["Authorization"].ToString();
+            authenticatedClient.DefaultRequestHeaders.Add("Authorization", authHeader);
+        }
+        
+        return await authenticatedClient.PostAsync(url, content);
     }
 
     private async Task InsertMarkdown(string before, string after)

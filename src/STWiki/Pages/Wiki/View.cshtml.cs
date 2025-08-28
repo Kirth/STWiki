@@ -10,11 +10,13 @@ public class ViewModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly MarkdownService _markdownService;
+    private readonly TemplateService _templateService;
 
-    public ViewModel(AppDbContext context, MarkdownService markdownService)
+    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService)
     {
         _context = context;
         _markdownService = markdownService;
+        _templateService = templateService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
@@ -33,8 +35,8 @@ public class ViewModel : PageModel
             // Render content based on format
             RenderedContent = Page.BodyFormat switch
             {
-                "markdown" => _markdownService.RenderToHtml(Page.Body),
-                "html" => Page.Body, // Raw HTML (should be sanitized in production)
+                "markdown" => await _markdownService.RenderToHtmlAsync(Page.Body, _templateService),
+                "html" => await _templateService.ProcessTemplatesAsync(Page.Body), // Process templates in HTML too
                 _ => $"<pre>{Page.Body}</pre>" // Plain text fallback
             };
         }
