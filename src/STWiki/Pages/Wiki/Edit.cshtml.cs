@@ -149,7 +149,7 @@ public class EditModel : PageModel
         var currentUser = User.Identity?.Name ?? "Unknown";
         var now = DateTime.UtcNow;
 
-        // Generate slug if creating new page (slug is empty or "new")
+
         if (string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             IsNew = true;
@@ -218,7 +218,39 @@ public class EditModel : PageModel
 
             if (existingPage == null)
             {
-                return NotFound();
+                // Page doesn't exist, so create it using the slug from the URL
+                var newPage = new STWiki.Data.Entities.Page
+                {
+                    Id = Guid.NewGuid(),
+                    Slug = slug!,
+                    Title = Title,
+                    Summary = Summary ?? string.Empty,
+                    Body = CleanStringForBlazor(Body),
+                    BodyFormat = BodyFormat,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    UpdatedBy = currentUser,
+                    IsLocked = false
+                };
+
+                _context.Pages.Add(newPage);
+
+                // Create initial revision for new page
+                var initialRevision = new Revision
+                {
+                    PageId = newPage.Id,
+                    Author = currentUser,
+                    Note = "Initial page creation",
+                    Snapshot = CleanStringForBlazor(Body),
+                    Format = BodyFormat,
+                    CreatedAt = now
+                };
+
+                _context.Revisions.Add(initialRevision);
+                await _context.SaveChangesAsync();
+
+                // Redirect to the new page
+                return RedirectToPage("/Wiki/View", new { slug = slug });
             }
 
             // Check if page is locked
