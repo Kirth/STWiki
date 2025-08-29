@@ -6,29 +6,45 @@ namespace STWiki.Pages.Account;
 
 public class LoginModel : PageModel
 {
-    public IActionResult OnGet()
+    public string? ReturnUrl { get; set; }
+
+    public IActionResult OnGet(string? returnUrl = null)
     {
+        ReturnUrl = returnUrl;
+        
         if (User.Identity?.IsAuthenticated == true)
         {
-            return Redirect("/main-page");
+            return Redirect(GetSafeReturnUrl(returnUrl));
         }
         
         return Page();
     }
 
-    public IActionResult OnGetChallenge()
+    public IActionResult OnGetChallenge(string? returnUrl = null)
     {
         return Challenge(new AuthenticationProperties
         {
-            RedirectUri = "/main-page"
+            RedirectUri = GetSafeReturnUrl(returnUrl)
         }, "oidc");
     }
 
-    public IActionResult OnPostChallenge()
+    public IActionResult OnPostChallenge(string? returnUrl = null)
     {
         return Challenge(new AuthenticationProperties
         {
-            RedirectUri = "/main-page"
+            RedirectUri = GetSafeReturnUrl(returnUrl)
         }, "oidc");
+    }
+
+    private string GetSafeReturnUrl(string? returnUrl)
+    {
+        // Ensure the return URL is safe (local to this application)
+        if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+        {
+            return returnUrl;
+        }
+        
+        // Default fallback
+        return "/main-page";
     }
 }

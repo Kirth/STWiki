@@ -42,53 +42,50 @@ public class TemplateService
                 .Take(limit)
                 .ToListAsync();
 
-            if (!recentPages.Any())
+            if (recentPages.Count == 0)
             {
-                return @"<div class=""alert alert-info"">
-                    <i class=""bi bi-info-circle""></i> No recent pages found.
-                </div>";
+                return @"<div class=""alert alert-info py-2 px-3 mb-3"">
+  <i class=""bi bi-info-circle me-1""></i> No recent pages yet.
+</div>";
             }
 
-            var html = @"<div class=""card shadow-sm mb-4"">
-    <div class=""card-header bg-light"">
-        <h3 class=""card-title mb-0"">
-            <i class=""bi bi-clock-history text-primary""></i> Recent Activity
-        </h3>
-    </div>
-    <div class=""card-body p-0"">
-        <div class=""list-group list-group-flush"">";
+            var sb = new System.Text.StringBuilder();
+            sb.Append(@"<section class=""mb-4 border rounded shadow-sm p-3 bg-white"">
+ 
+<header class=""d-flex align-items-center mb-3"">
+  <h3 class=""h6 mb-0 lh-sm"">Recent activity</h3>
+</header>
+  <ul class=""list-unstyled mb-0"">");
 
             foreach (var page in recentPages)
             {
-                html += $@"
-            <div class=""list-group-item list-group-item-action d-flex justify-content-between align-items-center"">
-                <div>
-                    <h6 class=""mb-1"">
-                        <a href=""/{page.Slug}"" class=""text-decoration-none"">
-                            <i class=""bi bi-file-text text-muted me-2""></i>{System.Web.HttpUtility.HtmlEncode(page.Title)}
-                        </a>
-                    </h6>
-                    <small class=""text-muted"">
-                        <i class=""bi bi-calendar3""></i> Updated {page.UpdatedAt:MMM dd, yyyy 'at' HH:mm}
-                    </small>
-                </div>
-                <span class=""badge bg-primary rounded-pill"">View</span>
-            </div>";
+                var title = System.Web.HttpUtility.HtmlEncode(page.Title ?? "(Untitled)");
+                var iso = page.UpdatedAt.ToString("O");
+                var display = page.UpdatedAt.ToString("MMM dd, yyyy · HH:mm");
+
+                sb.Append($@"
+    <li class=""d-flex justify-content-between align-items-baseline py-2 px-1 border-top"">
+      <a class=""text-decoration-none fw-medium text-truncate me-3"" href=""/{page.Slug}"" title=""{title}"">
+        <i class=""bi bi-file-text me-2 text-muted""></i>{title}
+      </a>
+      <time class=""text-muted small"" datetime=""{iso}"">{display}</time>
+    </li>");
             }
 
-            html += @"
-        </div>
-    </div>
-</div>";
+            sb.Append(@"
+  </ul>
+</section>");
 
-            return html;
+            return sb.ToString();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to render recent pages template");
-            return @"<div class=""alert alert-danger"">
-                <i class=""bi bi-exclamation-triangle""></i> Error loading recent pages.
-            </div>";
+            return @"<div class=""alert alert-danger py-2 px-3 mb-3"">
+  <i class=""bi bi-exclamation-triangle me-1""></i> Error loading recent pages.
+</div>";
         }
     }
+
+
 }

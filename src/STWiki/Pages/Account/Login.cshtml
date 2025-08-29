@@ -8,5 +8,12 @@
 <div class="text-center">
     <h1>Login to STWiki</h1>
     <p>You need to login to edit pages.</p>
-    <a asp-page-handler="Challenge" class="btn btn-primary btn-lg">Login with Dex</a>
+    <a asp-page-handler="Challenge" asp-route-returnUrl="@Model.ReturnUrl" class="btn btn-primary btn-lg">Login with Dex</a>
+    
+    @if (!string.IsNullOrEmpty(Model.ReturnUrl))
+    {
+        <p class="text-muted mt-3">
+            <small>After login, you'll be redirected back to: <code>@Model.ReturnUrl</code></small>
+        </p>
+    }
 </div>

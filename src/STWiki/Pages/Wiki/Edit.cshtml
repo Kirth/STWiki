@@ -4,71 +4,83 @@
     ViewData["Title"] = Model.IsNew ? "Create New Page" : $"Edit {Model.Title}";
 }
 
-<div class="container-fluid">
+<div class="container-fluid px-4">
     <form method="post" class="mb-4" id="edit-form">
-        <!-- New Ergonomic Header -->
-    <div class="edit-header-section mb-4">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-            <div class="d-flex align-items-center flex-grow-1">
-                <h1 class="me-3 mb-0">@(Model.IsNew ? "Create New Page" : "Edit Page")</h1>
-                <div class="title-input-container flex-grow-1" style="max-width: 400px;">
-                    <input asp-for="Title" class="form-control form-control-lg border-0 shadow-sm" 
-                           style="font-size: 1.1rem; font-weight: 500; background: rgba(255,255,255,0.9);" 
-                           placeholder="@(Model.IsNew ? "Enter page title..." : "Page Title")" />
-                    <span asp-validation-for="Title" class="text-danger"></span>
+        <!-- Clean Header Section -->
+        <div class="edit-header bg-white rounded-3 shadow-sm border p-4 mb-4">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-secondary mb-2">
+                            <i class="bi bi-pencil-square me-1"></i>
+                            @(Model.IsNew ? "New Wiki Page" : "Edit Page")
+                        </label>
+                        <input asp-for="Title" class="form-control form-control-lg border-0 bg-light" 
+                               placeholder="@(Model.IsNew ? "Enter page title..." : "Page Title")" 
+                               style="font-size: 1.25rem; font-weight: 600;" />
+                        <span asp-validation-for="Title" class="text-danger small"></span>
+                    </div>
+                </div>
+                
+                <div class="col-md-4 text-end">
+                    <div class="d-flex gap-2 justify-content-end flex-wrap">
+                        <button type="submit" class="btn btn-primary px-4 @(Model.IsLocked ? "disabled" : "")" 
+                                @(Model.IsLocked ? "disabled" : "")>
+                            <i class="bi bi-save me-1"></i>
+                            @(Model.IsNew ? "Create" : "Save")
+                        </button>
+                        
+                        @if (!Model.IsNew)
+                        {
+                            <button type="button" class="btn btn-outline-@(Model.IsLocked ? "success" : "warning")" 
+                                    onclick="submitLockForm('@(Model.IsLocked ? "Unlock this page?" : "Lock this page?")')">
+                                <i class="bi bi-@(Model.IsLocked ? "unlock" : "lock") me-1"></i>
+                                @(Model.IsLocked ? "Unlock" : "Lock")
+                            </button>
+                            
+                            <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-lg me-1"></i> Cancel
+                            </a>
+                        }
+                        else
+                        {
+                            <a asp-page="/Wiki/Index" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-lg me-1"></i> Cancel
+                            </a>
+                        }
+                    </div>
                 </div>
             </div>
             
-            <div class="header-actions d-flex gap-2">
-                <button type="submit" form="edit-form" class="btn btn-success btn-lg @(Model.IsLocked ? "disabled" : "")" 
-                        @(Model.IsLocked ? "disabled" : "")>
-                    <i class="bi bi-check-circle"></i> @(Model.IsNew ? "Create Page" : "Save Changes")
-                </button>
-                
-                @if (!Model.IsNew)
-                {
-                    <!-- Lock/Unlock button - moved outside main form to avoid nesting -->
-                    <button type="button" class="btn btn-outline-@(Model.IsLocked ? "success" : "warning") btn-lg" 
-                            onclick="submitLockForm('@(Model.IsLocked ? "Unlock this page?" : "Lock this page? This will prevent other users from editing it.")')">
-                        <i class="bi bi-@(Model.IsLocked ? "unlock" : "lock")"></i> 
-                        @(Model.IsLocked ? "Unlock" : "Lock") Page
-                    </button>
-                    
-                    <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-x-circle"></i> Cancel
-                    </a>
-                }
-                else
-                {
-                    <a asp-page="/Wiki/Index" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-x-circle"></i> Cancel
-                    </a>
-                }
-            </div>
+            <!-- Page Metadata -->
+            @if (!Model.IsNew)
+            {
+                <div class="row mt-3 pt-3 border-top">
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-center text-muted small">
+                            <span class="me-4">
+                                <i class="bi bi-calendar-plus text-success me-1"></i>
+                                Created @Model.CreatedAt?.ToString("MMM dd, yyyy 'at' HH:mm")
+                            </span>
+                            <span class="me-4">
+                                <i class="bi bi-clock-history text-primary me-1"></i>
+                                Updated @Model.UpdatedAt?.ToString("MMM dd, yyyy 'at' HH:mm")
+                            </span>
+                            <span>
+                                <i class="bi bi-person text-info me-1"></i>
+                                by @Model.UpdatedBy
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm">
+                            <i class="bi bi-clock-history me-1"></i>
+                            History
+                        </a>
+                    </div>
+                </div>
+            }
         </div>
-        
-        <!-- Page Information Row -->
-        @if (!Model.IsNew)
-        {
-            <div class="page-info-bar d-flex align-items-center text-muted small mb-2">
-                <span class="me-4">
-                    <i class="bi bi-calendar-plus"></i> <strong>Created:</strong> @Model.CreatedAt?.ToString("yyyy-MM-dd HH:mm")
-                </span>
-                <span class="me-4">
-                    <i class="bi bi-clock-history"></i> <strong>Last Updated:</strong> @Model.UpdatedAt?.ToString("yyyy-MM-dd HH:mm")
-                </span>
-                <span class="me-4">
-                    <i class="bi bi-person"></i> <strong>By:</strong> @Model.UpdatedBy
-                </span>
-                @if (!Model.IsNew)
-                {
-                    <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm ms-auto">
-                        <i class="bi bi-clock-history"></i> View History
-                    </a>
-                }
-            </div>
-        }
-    </div>
 
     @if (!ModelState.IsValid)
     {
@@ -102,65 +114,99 @@
             <input type="hidden" asp-for="OriginalSlug" />
         }
         
-        <div class="row">
+        <div class="row g-4">
+            <!-- Main Content Area -->
             <div class="col-12">
-
-                @if (Model.IsNew)
-                {
-                    <div class="mb-3">
-                        <label asp-for="Slug" class="form-label">URL Slug</label>
-                        <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
-                        <div class="form-text">Leave blank to auto-generate from title</div>
-                        <span asp-validation-for="Slug" class="text-danger"></span>
-                    </div>
-                }
-                else
-                {
-                    <div class="mb-3">
-                        <label asp-for="Slug" class="form-label">URL Slug</label>
-                        <input asp-for="Slug" class="form-control" />
-                        <div class="form-text">
-                            <i class="bi bi-info-circle text-primary"></i> 
-                            Changing the URL will create an automatic redirect from the old URL
+                <!-- Editor Section -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light border-0 d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-file-text text-primary me-2"></i>
+                            Content Editor
+                        </h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary px-3">@Model.BodyFormat.ToUpperInvariant()</span>
                         </div>
-                        <span asp-validation-for="Slug" class="text-danger"></span>
                     </div>
-                }
-
-                <div class="mb-3">
-                    <div id="editor-container">
-                        <component type="typeof(STWiki.Components.EditorSimple)" 
-                                   render-mode="Server"
-                                   param-PageId="@(Model.PageId ?? Guid.Empty)"
-                                   param-InitialContentRaw="@Model.Body"
-                                   param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
-                                   param-BodyFormat="@Model.BodyFormat" />
+                    <div class="card-body p-0">
+                        <div id="editor-container">
+                            <component type="typeof(STWiki.Components.EditorSimple)" 
+                                       render-mode="Server"
+                                       param-PageId="@(Model.PageId ?? Guid.Empty)"
+                                       param-InitialContentRaw="@Model.Body"
+                                       param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
+                                       param-BodyFormat="@Model.BodyFormat" />
+                        </div>
+                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
+                        <span asp-validation-for="Body" class="text-danger"></span>
                     </div>
-                    <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
-                    <span asp-validation-for="Body" class="text-danger"></span>
                 </div>
 
-                <div class="mb-3">
-                    <label asp-for="Summary" class="form-label">Summary (Optional)</label>
-                    <input asp-for="Summary" class="form-control" placeholder="Brief description of this page..." />
-                    <span asp-validation-for="Summary" class="text-danger"></span>
+                <!-- URL Configuration -->
+                <div class="card mb-4">
+                    <div class="card-header bg-light border-0">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-link-45deg text-primary me-2"></i>
+                            Page Settings
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                @if (Model.IsNew)
+                                {
+                                    <label asp-for="Slug" class="form-label fw-medium">URL Slug</label>
+                                    <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                    <div class="form-text">
+                                        <i class="bi bi-info-circle me-1"></i>
+                                        Leave blank to auto-generate from title
+                                    </div>
+                                    <span asp-validation-for="Slug" class="text-danger small"></span>
+                                }
+                                else
+                                {
+                                    <label asp-for="Slug" class="form-label fw-medium">URL Slug</label>
+                                    <input asp-for="Slug" class="form-control" />
+                                    <div class="form-text">
+                                        <i class="bi bi-arrow-repeat text-success me-1"></i>
+                                        Changing the URL will create an automatic redirect
+                                    </div>
+                                    <span asp-validation-for="Slug" class="text-danger small"></span>
+                                }
+                            </div>
+                            <div class="col-md-6">
+                                <label asp-for="Summary" class="form-label fw-medium">Summary <span class="text-muted">(Optional)</span></label>
+                                <input asp-for="Summary" class="form-control" placeholder="Brief description of this page..." />
+                                <div class="form-text">
+                                    <i class="bi bi-chat-left-text me-1"></i>
+                                    Short description for search results and previews
+                                </div>
+                                <span asp-validation-for="Summary" class="text-danger small"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">Content Format</h6>
-                        <span class="badge bg-primary">@Model.BodyFormat.ToUpperInvariant()</span>
+                <!-- Format Options -->
+                <div class="card">
+                    <div class="card-header bg-light border-0">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-code-slash text-primary me-2"></i>
+                            Format Options
+                        </h6>
                     </div>
-                    
-                    <!-- Both buttons exist in DOM, visibility controlled by CSS -->
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="switch-to-html-btn" 
-                            style="display: @(Model.BodyFormat == "markdown" ? "inline-block" : "none");">
-                        <i class="bi bi-code-slash"></i> Change to HTML
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" id="switch-to-markdown-btn"
-                            style="display: @(Model.BodyFormat == "markdown" ? "none" : "inline-block");">
-                        <i class="bi bi-markdown"></i> Change to Markdown
-                    </button>
+                    <div class="card-body">
+                        <div class="d-flex gap-2 align-items-center">
+                            <span class="text-muted small">Switch format:</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="switch-to-html-btn" 
+                                    style="display: @(Model.BodyFormat == "markdown" ? "inline-block" : "none");">
+                                <i class="bi bi-code-slash me-1"></i> HTML
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="switch-to-markdown-btn"
+                                    style="display: @(Model.BodyFormat == "markdown" ? "none" : "inline-block");">
+                                <i class="bi bi-markdown me-1"></i> Markdown
+                            </button>
+                        </div>
                     
                     <!-- Hidden format conversion options -->
                     <div id="format-conversion-options" class="mt-2 p-3 border rounded bg-light" style="display: none;">
@@ -895,153 +941,91 @@
                 color: #e83e8c;
             }
             
-            /* Format switching UI styles */
-            #format-conversion-options {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                border: 2px solid #dee2e6;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            /* Clean Edit Page Styles */
+            .edit-header {
+                backdrop-filter: blur(10px);
+                background: rgba(255, 255, 255, 0.95) !important;
+            }
+            
+            .card {
+                border: 1px solid rgba(0, 0, 0, 0.08);
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
                 transition: all 0.3s ease;
             }
             
-            #format-conversion-options h6 {
+            .card:hover {
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            }
+            
+            .card-header {
+                border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            }
+            
+            .card-title {
+                font-size: 0.95rem;
                 color: #495057;
+            }
+            
+            .form-control:focus {
+                border-color: #0d6efd;
+                box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+                transform: translateY(-1px);
+                transition: all 0.2s ease;
+            }
+            
+            .btn {
+                font-weight: 500;
+                border-radius: 6px;
+                transition: all 0.2s ease;
+            }
+            
+            .btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+            }
+            
+            .badge {
                 font-weight: 600;
+                letter-spacing: 0.5px;
+            }
+            
+            /* Format conversion dialog */
+            #format-conversion-options {
+                background: #f8f9fa;
+                border: 1px solid #e9ecef;
+                border-radius: 8px;
+                transition: all 0.3s ease;
             }
             
             .form-check-label {
                 cursor: pointer;
                 padding: 8px 12px;
-                border-radius: 4px;
+                border-radius: 6px;
                 transition: background-color 0.2s ease;
             }
             
             .form-check-label:hover {
-                background-color: rgba(0, 123, 255, 0.1);
+                background-color: rgba(13, 110, 253, 0.08);
             }
             
             .form-check-input:checked + .form-check-label {
-                background-color: rgba(40, 167, 69, 0.1);
-                border-left: 3px solid #28a745;
+                background-color: rgba(25, 135, 84, 0.1);
+                border-left: 3px solid #198754;
             }
             
-            #switch-to-html-btn, #switch-to-markdown-btn {
-                transition: all 0.2s ease;
-                font-weight: 500;
-            }
-            
-            #switch-to-html-btn:hover, #switch-to-markdown-btn:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 3px 6px rgba(0,0,0,0.1);
-            }
-            
-            .badge.bg-primary {
-                font-size: 0.75em;
-                padding: 6px 10px;
-                border-radius: 12px;
-                font-weight: 600;
-            }
-            
-            #format-conversion-options .alert-warning {
-                background: linear-gradient(45deg, #fff3cd, #ffeaa7);
-                border-color: #f39c12;
-                color: #856404;
-            }
-            
-            #confirm-format-switch {
-                background: linear-gradient(45deg, #28a745, #20c997);
-                border: none;
-                font-weight: 600;
-            }
-            
-            #confirm-format-switch:hover {
-                background: linear-gradient(45deg, #218838, #1dd1a1);
-                transform: translateY(-1px);
-            }
-            
-            #cancel-format-switch {
-                background: linear-gradient(45deg, #6c757d, #868e96);
-                border: none;
-                color: white;
-            }
-            
-            #cancel-format-switch:hover {
-                background: linear-gradient(45deg, #5a6268, #747b83);
-                transform: translateY(-1px);
-            }
-            
-            /* Ergonomic Header Styling */
-            .edit-header-section {
-                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-                border-radius: 12px;
-                padding: 20px 24px;
-                border: 1px solid #dee2e6;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            }
-            
-            .title-input-container input {
-                background: rgba(255,255,255,0.9);
-                transition: all 0.3s ease;
-                border-radius: 8px;
-            }
-            
-            .title-input-container input:focus {
-                background: white;
-                box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
-                border-color: #0d6efd;
-                transform: translateY(-1px);
-            }
-            
-            .header-actions .btn {
-                font-weight: 600;
-                border-radius: 8px;
-                transition: all 0.2s ease;
-                min-width: 120px;
-            }
-            
-            .header-actions .btn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            }
-            
-            .header-actions .btn-success {
-                background: linear-gradient(45deg, #28a745, #20c997);
-                border: none;
-                box-shadow: 0 2px 6px rgba(40,167,69,0.3);
-            }
-            
-            .header-actions .btn-success:hover {
-                background: linear-gradient(45deg, #218838, #1dd1a1);
-                box-shadow: 0 4px 12px rgba(40,167,69,0.4);
-            }
-            
-            .page-info-bar {
-                background: rgba(255,255,255,0.7);
-                padding: 12px 16px;
-                border-radius: 8px;
-                border: 1px solid rgba(222,226,230,0.6);
-            }
-            
-            .page-info-bar i {
-                opacity: 0.7;
-                margin-right: 4px;
-            }
-            
-            .page-info-bar .btn-outline-info {
-                border-radius: 6px;
-                font-size: 0.875rem;
-                padding: 4px 12px;
-            }
-            
-            /* Make the main content area cleaner */
-            .col-12 {
-                max-width: none;
-            }
-            
-            /* Adjust form spacing */
-            #edit-form .row {
-                margin-left: 0;
-                margin-right: 0;
+            /* Responsive adjustments */
+            @@media (max-width: 768px) {
+                .edit-header .row > div {
+                    margin-bottom: 1rem;
+                }
+                
+                .edit-header .text-end {
+                    text-align: left !important;
+                }
+                
+                .d-flex.flex-wrap {
+                    justify-content: flex-start !important;
+                }
             }
         </style>
 }

@@ -35,6 +35,15 @@ builder.Services.AddAuthentication(options =>
 .AddCookie("Cookies", options =>
 {
     options.AccessDeniedPath = "/Account/AccessDenied";
+    options.LoginPath = "/Account/Login";
+    
+    options.Events.OnRedirectToLogin = context =>
+    {
+        // Preserve the original URL the user was trying to access
+        var returnUrl = context.Request.Path + context.Request.QueryString;
+        context.Response.Redirect($"{context.RedirectUri}?returnUrl={Uri.EscapeDataString(returnUrl)}");
+        return Task.CompletedTask;
+    };
 })
 .AddOpenIdConnect("oidc", options =>
 {
@@ -128,6 +137,23 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseStaticFiles();
+
+// Handle trailing slashes by redirecting to non-trailing slash URLs
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    if (path != null && path.Length > 1 && path.EndsWith('/'))
+    {
+        // Remove trailing slash and redirect
+        var newPath = path.TrimEnd('/');
+        var newUrl = $"{context.Request.Scheme}://{context.Request.Host}{newPath}{context.Request.QueryString}";
+        context.Response.Redirect(newUrl, permanent: true);
+        return;
+    }
+    
+    await next.Invoke();
+});
+
 app.UseRouting();
 
 app.UseAuthentication();

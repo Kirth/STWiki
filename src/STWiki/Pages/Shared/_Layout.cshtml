@@ -6,32 +6,84 @@
     <title>@ViewData["Title"] - STWiki</title>
     <base href="~/" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="css/site.css" rel="stylesheet" />
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <nav class="navbar navbar-expand-lg navbar-light bg-transparent border-bottom">
             <div class="container-fluid">
-                <a class="navbar-brand" href="/main-page">STWiki</a>
+                <!-- Brand -->
+                <a class="navbar-brand fw-bold d-flex align-items-center" href="/main-page">
+                    <i class="bi bi-journal-text me-2" style="font-size: 1.5rem;"></i>
+                    <span class="fs-4">STWiki</span>
+                </a>
                 
-                <div class="d-flex mx-auto" style="max-width: 400px;">
-                    <form action="/search" method="get" class="d-flex w-100">
-                        <input class="form-control me-2" type="search" name="q" placeholder="Search wiki..." aria-label="Search">
-                    </form>
-                </div>
+                <!-- Mobile toggle button -->
+                <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                
+                <!-- Collapsible content -->
+                <div class="collapse navbar-collapse" id="navbarContent">
+                    <!-- Search bar (centered on desktop, full width on mobile) -->
+                    <div class="mx-auto my-2 my-lg-0" style="max-width: 500px; width: 100%;">
+                        <form action="/search" method="get" class="position-relative">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0">
+                                    <i class="bi bi-search text-muted"></i>
+                                </span>
+                                <input class="form-control border-start-0 ps-0" 
+                                       type="search" 
+                                       name="q" 
+                                       placeholder="Search wiki pages..." 
+                                       aria-label="Search"
+                                       style="background: white;">
+                            </div>
+                        </form>
+                    </div>
 
-                <div class="navbar-nav ms-auto">
-                    @if (User.Identity?.IsAuthenticated == true)
-                    {
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="navbar-text">Welcome, @User.Identity.Name 
-                              (<a href="/Account/Logout">logout</a>)</span> 
-                        </div>
-                    }
-                    else
-                    {
-                        <a href="/Account/Login" class="btn btn-sm btn-primary">Login</a>
-                    }
+                    <!-- Dark mode toggle -->
+                    <div class="navbar-nav me-3">
+                        <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" title="Toggle dark mode">
+                            <i class="bi bi-moon" id="darkModeIcon"></i>
+                        </button>
+                    </div>
+
+                    <!-- User section -->
+                    <div class="navbar-nav ms-auto">
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            <div class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle d-flex align-items-center text-body" 
+                                   href="#" 
+                                   role="button" 
+                                   data-bs-toggle="dropdown">
+                                    <i class="bi bi-person-circle me-2 fs-5"></i>
+                                    <span class="d-none d-md-inline">@(User.Identity.Name ?? "User")</span>
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end shadow">
+                                    <li><h6 class="dropdown-header">@(User.Identity.Name ?? "User")</h6></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="/Account/Logout">
+                                            <i class="bi bi-box-arrow-right me-2"></i>
+                                            Logout
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                        }
+                        else
+                        {
+                            var currentUrl = Context.Request.Path + Context.Request.QueryString;
+                            <a href="/Account/Login?returnUrl=@Uri.EscapeDataString(currentUrl)" 
+                               class="btn btn-primary btn-sm fw-medium">
+                                <i class="bi bi-box-arrow-in-right me-1"></i>
+                                Login
+                            </a>
+                        }
+                    </div>
                 </div>
             </div>
         </nav>
@@ -42,6 +94,251 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Dark mode functionality
+        (function() {
+            const darkModeToggle = document.getElementById('darkModeToggle');
+            const darkModeIcon = document.getElementById('darkModeIcon');
+            const html = document.documentElement;
+            
+            // Check for saved theme preference or default to system preference
+            const savedTheme = localStorage.getItem('theme') || 
+                              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            
+            // Apply the theme
+            function applyTheme(theme) {
+                if (theme === 'dark') {
+                    html.setAttribute('data-bs-theme', 'dark');
+                    darkModeIcon.className = 'bi bi-sun';
+                } else {
+                    html.setAttribute('data-bs-theme', 'light');
+                    darkModeIcon.className = 'bi bi-moon';
+                }
+                localStorage.setItem('theme', theme);
+            }
+            
+            // Initialize theme
+            applyTheme(savedTheme);
+            
+            // Toggle theme on button click
+            darkModeToggle?.addEventListener('click', function() {
+                const currentTheme = html.getAttribute('data-bs-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                applyTheme(newTheme);
+            });
+            
+            // Listen for system theme changes
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+                if (!localStorage.getItem('theme')) {
+                    applyTheme(e.matches ? 'dark' : 'light');
+                }
+            });
+        })();
+    </script>
+    
+    <style>
+        /* Dark mode styles */
+        [data-bs-theme="dark"] {
+            --bs-body-bg: #121212;
+            --bs-body-color: #e0e0e0;
+            --bs-border-color: #333;
+        }
+        
+        /* Body and background override */
+        [data-bs-theme="dark"] body {
+            background-color: #121212 !important;
+            color: #e0e0e0 !important;
+        }
+        
+        /* Typography in dark mode */
+        [data-bs-theme="dark"] h1,
+        [data-bs-theme="dark"] h2, 
+        [data-bs-theme="dark"] h3,
+        [data-bs-theme="dark"] h4,
+        [data-bs-theme="dark"] h5,
+        [data-bs-theme="dark"] h6 {
+            color: #e0e0e0 !important;
+        }
+        
+        [data-bs-theme="dark"] .navbar {
+            background-color: #1e1e1e !important;
+            border-color: #333 !important;
+        }
+        
+        [data-bs-theme="dark"] .card {
+            background-color: #1e1e1e;
+            border-color: #333;
+        }
+        
+        [data-bs-theme="dark"] .card-header {
+            background-color: #2d2d2d;
+            border-color: #333;
+        }
+        
+        [data-bs-theme="dark"] .bg-light {
+            background-color: #2d2d2d !important;
+        }
+        
+        [data-bs-theme="dark"] .border,
+        [data-bs-theme="dark"] .border-top {
+            border-color: #333 !important;
+        }
+        
+        [data-bs-theme="dark"] .text-muted {
+            color: #a0a0a0 !important;
+        }
+        
+        /* Form controls */
+        [data-bs-theme="dark"] .form-control {
+            background-color: #2d2d2d;
+            border-color: #404040;
+            color: #e0e0e0;
+        }
+        
+        [data-bs-theme="dark"] .form-control:focus {
+            background-color: #2d2d2d;
+            border-color: #0d6efd;
+            color: #e0e0e0;
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        
+        [data-bs-theme="dark"] .input-group-text {
+            background-color: #2d2d2d;
+            border-color: #404040;
+            color: #a0a0a0;
+        }
+        
+        /* Dropdown menus */
+        [data-bs-theme="dark"] .dropdown-menu {
+            background-color: #1e1e1e;
+            border-color: #333;
+        }
+        
+        [data-bs-theme="dark"] .dropdown-item {
+            color: #e0e0e0;
+        }
+        
+        [data-bs-theme="dark"] .dropdown-item:hover {
+            background-color: #2d2d2d;
+            color: #e0e0e0;
+        }
+        
+        [data-bs-theme="dark"] .dropdown-divider {
+            border-color: #333;
+        }
+        
+        [data-bs-theme="dark"] .dropdown-header {
+            color: #a0a0a0;
+        }
+        
+        /* Wiki content */
+        [data-bs-theme="dark"] .wiki-content {
+            color: #e0e0e0;
+        }
+        
+        [data-bs-theme="dark"] .wiki-content pre {
+            background-color: #2d2d2d !important;
+            color: #e0e0e0;
+        }
+        
+        [data-bs-theme="dark"] .wiki-content blockquote {
+            color: #a0a0a0;
+            border-left-color: #0d6efd;
+        }
+        
+        [data-bs-theme="dark"] .wiki-content table th,
+        [data-bs-theme="dark"] .wiki-content table td {
+            border-color: #333;
+            background-color: #1e1e1e;
+        }
+        
+        [data-bs-theme="dark"] .wiki-content table th {
+            background-color: #2d2d2d !important;
+        }
+        
+        /* Editor styles */
+        [data-bs-theme="dark"] .editor-container {
+            background-color: #1e1e1e;
+            border-color: #333;
+        }
+        
+        [data-bs-theme="dark"] .editor-content {
+            background-color: #1e1e1e !important;
+        }
+        
+        [data-bs-theme="dark"] .editor-toolbar {
+            border-color: #333;
+        }
+        
+        /* Code block dark mode */
+        [data-bs-theme="dark"] .wiki-content code:not([class*="language-"]) {
+            background: rgba(255,255,255,0.1);
+            color: #ff79c6;
+        }
+        
+        [data-bs-theme="dark"] .wiki-content pre[class*="language-"] {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        
+        /* Alert styles for dark mode */
+        [data-bs-theme="dark"] .alert-info {
+            background-color: #1b2a2d;
+            border-color: #2b5a5c;
+            color: #c6f5fb;
+        }
+        
+        [data-bs-theme="dark"] .alert-danger {
+            background-color: #2d1b1b;
+            border-color: #5c2b2b;
+            color: #f5c6cb;
+        }
+        
+        [data-bs-theme="dark"] .alert-success {
+            background-color: #1b2d1b;
+            border-color: #2b5c2b;
+            color: #c6f5cb;
+        }
+        
+        [data-bs-theme="dark"] .alert-warning {
+            background-color: #2d2a1b;
+            border-color: #5c5b2b;
+            color: #f5f2c6;
+        }
+        
+        /* Button adjustments for dark mode */
+        [data-bs-theme="dark"] .btn-outline-secondary {
+            border-color: #6c757d;
+            color: #6c757d;
+        }
+        
+        [data-bs-theme="dark"] .btn-outline-secondary:hover {
+            background-color: #6c757d;
+            border-color: #6c757d;
+            color: #fff;
+        }
+        
+        [data-bs-theme="dark"] .btn-outline-primary {
+            color: #86b7fe;
+            border-color: #86b7fe;
+        }
+        
+        [data-bs-theme="dark"] .btn-outline-primary:hover {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+            color: #fff;
+        }
+        
+        /* Breadcrumb navigation */
+        [data-bs-theme="dark"] .breadcrumb-item a {
+            color: #86b7fe;
+        }
+        
+        [data-bs-theme="dark"] .breadcrumb-item.active {
+            color: #a0a0a0;
+        }
+    </style>
+    
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>
