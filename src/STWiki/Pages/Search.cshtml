@@ -79,13 +79,16 @@
                                 
                                 @if (!string.IsNullOrWhiteSpace(result.HighlightedSummary))
                                 {
-                                    <p class="mb-1 text-muted">
-                                        @Html.Raw(result.HighlightedSummary)
-                                        @if (result.MatchType == "summary")
-                                        {
-                                            <small class="badge bg-info ms-1 search-match-badge">Summary Match</small>
-                                        }
-                                    </p>
+                                    <div class="page-summary-result mb-2">
+                                        <p class="mb-1 text-secondary lead" style="font-size: 1rem;">
+                                            <i class="bi bi-info-circle text-primary me-1"></i>
+                                            @Html.Raw(result.HighlightedSummary)
+                                            @if (result.MatchType == "summary")
+                                            {
+                                                <small class="badge bg-info ms-2 search-match-badge">Summary Match</small>
+                                            }
+                                        </p>
+                                    </div>
                                 }
                                 
                                 @if (!string.IsNullOrWhiteSpace(result.BodySnippet))
@@ -96,13 +99,29 @@
                                     </p>
                                 }
                                 
-                                <small class="text-muted">
-                                    <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.Page.UpdatedBy
-                                    <span class="ms-2">
-                                        <i class="bi bi-file-earmark-@(result.Page.BodyFormat == "markdown" ? "text" : "code")"></i>
-                                        @result.Page.BodyFormat.ToUpper()
-                                    </span>
-                                </small>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.Page.UpdatedBy
+                                        @if (result.Page.CreatedAt != result.Page.UpdatedAt)
+                                        {
+                                            <span class="ms-2">
+                                                <i class="bi bi-calendar-plus"></i> Created @result.Page.CreatedAt.ToString("yyyy-MM-dd")
+                                            </span>
+                                        }
+                                    </small>
+                                    <small class="text-muted">
+                                        <span class="badge bg-light text-dark border">
+                                            <i class="bi bi-file-earmark-@(result.Page.BodyFormat == "markdown" ? "text" : "code")"></i>
+                                            @result.Page.BodyFormat.ToUpper()
+                                        </span>
+                                        @if (result.Page.IsLocked)
+                                        {
+                                            <span class="badge bg-warning text-dark ms-1">
+                                                <i class="bi bi-lock"></i> Locked
+                                            </span>
+                                        }
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>

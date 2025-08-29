@@ -22,6 +22,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton<STWiki.Services.MarkdownService>();
 builder.Services.AddSingleton<STWiki.Services.DiffService>();
 builder.Services.AddScoped<STWiki.Services.TemplateService>();
+builder.Services.AddScoped<STWiki.Services.IRedirectService, STWiki.Services.RedirectService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 

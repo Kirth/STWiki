@@ -30,13 +30,21 @@ public class AppDbContext : DbContext
                 .UseCollation("C");
         });
 
-        // Foreign key relationship
+        // Foreign key relationship and performance indexes
         modelBuilder.Entity<Revision>(entity =>
         {
             entity.HasOne(r => r.Page)
                 .WithMany(p => p.Revisions)
                 .HasForeignKey(r => r.PageId)
                 .OnDelete(DeleteBehavior.Cascade);
+                
+            // Composite index for efficient revision history pagination
+            entity.HasIndex(e => new { e.PageId, e.CreatedAt })
+                .HasDatabaseName("IX_Revisions_PageId_CreatedAt");
+                
+            // Index on CreatedAt for chronological queries
+            entity.HasIndex(e => e.CreatedAt)
+                .HasDatabaseName("IX_Revisions_CreatedAt");
         });
 
         // Unique index on FromSlug for redirects

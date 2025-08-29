@@ -26,6 +26,12 @@ public class HistoryModel : PageModel
     public List<Revision> Revisions { get; set; } = new();
     public string RenderedContent { get; set; } = string.Empty;
     
+    // Pagination properties
+    public int CurrentPage { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
+    public int TotalRevisions { get; set; }
+    public int TotalPages { get; set; }
+    
     // For revision viewing
     public Revision? SelectedRevision { get; set; }
     public string SelectedRevisionContent { get; set; } = string.Empty;
@@ -35,19 +41,33 @@ public class HistoryModel : PageModel
     public Revision? CompareToRevision { get; set; }
     public string DiffHtml { get; set; } = string.Empty;
 
-    public async Task<IActionResult> OnGetAsync(string slug)
+    public async Task<IActionResult> OnGetAsync(string slug, int page = 1)
     {
         Slug = slug;
+        CurrentPage = Math.Max(1, page);
         
         Page = await _context.Pages
             .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
 
         if (Page != null)
         {
-            // Load revisions for this page
+            // Get total revision count for pagination
+            TotalRevisions = await _context.Revisions
+                .Where(r => r.PageId == Page.Id)
+                .CountAsync();
+                
+            TotalPages = (int)Math.Ceiling((double)TotalRevisions / PageSize);
+            
+            // Ensure current page is valid
+            if (CurrentPage > TotalPages && TotalPages > 0)
+                CurrentPage = TotalPages;
+            
+            // Load paginated revisions for this page
             Revisions = await _context.Revisions
                 .Where(r => r.PageId == Page.Id)
                 .OrderByDescending(r => r.CreatedAt)
+                .Skip((CurrentPage - 1) * PageSize)
+                .Take(PageSize)
                 .ToListAsync();
 
             // Render current content
@@ -62,9 +82,10 @@ public class HistoryModel : PageModel
         return Page();
     }
 
-    public async Task<IActionResult> OnGetViewRevisionAsync(string slug, long revisionId)
+    public async Task<IActionResult> OnGetViewRevisionAsync(string slug, long revisionId, int page = 1)
     {
         Slug = slug;
+        CurrentPage = Math.Max(1, page);
         
         Page = await _context.Pages
             .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
@@ -72,10 +93,23 @@ public class HistoryModel : PageModel
         if (Page == null)
             return NotFound();
 
-        // Load all revisions for navigation
+        // Get total revision count for pagination
+        TotalRevisions = await _context.Revisions
+            .Where(r => r.PageId == Page.Id)
+            .CountAsync();
+            
+        TotalPages = (int)Math.Ceiling((double)TotalRevisions / PageSize);
+        
+        // Ensure current page is valid
+        if (CurrentPage > TotalPages && TotalPages > 0)
+            CurrentPage = TotalPages;
+
+        // Load paginated revisions for navigation
         Revisions = await _context.Revisions
             .Where(r => r.PageId == Page.Id)
             .OrderByDescending(r => r.CreatedAt)
+            .Skip((CurrentPage - 1) * PageSize)
+            .Take(PageSize)
             .ToListAsync();
 
         // Load selected revision
@@ -155,9 +189,10 @@ public class HistoryModel : PageModel
         return RedirectToPage("/Wiki/View", new { slug });
     }
 
-    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId)
+    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId, int page = 1)
     {
         Slug = slug;
+        CurrentPage = Math.Max(1, page);
         
         Page = await _context.Pages
             .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
@@ -165,10 +200,23 @@ public class HistoryModel : PageModel
         if (Page == null)
             return NotFound();
 
-        // Load all revisions for navigation
+        // Get total revision count for pagination
+        TotalRevisions = await _context.Revisions
+            .Where(r => r.PageId == Page.Id)
+            .CountAsync();
+            
+        TotalPages = (int)Math.Ceiling((double)TotalRevisions / PageSize);
+        
+        // Ensure current page is valid
+        if (CurrentPage > TotalPages && TotalPages > 0)
+            CurrentPage = TotalPages;
+
+        // Load paginated revisions for navigation
         Revisions = await _context.Revisions
             .Where(r => r.PageId == Page.Id)
             .OrderByDescending(r => r.CreatedAt)
+            .Skip((CurrentPage - 1) * PageSize)
+            .Take(PageSize)
             .ToListAsync();
 
         // Load the two revisions to compare

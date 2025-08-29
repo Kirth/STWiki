@@ -86,7 +86,9 @@ public class SearchModel : PageModel
         { 
             Page = page,
             HighlightedTitle = HighlightText(page.Title, searchTerm),
-            HighlightedSummary = HighlightText(page.Summary, searchTerm)
+            HighlightedSummary = !string.IsNullOrWhiteSpace(page.Summary) 
+                ? HighlightText(page.Summary, searchTerm)
+                : ""
         };
         
         // Determine match type and create snippet

@@ -13,10 +13,12 @@ namespace STWiki.Pages.Wiki;
 public class EditModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly IRedirectService _redirectService;
 
-    public EditModel(AppDbContext context)
+    public EditModel(AppDbContext context, IRedirectService redirectService)
     {
         _context = context;
+        _redirectService = redirectService;
     }
 
     [BindProperty]
@@ -45,12 +47,18 @@ public class EditModel : PageModel
     public DateTimeOffset? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
 
+    // Original slug for tracking changes
+    public string? OriginalSlug { get; set; }
+
+    // Page locking status
+    public bool IsLocked { get; set; }
+
     public async Task<IActionResult> OnGetAsync(string? slug)
     {
         Console.WriteLine($"============== EDIT ONGETASYNC START ==============");
         Console.WriteLine($"🎯 OnGetAsync called with slug: '{slug}'");
         Console.WriteLine($"============== THREAD: {System.Threading.Thread.CurrentThread.ManagedThreadId} ==============");
-        
+
         if (string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             // New page mode
@@ -65,13 +73,7 @@ public class EditModel : PageModel
         Console.WriteLine($"🎯 Querying database for slug: '{slug}'");
         var existingPage = await _context.Pages
             .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
-        
-        if (existingPage != null)
-        {
-            Console.WriteLine($"🎯 Raw from DB - Body length: {existingPage.Body?.Length}, Slug length: {existingPage.Slug?.Length}");
-            Console.WriteLine($"🎯 Raw from DB - Body has BOM: {existingPage.Body?.StartsWith("\uFEFF") ?? false}");
-            Console.WriteLine($"🎯 Raw from DB - Slug has BOM: {existingPage.Slug?.StartsWith("\uFEFF") ?? false}");
-        }
+
 
         if (existingPage == null)
         {
@@ -90,16 +92,21 @@ public class EditModel : PageModel
         PageId = existingPage.Id;
         Title = existingPage.Title;
         Slug = CleanStringForBlazor(existingPage.Slug);
+        OriginalSlug = existingPage.Slug; // Store original slug for change detection
         Summary = existingPage.Summary;
         Body = CleanStringForBlazor(existingPage.Body);
         BodyFormat = existingPage.BodyFormat;
         CreatedAt = existingPage.CreatedAt;
         UpdatedAt = existingPage.UpdatedAt;
         UpdatedBy = existingPage.UpdatedBy;
-        
-        Console.WriteLine($"🎯 After cleaning - Body has BOM: {Body?.StartsWith("\uFEFF") ?? false}");
-        Console.WriteLine($"🎯 After cleaning - Slug has BOM: {Slug?.StartsWith("\uFEFF") ?? false}");
+        IsLocked = existingPage.IsLocked;
 
+        // Check if page is locked - still show the form but with warnings
+        if (existingPage.IsLocked)
+        {
+            ViewData["IsPageLocked"] = true;
+            ViewData["LockWarning"] = "This page is currently locked. You can view the content but cannot save changes.";
+        }
 
         return Page();
     }
@@ -110,7 +117,9 @@ public class EditModel : PageModel
         Console.WriteLine($"📝 FORM SUBMIT - Body length: {Body?.Length ?? -1}");
         Console.WriteLine($"📝 FORM SUBMIT - Title: '{Title}'");
         Console.WriteLine($"📝 FORM SUBMIT - BodyFormat: '{BodyFormat}'");
-        
+        Console.WriteLine($"📝 FORM SUBMIT - Form Slug field: '{Slug}'");
+        Console.WriteLine($"📝 FORM SUBMIT - OriginalSlug field: '{OriginalSlug}'");
+
         if (Body?.Length > 50)
         {
             Console.WriteLine($"📝 FORM SUBMIT - Body preview: '{Body.Substring(0, Math.Min(50, Body.Length))}...'");
@@ -123,6 +132,16 @@ public class EditModel : PageModel
         if (!ModelState.IsValid)
         {
             Console.WriteLine("❌ FORM SUBMIT - ModelState is invalid");
+            // Debug: List validation errors
+            foreach (var key in ModelState.Keys)
+            {
+                var state = ModelState[key];
+                if (state != null && state.Errors.Count > 0)
+                {
+                    Console.WriteLine($"  🔍 Validation error for {key}: {string.Join(", ", state.Errors.Select(e => e.ErrorMessage))}");
+                }
+            }
+            
             IsNew = string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase);
             return Page();
         }
@@ -140,7 +159,7 @@ public class EditModel : PageModel
             }
 
             Slug = CleanStringForBlazor(Slug);
-            
+
             if (string.IsNullOrWhiteSpace(Slug))
             {
                 ModelState.AddModelError(nameof(Slug), "Unable to generate valid slug from title");
@@ -173,7 +192,7 @@ public class EditModel : PageModel
             };
 
             _context.Pages.Add(newPage);
-            
+
             // Create initial revision for new page
             var initialRevision = new Revision
             {
@@ -184,7 +203,7 @@ public class EditModel : PageModel
                 Format = BodyFormat,
                 CreatedAt = now
             };
-            
+
             _context.Revisions.Add(initialRevision);
             await _context.SaveChangesAsync();
 
@@ -202,6 +221,15 @@ public class EditModel : PageModel
                 return NotFound();
             }
 
+            // Check if page is locked
+            if (existingPage.IsLocked)
+            {
+                ModelState.AddModelError("", "This page is currently locked and cannot be edited.");
+                IsNew = false;
+                OriginalSlug = existingPage.Slug;
+                return Page();
+            }
+
             // Create revision before updating the page
             var revision = new Revision
             {
@@ -212,14 +240,47 @@ public class EditModel : PageModel
                 Format = BodyFormat,
                 CreatedAt = now
             };
-            
+
             _context.Revisions.Add(revision);
+
+            // Check if slug has changed and create redirect if needed
+            Console.WriteLine($"🔍 Slug comparison: existing='{existingPage.Slug}', new='{Slug}'");
+            var slugHasChanged = !string.IsNullOrEmpty(Slug) &&
+                                !string.Equals(existingPage.Slug, Slug, StringComparison.OrdinalIgnoreCase);
             
+            Console.WriteLine($"🔍 Slug has changed: {slugHasChanged}");
+
+            if (slugHasChanged)
+            {
+                // Validate new slug doesn't already exist
+                var slugExists = await _context.Pages
+                    .AnyAsync(p => p.Slug.ToLower() == Slug!.ToLower() && p.Id != existingPage.Id);
+
+                if (slugExists)
+                {
+                    ModelState.AddModelError(nameof(Slug), "A page with this URL already exists");
+                    IsNew = false;
+                    OriginalSlug = existingPage.Slug;
+                    return Page();
+                }
+
+                Console.WriteLine($"📝 Slug changed from '{existingPage.Slug}' to '{Slug}' - creating redirect");
+
+                // Create redirect from old slug to new slug
+                await _redirectService.CreateRedirectAsync(existingPage.Slug, Slug!);
+
+                // Clean up any existing redirects that pointed to the old slug
+                await _redirectService.CleanupRedirectChainAsync(existingPage.Slug);
+
+                // Update the page slug
+                existingPage.Slug = Slug!;
+            }
+
             // Update page
             Console.WriteLine($"📝 FORM SUBMIT - Updating existing page ID: {existingPage.Id}");
             Console.WriteLine($"📝 FORM SUBMIT - Old body length: {existingPage.Body?.Length ?? -1}");
             Console.WriteLine($"📝 FORM SUBMIT - New body length: {Body?.Length ?? -1}");
-            
+
             existingPage.Title = Title;
             existingPage.Summary = Summary ?? string.Empty;
             existingPage.Body = CleanStringForBlazor(Body);
@@ -230,8 +291,36 @@ public class EditModel : PageModel
             await _context.SaveChangesAsync();
             Console.WriteLine($"✅ FORM SUBMIT - Page updated successfully");
 
-            return RedirectToPage("/Wiki/View", new { slug });
+            // Redirect to the new slug if it changed, otherwise the original slug
+            var targetSlug = slugHasChanged ? Slug : slug;
+            return RedirectToPage("/Wiki/View", new { slug = targetSlug });
         }
+    }
+
+    [Authorize(Policy = "RequireEditor")]
+    public async Task<IActionResult> OnPostToggleLockAsync(string slug)
+    {
+        var page = await _context.Pages
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+
+        if (page == null)
+        {
+            return NotFound();
+        }
+
+        // Toggle the lock status
+        page.IsLocked = !page.IsLocked;
+        page.UpdatedAt = DateTimeOffset.UtcNow;
+        page.UpdatedBy = User.Identity?.Name ?? "Unknown";
+
+        await _context.SaveChangesAsync();
+
+        // Redirect back to edit page with status message
+        TempData["StatusMessage"] = page.IsLocked
+            ? "Page has been locked successfully."
+            : "Page has been unlocked successfully.";
+
+        return RedirectToPage("/Wiki/Edit", new { slug });
     }
 
     /// <summary>
@@ -241,7 +330,7 @@ public class EditModel : PageModel
     private static string? CleanStringForBlazor(string? input)
     {
         Console.WriteLine($"🧹 CleanStringForBlazor called with input length: {input?.Length ?? -1}");
-        
+
         if (string.IsNullOrEmpty(input))
         {
             Console.WriteLine($"🧹 CleanStringForBlazor: input is null/empty, returning as-is");
@@ -251,12 +340,12 @@ public class EditModel : PageModel
         // Check for BOM before cleaning
         var hasBomBefore = input.StartsWith("\uFEFF");
         Console.WriteLine($"🧹 CleanStringForBlazor: input has BOM before cleaning: {hasBomBefore}");
-        
+
         if (hasBomBefore)
         {
             var bomChars = input.Where(c => c == '\uFEFF').Count();
             Console.WriteLine($"🧹 CleanStringForBlazor: found {bomChars} BOM characters in input");
-            
+
             // Show first few characters in hex
             var firstChars = input.Take(10).Select(c => $"U+{(int)c:X4}").ToArray();
             Console.WriteLine($"🧹 CleanStringForBlazor: first chars: [{string.Join(", ", firstChars)}]");
@@ -276,9 +365,7 @@ public class EditModel : PageModel
 
         // Check for BOM after cleaning
         var hasBomAfter = cleaned.StartsWith("\uFEFF");
-        Console.WriteLine($"🧹 CleanStringForBlazor: output has BOM after cleaning: {hasBomAfter}");
-        Console.WriteLine($"🧹 CleanStringForBlazor: input length {input.Length} -> output length {cleaned.Length}");
-        
+
         if (hasBomAfter)
         {
             Console.WriteLine($"🧹 ❌ CleanStringForBlazor: BOM STILL PRESENT AFTER CLEANING!");

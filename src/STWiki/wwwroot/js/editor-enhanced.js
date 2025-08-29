@@ -67,6 +67,9 @@ function setupEventListeners(instance) {
 
     // Live preview updates with debouncing
     textarea.addEventListener('input', function() {
+        // Immediate sync with form textarea on every input
+        syncWithFormTextarea(textarea.value);
+        
         clearTimeout(instance.updateTimeout);
         instance.updateTimeout = setTimeout(() => {
             updatePreview(instance);
@@ -210,11 +213,16 @@ function syncWithFormTextarea(content) {
     try {
         const bodyTextarea = document.getElementById('body-textarea');
         if (bodyTextarea) {
-            bodyTextarea.value = content;
-            console.log('🔄 Synced content to form textarea');
+            bodyTextarea.value = content || '';
+            // Also trigger change event to ensure form validation updates
+            bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+            bodyTextarea.dispatchEvent(new Event('change', { bubbles: true }));
+            console.log('🔄 Synced content to form textarea:', content?.length || 0, 'characters');
+        } else {
+            console.warn('⚠️ body-textarea not found for syncing');
         }
     } catch (error) {
-        console.error('Error syncing with form textarea:', error);
+        console.error('❌ Error syncing with form textarea:', error);
     }
 }
 

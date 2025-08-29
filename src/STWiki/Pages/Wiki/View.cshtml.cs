@@ -17,12 +17,14 @@ public class ViewModel : PageModel
     private readonly AppDbContext _context;
     private readonly MarkdownService _markdownService;
     private readonly TemplateService _templateService;
+    private readonly IRedirectService _redirectService;
 
-    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService)
+    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService, IRedirectService redirectService)
     {
         _context = context;
         _markdownService = markdownService;
         _templateService = templateService;
+        _redirectService = redirectService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
@@ -36,6 +38,17 @@ public class ViewModel : PageModel
         
         Page = await _context.Pages
             .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+
+        // If page not found, check for redirects
+        if (Page == null)
+        {
+            var redirectTarget = await _redirectService.GetRedirectTargetAsync(slug);
+            if (!string.IsNullOrEmpty(redirectTarget))
+            {
+                // Redirect to the target slug with a 301 Moved Permanently
+                return RedirectPermanent($"/{redirectTarget}");
+            }
+        }
 
         if (Page != null)
         {

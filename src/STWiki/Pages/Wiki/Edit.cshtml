@@ -20,11 +20,20 @@
             </div>
             
             <div class="header-actions d-flex gap-2">
-                <button type="submit" form="edit-form" class="btn btn-success btn-lg">
+                <button type="submit" form="edit-form" class="btn btn-success btn-lg @(Model.IsLocked ? "disabled" : "")" 
+                        @(Model.IsLocked ? "disabled" : "")>
                     <i class="bi bi-check-circle"></i> @(Model.IsNew ? "Create Page" : "Save Changes")
                 </button>
+                
                 @if (!Model.IsNew)
                 {
+                    <!-- Lock/Unlock button - moved outside main form to avoid nesting -->
+                    <button type="button" class="btn btn-outline-@(Model.IsLocked ? "success" : "warning") btn-lg" 
+                            onclick="submitLockForm('@(Model.IsLocked ? "Unlock this page?" : "Lock this page? This will prevent other users from editing it.")')">
+                        <i class="bi bi-@(Model.IsLocked ? "unlock" : "lock")"></i> 
+                        @(Model.IsLocked ? "Unlock" : "Lock") Page
+                    </button>
+                    
                     <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary btn-lg">
                         <i class="bi bi-x-circle"></i> Cancel
                     </a>
@@ -67,7 +76,32 @@
             <div asp-validation-summary="All"></div>
         </div>
     }
+    
+    @if (ViewData["IsPageLocked"] != null)
+    {
+        <div class="alert alert-warning d-flex align-items-center">
+            <i class="bi bi-lock-fill text-warning me-2"></i>
+            <div class="flex-grow-1">
+                <strong>Page Locked:</strong> @ViewData["LockWarning"]
+            </div>
+        </div>
+    }
+    
+    @if (TempData["StatusMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="bi bi-check-circle-fill me-2"></i>
+            @TempData["StatusMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
 
+        <!-- Hidden field to track original slug for redirect creation -->
+        @if (!Model.IsNew)
+        {
+            <input type="hidden" asp-for="OriginalSlug" />
+        }
+        
         <div class="row">
             <div class="col-12">
 
@@ -77,6 +111,18 @@
                         <label asp-for="Slug" class="form-label">URL Slug</label>
                         <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
                         <div class="form-text">Leave blank to auto-generate from title</div>
+                        <span asp-validation-for="Slug" class="text-danger"></span>
+                    </div>
+                }
+                else
+                {
+                    <div class="mb-3">
+                        <label asp-for="Slug" class="form-label">URL Slug</label>
+                        <input asp-for="Slug" class="form-control" />
+                        <div class="form-text">
+                            <i class="bi bi-info-circle text-primary"></i> 
+                            Changing the URL will create an automatic redirect from the old URL
+                        </div>
                         <span asp-validation-for="Slug" class="text-danger"></span>
                     </div>
                 }
@@ -150,7 +196,7 @@
                     </div>
                     
                     <!-- Hidden select for form submission -->
-                    <select asp-for="BodyFormat" class="form-select d-none">
+                    <select asp-for="BodyFormat" class="form-select" style="display: none;">
                         <option value="markdown">Markdown</option>
                         <option value="html">HTML</option>
                     </select>
@@ -159,6 +205,13 @@
             </div>
         </div>
     </form>
+    
+    <!-- Separate lock form to avoid nesting -->
+    @if (!Model.IsNew)
+    {
+        <form method="post" asp-page-handler="ToggleLock" asp-route-slug="@Model.OriginalSlug" id="lock-form" style="display: none;">
+        </form>
+    }
 </div>
 
 @section Scripts {
@@ -249,6 +302,13 @@
                 
                 window.blazorDiagnostics = { logBlazorState, checkBlazorConnection };
             })();
+            
+            // Function to submit lock form with confirmation
+            function submitLockForm(confirmMessage) {
+                if (confirm(confirmMessage)) {
+                    document.getElementById('lock-form').submit();
+                }
+            }
         </script>
     
     <script>
@@ -581,22 +641,79 @@
                         try {
                             console.log('🔄 Form submission detected, syncing editor content...');
                             
-                            // Find the active enhanced editor (look for any textarea in .editor-container)
-                            const editorContainer = document.querySelector('.editor-container');
                             const bodyTextarea = document.getElementById('body-textarea');
+                            if (!bodyTextarea) {
+                                console.error('❌ Body textarea not found');
+                                return;
+                            }
                             
-                            if (editorContainer && bodyTextarea) {
-                                const activeEditor = editorContainer.querySelector('textarea[id*="simple-editor-"]');
-                                if (activeEditor) {
-                                    bodyTextarea.value = activeEditor.value;
-                                    console.log('✅ Synced editor content to form textarea:', activeEditor.value.length, 'characters');
-                                } else {
-                                    console.warn('⚠️ Enhanced editor textarea not found in container');
+                            console.log('📋 Current body textarea value before sync:', bodyTextarea.value.length, 'characters');
+                            
+                            // Try multiple methods to find the active editor content
+                            let editorContent = '';
+                            let syncMethod = '';
+                            
+                            // Method 1: Look for enhanced editor textarea in editor container
+                            const editorContainer = document.querySelector('.editor-container');
+                            if (editorContainer) {
+                                // Try various selectors for the editor textarea
+                                const selectors = [
+                                    'textarea[id*="simple-editor-"]',
+                                    'textarea[id*="editor-"]', 
+                                    'textarea.enhanced-editor',
+                                    'textarea:not(#body-textarea)',
+                                    'textarea'
+                                ];
+                                
+                                for (const selector of selectors) {
+                                    const activeEditor = editorContainer.querySelector(selector);
+                                    if (activeEditor && activeEditor.id !== 'body-textarea') {
+                                        editorContent = activeEditor.value || '';
+                                        syncMethod = `container selector: ${selector}`;
+                                        break;
+                                    }
                                 }
+                            }
+                            
+                            // Method 2: Use the enhanced editor global function if available
+                            if (!editorContent && typeof getEnhancedEditorContent === 'function') {
+                                // Try to find any editor instance
+                                const editorTextareas = document.querySelectorAll('textarea:not(#body-textarea)');
+                                for (const textarea of editorTextareas) {
+                                    if (textarea.id && textarea.id.includes('editor')) {
+                                        editorContent = getEnhancedEditorContent(textarea.id) || '';
+                                        syncMethod = `global function: ${textarea.id}`;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Method 3: Try to get content from any visible textarea that's not the hidden one
+                            if (!editorContent) {
+                                const visibleTextareas = Array.from(document.querySelectorAll('textarea:not(#body-textarea)'))
+                                    .filter(ta => ta.offsetParent !== null && ta.value && ta.value.trim());
+                                    
+                                if (visibleTextareas.length > 0) {
+                                    editorContent = visibleTextareas[0].value;
+                                    syncMethod = `visible textarea: ${visibleTextareas[0].id || 'unnamed'}`;
+                                }
+                            }
+                            
+                            // Update the form textarea
+                            if (editorContent) {
+                                bodyTextarea.value = editorContent;
+                                console.log(`✅ Synced editor content to form textarea (${syncMethod}):`, editorContent.length, 'characters');
                             } else {
-                                console.warn('⚠️ Editor container or body textarea not found');
-                                console.log('Editor container:', !!editorContainer);
-                                console.log('Body textarea:', !!bodyTextarea);
+                                console.warn('⚠️ No editor content found to sync, form textarea remains:', bodyTextarea.value.length, 'characters');
+                                
+                                // Debug: list all textareas
+                                const allTextareas = document.querySelectorAll('textarea');
+                                console.log('📋 All textareas found:', Array.from(allTextareas).map(ta => ({
+                                    id: ta.id,
+                                    className: ta.className,
+                                    visible: ta.offsetParent !== null,
+                                    contentLength: ta.value?.length || 0
+                                })));
                             }
                         } catch (error) {
                             console.error('❌ Error syncing editor content:', error);
