@@ -12,6 +12,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.0" />
     <PackageReference Include="Markdig" Version="0.33.0" />
+    <PackageReference Include="ReverseMarkdown" Version="2.0.0" />
   </ItemGroup>
 
 </Project>

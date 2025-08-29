@@ -1,4 +1,4 @@
-@page "/{slug}"
+@page "/{*slug}"
 @model STWiki.Pages.Wiki.ViewModel
 @{
     ViewData["Title"] = Model.Page?.Title ?? "Page Not Found";
@@ -18,6 +18,33 @@
 else
 {
     <div class="wiki-page">
+        @if (Model.BreadcrumbParts?.Any() == true)
+        {
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a asp-page="/Wiki/View" asp-route-slug="main-page">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                    </li>
+                    @for (int i = 0; i < Model.BreadcrumbParts.Count; i++)
+                    {
+                        var part = Model.BreadcrumbParts[i];
+                        if (i == Model.BreadcrumbParts.Count - 1)
+                        {
+                            <li class="breadcrumb-item active" aria-current="page">@part.Title</li>
+                        }
+                        else
+                        {
+                            <li class="breadcrumb-item">
+                                <a asp-page="/Wiki/View" asp-route-slug="@part.Slug">@part.Title</a>
+                            </li>
+                        }
+                    }
+                </ol>
+            </nav>
+        }
+        
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h1>@Model.Page.Title</h1>
             <div>

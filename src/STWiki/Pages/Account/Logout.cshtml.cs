@@ -9,6 +9,6 @@ public class LogoutModel : PageModel
     public async Task<IActionResult> OnGetAsync()
     {
         await HttpContext.SignOutAsync("Cookies");
-        return Redirect("/main");
+        return Redirect("/main-page");
     }
 }

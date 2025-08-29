@@ -85,7 +85,7 @@
                     <textarea id="@_editorId" 
                               class="form-control border-0" 
                               rows="20" 
-                              placeholder="Start writing your wiki content in Markdown..."
+                              placeholder="@(BodyFormat == "markdown" ? "Start writing your wiki content in Markdown..." : "Start writing your wiki content in HTML...")"
                               data-room="@_safeRoom"
                               style="resize: vertical; min-height: 400px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 14px; line-height: 1.5;">@_safeContent</textarea>
                 </div>
@@ -132,6 +132,9 @@
     
     [Parameter] 
     public Guid PageId { get; set; }
+    
+    [Parameter]
+    public string BodyFormat { get; set; } = "markdown";
     
     // Safe versions for DOM use
     private string _editorId = $"simple-editor-{Guid.NewGuid():N}";
@@ -310,6 +313,8 @@
                 {
                     using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
                     await JS.InvokeVoidAsync("showEditorStatus", "Changes committed successfully");
+                    // Notify that changes have been committed via API
+                    await JS.InvokeVoidAsync("markContentAsCommitted");
                 }
                 catch
                 {

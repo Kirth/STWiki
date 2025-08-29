@@ -29,9 +29,16 @@
                 </div>
 
                 <div class="mb-3">
+                    <label asp-for="ParentPath" class="form-label">Parent Path (Optional)</label>
+                    <input asp-for="ParentPath" class="form-control" placeholder="e.g., infrastructure/network" />
+                    <div class="form-text">Create a page under a specific hierarchy, e.g., "infrastructure" or "infrastructure/network"</div>
+                    <span asp-validation-for="ParentPath" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
                     <label asp-for="Slug" class="form-label">URL Slug</label>
                     <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
-                    <div class="form-text">Leave blank to auto-generate from title</div>
+                    <div class="form-text">Leave blank to auto-generate from title. Will be combined with parent path if provided.</div>
                     <span asp-validation-for="Slug" class="text-danger"></span>
                 </div>
 

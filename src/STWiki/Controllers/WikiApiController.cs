@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using STWiki.Data;
 using STWiki.Data.Entities;
+using STWiki.Services;
 using System.ComponentModel.DataAnnotations;
 
 namespace STWiki.Controllers;
@@ -13,11 +14,13 @@ namespace STWiki.Controllers;
 public class WikiApiController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly MarkdownService _markdownService;
     private readonly ILogger<WikiApiController> _logger;
 
-    public WikiApiController(AppDbContext context, ILogger<WikiApiController> logger)
+    public WikiApiController(AppDbContext context, MarkdownService markdownService, ILogger<WikiApiController> logger)
     {
         _context = context;
+        _markdownService = markdownService;
         _logger = logger;
     }
 

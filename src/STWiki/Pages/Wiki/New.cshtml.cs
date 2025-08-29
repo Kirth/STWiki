@@ -25,6 +25,10 @@ public class NewModel : PageModel
 
     [BindProperty]
     [StringLength(255)]
+    public string? ParentPath { get; set; }
+
+    [BindProperty]
+    [StringLength(255)]
     public string? Slug { get; set; }
 
     [BindProperty]
@@ -64,9 +68,21 @@ public class NewModel : PageModel
             return Page();
         }
 
-        // Check if slug already exists
+        // Combine with parent path if provided
+        string finalSlug = Slug;
+        if (!string.IsNullOrWhiteSpace(ParentPath))
+        {
+            // Clean and validate parent path
+            var cleanParentPath = ParentPath.Trim().Trim('/');
+            if (!string.IsNullOrEmpty(cleanParentPath))
+            {
+                finalSlug = $"{cleanParentPath}/{Slug}";
+            }
+        }
+
+        // Check if final slug already exists
         var existingPage = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == Slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == finalSlug.ToLower());
 
         if (existingPage != null)
         {
@@ -85,7 +101,7 @@ public class NewModel : PageModel
         var newPage = new STWiki.Data.Entities.Page
         {
             Id = Guid.NewGuid(),
-            Slug = Slug,
+            Slug = finalSlug,
             Title = Title,
             Summary = Summary ?? string.Empty,
             Body = placeholderContent,
@@ -113,6 +129,6 @@ public class NewModel : PageModel
         await _context.SaveChangesAsync();
 
         // Redirect to edit the content
-        return RedirectToPage("/Wiki/Edit", new { slug = Slug });
+        return RedirectToPage("/Wiki/Edit", new { slug = finalSlug });
     }
 }

@@ -5,18 +5,59 @@
 }
 
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>@(Model.IsNew ? "Create New Page" : "Edit Page")</h1>
-        <div>
-            @if (!Model.IsNew)
-            {
-                <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">Cancel</a>
-            }
-            else
-            {
-                <a asp-page="/Wiki/Index" class="btn btn-outline-secondary">Cancel</a>
-            }
+    <!-- New Ergonomic Header -->
+    <div class="edit-header-section mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="d-flex align-items-center flex-grow-1">
+                <h1 class="me-3 mb-0">@(Model.IsNew ? "Create New Page" : "Edit Page")</h1>
+                <div class="title-input-container flex-grow-1" style="max-width: 400px;">
+                    <input asp-for="Title" class="form-control form-control-lg border-0 shadow-sm" 
+                           placeholder="@(Model.IsNew ? "Enter page title..." : "Page Title")" 
+                           style="font-size: 1.1rem; font-weight: 500;" />
+                    <span asp-validation-for="Title" class="text-danger"></span>
+                </div>
+            </div>
+            
+            <div class="header-actions d-flex gap-2">
+                <button type="submit" form="edit-form" class="btn btn-success btn-lg">
+                    <i class="bi bi-check-circle"></i> @(Model.IsNew ? "Create Page" : "Save Changes")
+                </button>
+                @if (!Model.IsNew)
+                {
+                    <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </a>
+                }
+                else
+                {
+                    <a asp-page="/Wiki/Index" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-x-circle"></i> Cancel
+                    </a>
+                }
+            </div>
         </div>
+        
+        <!-- Page Information Row -->
+        @if (!Model.IsNew)
+        {
+            <div class="page-info-bar d-flex align-items-center text-muted small mb-2">
+                <span class="me-4">
+                    <i class="bi bi-calendar-plus"></i> <strong>Created:</strong> @Model.CreatedAt?.ToString("yyyy-MM-dd HH:mm")
+                </span>
+                <span class="me-4">
+                    <i class="bi bi-clock-history"></i> <strong>Last Updated:</strong> @Model.UpdatedAt?.ToString("yyyy-MM-dd HH:mm")
+                </span>
+                <span class="me-4">
+                    <i class="bi bi-person"></i> <strong>By:</strong> @Model.UpdatedBy
+                </span>
+                @if (!Model.IsNew)
+                {
+                    <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm ms-auto">
+                        <i class="bi bi-clock-history"></i> View History
+                    </a>
+                }
+            </div>
+        }
     </div>
 
     @if (!ModelState.IsValid)
@@ -26,14 +67,9 @@
         </div>
     }
 
-    <form method="post" class="mb-4">
+    <form method="post" class="mb-4" id="edit-form">
         <div class="row">
-            <div class="col-md-8">
-                <div class="mb-3">
-                    <label asp-for="Title" class="form-label">Page Title</label>
-                    <input asp-for="Title" class="form-control" placeholder="Enter page title..." />
-                    <span asp-validation-for="Title" class="text-danger"></span>
-                </div>
+            <div class="col-12">
 
                 @if (Model.IsNew)
                 {
@@ -52,8 +88,56 @@
                 </div>
 
                 <div class="mb-3">
-                    <label asp-for="BodyFormat" class="form-label">Content Format</label>
-                    <select asp-for="BodyFormat" class="form-select">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">Content Format</h6>
+                        <span class="badge bg-primary">@Model.BodyFormat.ToUpperInvariant()</span>
+                    </div>
+                    
+                    <!-- Both buttons exist in DOM, visibility controlled by CSS -->
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="switch-to-html-btn" 
+                            style="display: @(Model.BodyFormat == "markdown" ? "inline-block" : "none");">
+                        <i class="bi bi-code-slash"></i> Change to HTML
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="switch-to-markdown-btn"
+                            style="display: @(Model.BodyFormat == "markdown" ? "none" : "inline-block");">
+                        <i class="bi bi-markdown"></i> Change to Markdown
+                    </button>
+                    
+                    <!-- Hidden format conversion options -->
+                    <div id="format-conversion-options" class="mt-2 p-3 border rounded bg-light" style="display: none;">
+                        <h6 class="text-primary mb-2">Format Conversion Options</h6>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="conversionOption" id="convert-content" value="convert" checked>
+                            <label class="form-check-label" for="convert-content">
+                                <strong>Convert content automatically</strong>
+                                <div class="form-text" id="conversion-description">
+                                    <!-- Description will be set by JavaScript -->
+                                </div>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="conversionOption" id="keep-as-is" value="keep">
+                            <label class="form-check-label" for="keep-as-is">
+                                <strong>Keep content as-is (no translation)</strong>
+                                <div class="form-text">Content will be switched to new format without any conversion</div>
+                            </label>
+                        </div>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-primary btn-sm" id="confirm-format-switch">
+                                <i class="bi bi-check-circle"></i> Confirm Format Switch
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-sm ms-2" id="cancel-format-switch">
+                                <i class="bi bi-x-circle"></i> Cancel
+                            </button>
+                        </div>
+                        <div class="alert alert-warning mt-2 mb-0">
+                            <small><i class="bi bi-exclamation-triangle"></i> 
+                            <strong>Warning:</strong> Converting between formats may result in some formatting loss. Consider making a backup of your content first.</small>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden select for form submission -->
+                    <select asp-for="BodyFormat" class="form-select d-none">
                         <option value="markdown">Markdown</option>
                         <option value="html">HTML</option>
                     </select>
@@ -62,48 +146,16 @@
 
                 <div class="mb-3">
                     <label asp-for="Body" class="form-label">Content</label>
-                    @if (Model.BodyFormat == "markdown")
-                    {
-                        <div id="editor-container">
-                            <component type="typeof(STWiki.Components.EditorSimple)" 
-                                       render-mode="Server"
-                                       param-PageId="@(Model.PageId ?? Guid.Empty)"
-                                       param-InitialContentRaw="@Model.Body"
-                                       param-YjsRoomRaw="@(Model.Slug ?? "new-page")" />
-                        </div>
-                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
-                    }
-                    else
-                    {
-                        <textarea asp-for="Body" class="form-control" rows="20" placeholder="Enter your content here..."></textarea>
-                    }
-                    <span asp-validation-for="Body" class="text-danger"></span>
-                </div>
-            </div>
-            
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-title">Page Information</h6>
-                        @if (!Model.IsNew)
-                        {
-                            <p class="small text-muted">
-                                <strong>Created:</strong> @Model.CreatedAt?.ToString("yyyy-MM-dd HH:mm")<br/>
-                                <strong>Last Updated:</strong> @Model.UpdatedAt?.ToString("yyyy-MM-dd HH:mm")<br/>
-                                <strong>Updated By:</strong> @Model.UpdatedBy
-                            </p>
-                        }
-                        
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-success">
-                                @(Model.IsNew ? "Create Page" : "Save Changes")
-                            </button>
-                            @if (!Model.IsNew)
-                            {
-                                <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm">View History</a>
-                            }
-                        </div>
+                    <div id="editor-container">
+                        <component type="typeof(STWiki.Components.EditorSimple)" 
+                                   render-mode="Server"
+                                   param-PageId="@(Model.PageId ?? Guid.Empty)"
+                                   param-InitialContentRaw="@Model.Body"
+                                   param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
+                                   param-BodyFormat="@Model.BodyFormat" />
                     </div>
+                    <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
+                    <span asp-validation-for="Body" class="text-danger"></span>
                 </div>
             </div>
         </div>
@@ -112,10 +164,9 @@
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
-    @if (Model.BodyFormat == "markdown")
-    {
-        <script src="_framework/blazor.server.js"></script>
-        <script>
+    <script src="_framework/blazor.server.js"></script>
+    
+    <script>
             // Blazor connection diagnostics and state monitoring
             (function() {
                 console.log('🔧 Blazor diagnostics: Starting connection monitoring...');
@@ -187,8 +238,280 @@
                 window.blazorDiagnostics = { logBlazorState, checkBlazorConnection };
             })();
         </script>
-        <script src="~/js/editor-enhanced.js"></script>
-        <script>
+    
+    <script>
+        // Format switching functionality
+        document.addEventListener('DOMContentLoaded', function() {
+                console.log('🔧 DOM loaded, initializing format switching...');
+                
+                // Declare variables outside try-catch for proper scope
+                let switchToHtmlBtn, switchToMarkdownBtn, formatOptions, confirmBtn, cancelBtn, conversionDescription, bodyFormatSelect;
+                let targetFormat = '';
+                
+                try {
+                    switchToHtmlBtn = document.getElementById('switch-to-html-btn');
+                    switchToMarkdownBtn = document.getElementById('switch-to-markdown-btn');
+                    formatOptions = document.getElementById('format-conversion-options');
+                    confirmBtn = document.getElementById('confirm-format-switch');
+                    cancelBtn = document.getElementById('cancel-format-switch');
+                    conversionDescription = document.getElementById('conversion-description');
+                    bodyFormatSelect = document.querySelector('select[name="BodyFormat"]');
+                    
+                    // Comprehensive debug logging
+                    console.log('🔧 Elements found:');
+                    console.log('  switchToHtmlBtn:', switchToHtmlBtn, switchToHtmlBtn ? 'visible: ' + getComputedStyle(switchToHtmlBtn).display : 'null');
+                    console.log('  switchToMarkdownBtn:', switchToMarkdownBtn, switchToMarkdownBtn ? 'visible: ' + getComputedStyle(switchToMarkdownBtn).display : 'null');
+                    console.log('  formatOptions:', formatOptions);
+                    console.log('  confirmBtn:', confirmBtn);
+                    console.log('  bodyFormatSelect:', bodyFormatSelect, bodyFormatSelect ? 'current value: ' + bodyFormatSelect.value : 'null');
+                    
+                    // Show conversion options when switching to HTML
+                    if (switchToHtmlBtn) {
+                        console.log('🔧 Attaching click listener to switchToHtmlBtn');
+                        switchToHtmlBtn.addEventListener('click', function(e) {
+                            console.log('🔘 HTML button clicked!', e);
+                            e.preventDefault();
+                            targetFormat = 'html';
+                            conversionDescription.textContent = 'Convert Markdown syntax to HTML tags';
+                            formatOptions.style.display = 'block';
+                            this.style.display = 'none';
+                        });
+                        
+                        // Test click programmatically
+                        console.log('🧪 Testing HTML button click programmatically...');
+                    } else {
+                        console.warn('⚠️ switchToHtmlBtn not found');
+                    }
+                    
+                    // Show conversion options when switching to Markdown
+                    if (switchToMarkdownBtn) {
+                        console.log('🔧 Attaching click listener to switchToMarkdownBtn');
+                        switchToMarkdownBtn.addEventListener('click', function(e) {
+                            console.log('🔘 MARKDOWN BUTTON CLICKED!', e);
+                            e.preventDefault();
+                            try {
+                                targetFormat = 'markdown';
+                                console.log('🔧 Set targetFormat to:', targetFormat);
+                                
+                                if (conversionDescription) {
+                                    conversionDescription.textContent = 'Convert HTML tags to Markdown syntax';
+                                    console.log('🔧 Updated conversion description');
+                                } else {
+                                    console.error('❌ conversionDescription element not found');
+                                }
+                                
+                                if (formatOptions) {
+                                    formatOptions.style.display = 'block';
+                                    console.log('🔧 Showed format options');
+                                } else {
+                                    console.error('❌ formatOptions element not found');
+                                }
+                                
+                                this.style.display = 'none';
+                                console.log('🔧 Hid markdown button');
+                            } catch (error) {
+                                console.error('❌ Error in markdown button click handler:', error);
+                            }
+                        });
+                        
+                        // Add a test click listener to verify the button can be clicked
+                        switchToMarkdownBtn.addEventListener('mousedown', function() {
+                            console.log('🖱️ Mouse down on markdown button');
+                        });
+                        switchToMarkdownBtn.addEventListener('mouseup', function() {
+                            console.log('🖱️ Mouse up on markdown button');
+                        });
+                        
+                    } else {
+                        console.warn('⚠️ switchToMarkdownBtn not found');
+                    }
+                    
+                } catch (error) {
+                    console.error('❌ Error initializing format switching:', error);
+                }
+                
+                // Global test function to manually trigger markdown button
+                window.testMarkdownButton = function() {
+                    console.log('🧪 Manual test: Looking for markdown button...');
+                    const btn = document.getElementById('switch-to-markdown-btn');
+                    if (btn) {
+                        console.log('🧪 Found button, style display:', getComputedStyle(btn).display);
+                        console.log('🧪 Button disabled?', btn.disabled);
+                        console.log('🧪 Button visible?', btn.offsetParent !== null);
+                        console.log('🧪 Triggering click...');
+                        btn.click();
+                    } else {
+                        console.error('🧪 Button not found');
+                    }
+                };
+                
+                // Test for event conflicts - add a global click listener
+                document.addEventListener('click', function(e) {
+                    if (e.target.id === 'switch-to-markdown-btn') {
+                        console.log('🌍 Global click listener caught markdown button click', e);
+                    }
+                });
+                
+                // Confirm format switch
+                if (confirmBtn) {
+                    confirmBtn.addEventListener('click', function() {
+                        console.log('🔘 Confirm button clicked, targetFormat:', targetFormat);
+                        const convertContent = document.querySelector('input[name="conversionOption"]:checked').value === 'convert';
+                        
+                        if (convertContent) {
+                            // Call server-side conversion
+                            convertAndSwitchFormat(targetFormat);
+                        } else {
+                            // Just switch format without conversion
+                            switchFormatOnly(targetFormat);
+                        }
+                    });
+                } else {
+                    console.error('❌ confirmBtn not found');
+                }
+                
+                // Cancel format switch
+                if (cancelBtn) {
+                    cancelBtn.addEventListener('click', function() {
+                        console.log('🔘 Cancel button clicked');
+                        formatOptions.style.display = 'none';
+                        // Show the appropriate button again
+                        if (targetFormat === 'html') {
+                            switchToHtmlBtn.style.display = 'inline-block';
+                        } else {
+                            switchToMarkdownBtn.style.display = 'inline-block';
+                        }
+                    });
+                } else {
+                    console.error('❌ cancelBtn not found');
+                }
+                
+                function switchFormatOnly(newFormat) {
+                    console.log('🔧 switchFormatOnly called with:', newFormat);
+                    
+                    // Update the hidden select
+                    if (bodyFormatSelect) {
+                        bodyFormatSelect.value = newFormat;
+                        console.log('🔧 Updated hidden select to:', newFormat);
+                    } else {
+                        console.error('❌ bodyFormatSelect not found');
+                    }
+                    
+                    // Update UI
+                    updateFormatUI(newFormat);
+                    
+                    // Hide options
+                    if (formatOptions) {
+                        formatOptions.style.display = 'none';
+                        console.log('🔧 Hid format options');
+                    } else {
+                        console.error('❌ formatOptions not found when trying to hide');
+                    }
+                }
+                
+                function convertAndSwitchFormat(newFormat) {
+                    // Get current content from the enhanced editor
+                    const editorTextarea = document.querySelector('textarea[id*="simple-editor-"]');
+                    const bodyTextarea = document.getElementById('body-textarea');
+                    
+                    let currentContent = '';
+                    if (editorTextarea) {
+                        currentContent = editorTextarea.value || '';
+                    } else if (bodyTextarea) {
+                        currentContent = bodyTextarea.value || '';
+                    }
+                    
+                    if (!currentContent.trim()) {
+                        // No content to convert, just switch format
+                        switchFormatOnly(newFormat);
+                        return;
+                    }
+                    
+                    // Show loading state
+                    confirmBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Converting...';
+                    confirmBtn.disabled = true;
+                    
+                    // Call conversion API
+                    fetch('/api/convert-content', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: currentContent,
+                            fromFormat: bodyFormatSelect.value,
+                            toFormat: newFormat
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Update content in the enhanced editor
+                            if (editorTextarea) {
+                                editorTextarea.value = data.convertedContent;
+                                // Trigger input event to update preview and sync
+                                editorTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                            if (bodyTextarea) {
+                                bodyTextarea.value = data.convertedContent;
+                            }
+                            
+                            // Switch format
+                            switchFormatOnly(newFormat);
+                        } else {
+                            alert('Conversion failed: ' + (data.error || 'Unknown error'));
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Conversion error:', error);
+                        alert('Conversion failed. Please try again or switch format without conversion.');
+                    })
+                    .finally(() => {
+                        // Restore button state
+                        confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Confirm Format Switch';
+                        confirmBtn.disabled = false;
+                    });
+                }
+                
+                function updateFormatUI(newFormat) {
+                    // Update badge
+                    const badge = document.querySelector('.badge.bg-primary');
+                    badge.textContent = newFormat.toUpperCase();
+                    
+                    // Update editor format for preview rendering
+                    if (typeof updateEditorFormat !== 'undefined') {
+                        updateEditorFormat(newFormat);
+                    }
+                    
+                    // Show/hide buttons based on new format
+                    if (newFormat === 'markdown') {
+                        // Show "Change to HTML" button, hide "Change to Markdown" button
+                        if (switchToHtmlBtn) {
+                            switchToHtmlBtn.style.display = 'inline-block';
+                        }
+                        if (switchToMarkdownBtn) {
+                            switchToMarkdownBtn.style.display = 'none';
+                        }
+                    } else {
+                        // Show "Change to Markdown" button, hide "Change to HTML" button  
+                        if (switchToMarkdownBtn) {
+                            switchToMarkdownBtn.style.display = 'inline-block';
+                        }
+                        if (switchToHtmlBtn) {
+                            switchToHtmlBtn.style.display = 'none';
+                        }
+                    }
+                    
+                    // Note: We don't modify innerHTML to preserve event listeners
+                    // The buttons already have the correct text and icons
+                }
+            });
+        </script>
+    
+    
+    <script src="~/js/editor-enhanced.js"></script>
+    
+    <script>
             // Handle EditorSimple button clicks via event delegation
             document.addEventListener('click', function(e) {
                 const button = e.target.closest('button[data-action]');
@@ -269,6 +592,45 @@
                     });
                 }
             });
+            
+            // Function called when Blazor editor commits changes
+            window.markContentAsCommitted = function() {
+                console.log('📝 Content committed via API - updating form button');
+                
+                const saveButton = document.querySelector('button[type="submit"]');
+                if (saveButton) {
+                    // Change button text to indicate content was already saved
+                    const originalText = saveButton.textContent;
+                    saveButton.textContent = 'Already Saved via Editor';
+                    saveButton.classList.add('btn-secondary');
+                    saveButton.classList.remove('btn-success');
+                    
+                    // Add warning class to form to indicate potential conflict
+                    const form = document.querySelector('form');
+                    if (form) {
+                        form.style.border = '2px solid orange';
+                        form.style.borderRadius = '5px';
+                        form.style.padding = '10px';
+                        
+                        // Add warning message if not already present
+                        let warningDiv = document.getElementById('commit-warning');
+                        if (!warningDiv) {
+                            warningDiv = document.createElement('div');
+                            warningDiv.id = 'commit-warning';
+                            warningDiv.className = 'alert alert-warning';
+                            warningDiv.innerHTML = '<strong>⚠️ Content already saved!</strong> You used "Commit Changes" in the editor. Using "Save Changes" again may overwrite your API changes.';
+                            form.insertBefore(warningDiv, form.firstChild);
+                        }
+                    }
+                    
+                    // Restore button after 10 seconds
+                    setTimeout(() => {
+                        saveButton.textContent = originalText;
+                        saveButton.classList.remove('btn-secondary');
+                        saveButton.classList.add('btn-success');
+                    }, 10000);
+                }
+            };
         </script>
         <script>
             // DOM trap script - runs after Blazor initialization
@@ -340,5 +702,155 @@
                 console.log('✅ DOM operation traps installed');
             })();
         </script>
-    }
+        
+    <style>
+            /* Format switching UI styles */
+            #format-conversion-options {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border: 2px solid #dee2e6;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                transition: all 0.3s ease;
+            }
+            
+            #format-conversion-options h6 {
+                color: #495057;
+                font-weight: 600;
+            }
+            
+            .form-check-label {
+                cursor: pointer;
+                padding: 8px 12px;
+                border-radius: 4px;
+                transition: background-color 0.2s ease;
+            }
+            
+            .form-check-label:hover {
+                background-color: rgba(0, 123, 255, 0.1);
+            }
+            
+            .form-check-input:checked + .form-check-label {
+                background-color: rgba(40, 167, 69, 0.1);
+                border-left: 3px solid #28a745;
+            }
+            
+            #switch-to-html-btn, #switch-to-markdown-btn {
+                transition: all 0.2s ease;
+                font-weight: 500;
+            }
+            
+            #switch-to-html-btn:hover, #switch-to-markdown-btn:hover {
+                transform: translateY(-1px);
+                box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+            }
+            
+            .badge.bg-primary {
+                font-size: 0.75em;
+                padding: 6px 10px;
+                border-radius: 12px;
+                font-weight: 600;
+            }
+            
+            #format-conversion-options .alert-warning {
+                background: linear-gradient(45deg, #fff3cd, #ffeaa7);
+                border-color: #f39c12;
+                color: #856404;
+            }
+            
+            #confirm-format-switch {
+                background: linear-gradient(45deg, #28a745, #20c997);
+                border: none;
+                font-weight: 600;
+            }
+            
+            #confirm-format-switch:hover {
+                background: linear-gradient(45deg, #218838, #1dd1a1);
+                transform: translateY(-1px);
+            }
+            
+            #cancel-format-switch {
+                background: linear-gradient(45deg, #6c757d, #868e96);
+                border: none;
+                color: white;
+            }
+            
+            #cancel-format-switch:hover {
+                background: linear-gradient(45deg, #5a6268, #747b83);
+                transform: translateY(-1px);
+            }
+            
+            /* Ergonomic Header Styling */
+            .edit-header-section {
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border-radius: 12px;
+                padding: 20px 24px;
+                border: 1px solid #dee2e6;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            }
+            
+            .title-input-container input {
+                background: rgba(255,255,255,0.9);
+                transition: all 0.3s ease;
+                border-radius: 8px;
+            }
+            
+            .title-input-container input:focus {
+                background: white;
+                box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+                border-color: #0d6efd;
+                transform: translateY(-1px);
+            }
+            
+            .header-actions .btn {
+                font-weight: 600;
+                border-radius: 8px;
+                transition: all 0.2s ease;
+                min-width: 120px;
+            }
+            
+            .header-actions .btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            }
+            
+            .header-actions .btn-success {
+                background: linear-gradient(45deg, #28a745, #20c997);
+                border: none;
+                box-shadow: 0 2px 6px rgba(40,167,69,0.3);
+            }
+            
+            .header-actions .btn-success:hover {
+                background: linear-gradient(45deg, #218838, #1dd1a1);
+                box-shadow: 0 4px 12px rgba(40,167,69,0.4);
+            }
+            
+            .page-info-bar {
+                background: rgba(255,255,255,0.7);
+                padding: 12px 16px;
+                border-radius: 8px;
+                border: 1px solid rgba(222,226,230,0.6);
+            }
+            
+            .page-info-bar i {
+                opacity: 0.7;
+                margin-right: 4px;
+            }
+            
+            .page-info-bar .btn-outline-info {
+                border-radius: 6px;
+                font-size: 0.875rem;
+                padding: 4px 12px;
+            }
+            
+            /* Make the main content area cleaner */
+            .col-12 {
+                max-width: none;
+            }
+            
+            /* Adjust form spacing */
+            #edit-form .row {
+                margin-left: 0;
+                margin-right: 0;
+            }
+        </style>
 }

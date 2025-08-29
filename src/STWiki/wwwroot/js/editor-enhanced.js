@@ -3,7 +3,7 @@
 
 let editorInstances = new Map();
 
-// Initialize the enhanced markdown editor
+// Initialize the enhanced editor (markdown or HTML)
 window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
     try {
         console.log('Initializing enhanced editor:', editorId);
@@ -21,6 +21,10 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
             console.log('Stored component reference on editor container');
         }
 
+        // Detect the current format from the page
+        const formatBadge = document.querySelector('.badge.bg-primary');
+        const currentFormat = formatBadge ? formatBadge.textContent.toLowerCase() : 'markdown';
+        
         // Create editor instance with safe element lookups
         const instance = {
             textarea: textarea,
@@ -30,7 +34,8 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
             statusElement: document.getElementById('status-text') || null,
             lastContent: initialContent || '',
             updateTimeout: null,
-            componentRef: componentRef
+            componentRef: componentRef,
+            format: currentFormat
         };
 
         editorInstances.set(editorId, instance);
@@ -143,9 +148,9 @@ function setupKeyboardShorts(instance) {
     });
 }
 
-// Update the markdown preview
+// Update the preview (markdown or HTML)
 function updatePreview(instance) {
-    const { textarea, previewElement } = instance;
+    const { textarea, previewElement, format } = instance;
     if (!previewElement) return;
 
     try {
@@ -154,19 +159,42 @@ function updatePreview(instance) {
         
         instance.lastContent = content;
         
+        // Sync with traditional form textarea
+        syncWithFormTextarea(content);
+        
         if (!content.trim()) {
             previewElement.innerHTML = '<em class="text-muted">Preview will appear here...</em>';
             return;
         }
 
-        // Basic markdown to HTML conversion
-        const html = markdownToHtml(content);
+        let html;
+        if (format === 'html') {
+            // For HTML content, just display it directly (with basic sanitization)
+            html = content;
+        } else {
+            // For markdown content, convert to HTML
+            html = markdownToHtml(content);
+        }
+        
         previewElement.innerHTML = html;
     } catch (error) {
         console.error('Error updating preview:', error);
         if (previewElement) {
             previewElement.innerHTML = '<em class="text-danger">Preview error</em>';
         }
+    }
+}
+
+// Sync editor content with hidden form textarea
+function syncWithFormTextarea(content) {
+    try {
+        const bodyTextarea = document.getElementById('body-textarea');
+        if (bodyTextarea) {
+            bodyTextarea.value = content;
+            console.log('🔄 Synced content to form textarea');
+        }
+    } catch (error) {
+        console.error('Error syncing with form textarea:', error);
     }
 }
 
@@ -362,6 +390,16 @@ window.showEditorStatus = function(message) {
             console.log('🔥 ERROR PARSING RESPONSE:', e);
         }
     }
+};
+
+// Update editor format when format is switched
+window.updateEditorFormat = function(newFormat) {
+    for (const instance of editorInstances.values()) {
+        instance.format = newFormat.toLowerCase();
+        // Trigger a preview update to reflect the new format
+        updatePreview(instance);
+    }
+    console.log('Updated all editor instances to format:', newFormat);
 };
 
 // Clean up editor instance
