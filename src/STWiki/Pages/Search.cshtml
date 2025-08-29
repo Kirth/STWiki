@@ -4,6 +4,40 @@
     ViewData["Title"] = "Search";
 }
 
+<style>
+    .search-highlight mark {
+        background-color: #fff3cd;
+        color: #856404;
+        padding: 0.1em 0.2em;
+        border-radius: 0.25rem;
+        font-weight: 600;
+    }
+    
+    .search-result-snippet {
+        font-size: 0.9rem;
+        line-height: 1.4;
+        color: #6c757d;
+    }
+    
+    .search-match-badge {
+        font-size: 0.7rem;
+    }
+    
+    .pagination .page-link {
+        color: #495057;
+    }
+    
+    .pagination .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+    }
+    
+    .list-group-item:hover {
+        background-color: #f8f9fa;
+        transition: background-color 0.15s ease-in-out;
+    }
+</style>
+
 <div class="wiki-container">
     <h1>Search Wiki</h1>
     
@@ -20,26 +54,121 @@
     {
         @if (Model.Results?.Any() == true)
         {
-            <h3>Search Results (@Model.Results.Count)</h3>
-            <div class="list-group">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3>Search Results (@Model.TotalResults found)</h3>
+                <small class="text-muted">
+                    Page @Model.Page of @Model.TotalPages
+                </small>
+            </div>
+            
+            <div class="list-group mb-4 search-highlight">
                 @foreach (var result in Model.Results)
                 {
                     <div class="list-group-item">
-                        <h5 class="mb-1">
-                            <a asp-page="/Wiki/View" asp-route-slug="@result.Slug" class="text-decoration-none">
-                                @result.Title
-                            </a>
-                        </h5>
-                        @if (!string.IsNullOrWhiteSpace(result.Summary))
-                        {
-                            <p class="mb-1 text-muted">@result.Summary</p>
-                        }
-                        <small class="text-muted">
-                            Updated @result.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.UpdatedBy
-                        </small>
+                        <div class="d-flex w-100 justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1">
+                                    <a asp-page="/Wiki/View" asp-route-slug="@result.Page.Slug" class="text-decoration-none">
+                                        @Html.Raw(result.HighlightedTitle)
+                                    </a>
+                                    @if (result.MatchType == "title")
+                                    {
+                                        <small class="badge bg-success ms-2 search-match-badge">Title Match</small>
+                                    }
+                                </h5>
+                                
+                                @if (!string.IsNullOrWhiteSpace(result.HighlightedSummary))
+                                {
+                                    <p class="mb-1 text-muted">
+                                        @Html.Raw(result.HighlightedSummary)
+                                        @if (result.MatchType == "summary")
+                                        {
+                                            <small class="badge bg-info ms-1 search-match-badge">Summary Match</small>
+                                        }
+                                    </p>
+                                }
+                                
+                                @if (!string.IsNullOrWhiteSpace(result.BodySnippet))
+                                {
+                                    <p class="mb-1 search-result-snippet">
+                                        @Html.Raw(result.BodySnippet)
+                                        <small class="badge bg-secondary ms-1 search-match-badge">Content Match</small>
+                                    </p>
+                                }
+                                
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.Page.UpdatedBy
+                                    <span class="ms-2">
+                                        <i class="bi bi-file-earmark-@(result.Page.BodyFormat == "markdown" ? "text" : "code")"></i>
+                                        @result.Page.BodyFormat.ToUpper()
+                                    </span>
+                                </small>
+                            </div>
+                        </div>
                     </div>
                 }
             </div>
+            
+            <!-- Pagination -->
+            @if (Model.TotalPages > 1)
+            {
+                <nav aria-label="Search results pagination">
+                    <ul class="pagination justify-content-center">
+                        <!-- Previous Page -->
+                        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                            <a class="page-link" asp-page="/Search" asp-route-q="@Model.Query" asp-route-page="@(Model.Page - 1)">
+                                <i class="bi bi-chevron-left"></i> Previous
+                            </a>
+                        </li>
+                        
+                        <!-- Page Numbers -->
+                        @{
+                            var startPage = Math.Max(1, Model.Page - 2);
+                            var endPage = Math.Min(Model.TotalPages, Model.Page + 2);
+                        }
+                        
+                        @if (startPage > 1)
+                        {
+                            <li class="page-item">
+                                <a class="page-link" asp-page="/Search" asp-route-q="@Model.Query" asp-route-page="1">1</a>
+                            </li>
+                            @if (startPage > 2)
+                            {
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            }
+                        }
+                        
+                        @for (var i = startPage; i <= endPage; i++)
+                        {
+                            <li class="page-item @(i == Model.Page ? "active" : "")">
+                                <a class="page-link" asp-page="/Search" asp-route-q="@Model.Query" asp-route-page="@i">@i</a>
+                            </li>
+                        }
+                        
+                        @if (endPage < Model.TotalPages)
+                        {
+                            @if (endPage < Model.TotalPages - 1)
+                            {
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            }
+                            <li class="page-item">
+                                <a class="page-link" asp-page="/Search" asp-route-q="@Model.Query" asp-route-page="@Model.TotalPages">@Model.TotalPages</a>
+                            </li>
+                        }
+                        
+                        <!-- Next Page -->
+                        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                            <a class="page-link" asp-page="/Search" asp-route-q="@Model.Query" asp-route-page="@(Model.Page + 1)">
+                                Next <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            }
         }
         else
         {
