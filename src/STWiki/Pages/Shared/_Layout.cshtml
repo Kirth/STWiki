@@ -12,12 +12,11 @@
     <header>
         <nav class="navbar navbar-expand-lg navbar-light bg-light">
             <div class="container-fluid">
-                <a class="navbar-brand" href="/main">STWiki</a>
+                <a class="navbar-brand" href="/main-page">STWiki</a>
                 
                 <div class="d-flex mx-auto" style="max-width: 400px;">
                     <form action="/search" method="get" class="d-flex w-100">
                         <input class="form-control me-2" type="search" name="q" placeholder="Search wiki..." aria-label="Search">
-                        <button class="btn btn-outline-primary" type="submit">Search</button>
                     </form>
                 </div>
 
@@ -25,8 +24,8 @@
                     @if (User.Identity?.IsAuthenticated == true)
                     {
                         <div class="d-flex align-items-center gap-2">
-                            <span class="navbar-text">Welcome, @User.Identity.Name</span>
-                            <a href="/Account/Logout" class="btn btn-sm btn-outline-secondary">Logout</a>
+                            <span class="navbar-text">Welcome, @User.Identity.Name 
+                              (<a href="/Account/Logout">logout</a>)</span> 
                         </div>
                     }
                     else

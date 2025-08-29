@@ -5,15 +5,16 @@
 }
 
 <div class="container-fluid">
-    <!-- New Ergonomic Header -->
+    <form method="post" class="mb-4" id="edit-form">
+        <!-- New Ergonomic Header -->
     <div class="edit-header-section mb-4">
         <div class="d-flex align-items-center justify-content-between mb-2">
             <div class="d-flex align-items-center flex-grow-1">
                 <h1 class="me-3 mb-0">@(Model.IsNew ? "Create New Page" : "Edit Page")</h1>
                 <div class="title-input-container flex-grow-1" style="max-width: 400px;">
                     <input asp-for="Title" class="form-control form-control-lg border-0 shadow-sm" 
-                           placeholder="@(Model.IsNew ? "Enter page title..." : "Page Title")" 
-                           style="font-size: 1.1rem; font-weight: 500;" />
+                           style="font-size: 1.1rem; font-weight: 500; background: rgba(255,255,255,0.9);" 
+                           placeholder="@(Model.IsNew ? "Enter page title..." : "Page Title")" />
                     <span asp-validation-for="Title" class="text-danger"></span>
                 </div>
             </div>
@@ -67,7 +68,6 @@
         </div>
     }
 
-    <form method="post" class="mb-4" id="edit-form">
         <div class="row">
             <div class="col-12">
 
@@ -80,6 +80,19 @@
                         <span asp-validation-for="Slug" class="text-danger"></span>
                     </div>
                 }
+
+                <div class="mb-3">
+                    <div id="editor-container">
+                        <component type="typeof(STWiki.Components.EditorSimple)" 
+                                   render-mode="Server"
+                                   param-PageId="@(Model.PageId ?? Guid.Empty)"
+                                   param-InitialContentRaw="@Model.Body"
+                                   param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
+                                   param-BodyFormat="@Model.BodyFormat" />
+                    </div>
+                    <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
+                    <span asp-validation-for="Body" class="text-danger"></span>
+                </div>
 
                 <div class="mb-3">
                     <label asp-for="Summary" class="form-label">Summary (Optional)</label>
@@ -143,20 +156,6 @@
                     </select>
                     <span asp-validation-for="BodyFormat" class="text-danger"></span>
                 </div>
-
-                <div class="mb-3">
-                    <label asp-for="Body" class="form-label">Content</label>
-                    <div id="editor-container">
-                        <component type="typeof(STWiki.Components.EditorSimple)" 
-                                   render-mode="Server"
-                                   param-PageId="@(Model.PageId ?? Guid.Empty)"
-                                   param-InitialContentRaw="@Model.Body"
-                                   param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
-                                   param-BodyFormat="@Model.BodyFormat" />
-                    </div>
-                    <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
-                    <span asp-validation-for="Body" class="text-danger"></span>
-                </div>
             </div>
         </div>
     </form>
@@ -166,43 +165,18 @@
     <partial name="_ValidationScriptsPartial" />
     <script src="_framework/blazor.server.js"></script>
     
-    <!-- Prism.js Syntax Highlighting -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.css" rel="stylesheet" />
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <!-- Core Languages (stable and commonly used) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
-    
-    <!-- Web Technologies -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-scss.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-html.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-xml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-jsx.min.js"></script>
-    
-    <!-- Data Formats -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
-    
-    <!-- Shell and DevOps -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-powershell.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-docker.min.js"></script>
-    
-    <!-- Plugins - Load in correct order (toolbar must come first) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+    <!-- Prism.js Syntax Highlighting - Local Files -->
+    <link href="~/lib/prism/prism.min.css" rel="stylesheet" />
+    <script src="~/lib/prism/prism.min.js"></script>
+    <!-- Essential Languages Only -->
+    <script src="~/lib/prism/prism-javascript.min.js"></script>
+    <script src="~/lib/prism/prism-python.min.js"></script>
+    <script src="~/lib/prism/prism-csharp.min.js"></script>
+    <script src="~/lib/prism/prism-css.min.js"></script>
+    <script src="~/lib/prism/prism-html.min.js"></script>
+    <script src="~/lib/prism/prism-json.min.js"></script>
+    <script src="~/lib/prism/prism-sql.min.js"></script>
+    <script src="~/lib/prism/prism-bash.min.js"></script>
     
     <script>
             // Blazor connection diagnostics and state monitoring

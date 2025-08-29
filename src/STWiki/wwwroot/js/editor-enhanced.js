@@ -32,7 +32,7 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
             wordCountElement: document.getElementById('word-count') || null,
             charCountElement: document.getElementById('char-count') || null,
             statusElement: document.getElementById('status-text') || null,
-            lastContent: initialContent || '',
+            lastContent: '',
             updateTimeout: null,
             componentRef: componentRef,
             format: currentFormat
@@ -181,44 +181,20 @@ function updatePreview(instance) {
         // Apply Prism.js syntax highlighting to the new content
         if (typeof Prism !== 'undefined' && Prism.highlightElement) {
             try {
-                // Wait a bit to ensure all Prism plugins are loaded
-                setTimeout(() => {
+                // Simple, direct highlighting without complex error handling
+                const codeBlocks = previewElement.querySelectorAll('pre code[class*="language-"]');
+                codeBlocks.forEach(block => {
                     try {
-                        // Re-highlight all code blocks in the preview
-                        const codeBlocks = previewElement.querySelectorAll('pre code[class*="language-"]');
-                        codeBlocks.forEach(block => {
-                            try {
-                                // Clear any existing highlighting
-                                block.innerHTML = block.textContent;
-                                
-                                // Ensure the language class is valid
-                                const classList = Array.from(block.classList);
-                                const languageClass = classList.find(cls => cls.startsWith('language-'));
-                                
-                                if (languageClass) {
-                                    const language = languageClass.replace('language-', '');
-                                    // Only highlight if the language is supported
-                                    if (Prism.languages && (Prism.languages[language] || language === 'none')) {
-                                        Prism.highlightElement(block);
-                                    } else {
-                                        // Remove unsupported language class and add generic styling
-                                        block.classList.remove(languageClass);
-                                        block.classList.add('language-none');
-                                        console.warn(`Prism.js: Language '${language}' not supported, using generic styling`);
-                                    }
-                                }
-                            } catch (blockError) {
-                                console.warn('Prism.js: Failed to highlight individual code block:', blockError);
-                                // Continue with other blocks
-                            }
-                        });
-                    } catch (innerError) {
-                        console.warn('Prism.js: Failed to process code blocks:', innerError);
+                        // Simple highlighting - let Prism.js handle it
+                        Prism.highlightElement(block);
+                    } catch (blockError) {
+                        // Silently continue with other blocks
+                        console.debug('Skipping problematic code block');
                     }
-                }, 50);
+                });
             } catch (prismError) {
-                console.warn('Prism.js: Syntax highlighting initialization failed:', prismError);
-                // Don't stop the preview update, just skip highlighting
+                // Silently skip highlighting if there are issues
+                console.debug('Prism.js highlighting skipped');
             }
         }
     } catch (error) {
@@ -273,7 +249,6 @@ function markdownToHtml(markdown) {
     html = html.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(match, lang, code) {
         const language = lang ? lang.toLowerCase() : '';
         const languageClass = language ? ` class="language-${language}"` : '';
-        const preClass = language ? ` class="line-numbers"` : '';
         
         // Preserve the code exactly as written, only escaping HTML entities
         const escapedCode = code
@@ -281,7 +256,7 @@ function markdownToHtml(markdown) {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
         
-        const codeBlockHtml = `<pre${preClass}><code${languageClass}>${escapedCode}</code></pre>`;
+        const codeBlockHtml = `<pre><code${languageClass}>${escapedCode}</code></pre>`;
         codeBlocks.push(codeBlockHtml);
         return codeBlockPlaceholder + (codeBlocks.length - 1);
     });
