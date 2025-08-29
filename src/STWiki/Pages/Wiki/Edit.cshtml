@@ -166,6 +166,44 @@
     <partial name="_ValidationScriptsPartial" />
     <script src="_framework/blazor.server.js"></script>
     
+    <!-- Prism.js Syntax Highlighting -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-okaidia.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <!-- Core Languages (stable and commonly used) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-java.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-csharp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-cpp.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-c.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-go.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+    
+    <!-- Web Technologies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-css.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-scss.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-html.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-xml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-jsx.min.js"></script>
+    
+    <!-- Data Formats -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-yaml.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-sql.min.js"></script>
+    
+    <!-- Shell and DevOps -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-bash.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-powershell.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-docker.min.js"></script>
+    
+    <!-- Plugins - Load in correct order (toolbar must come first) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/toolbar/prism-toolbar.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/line-numbers/prism-line-numbers.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/copy-to-clipboard/prism-copy-to-clipboard.min.js"></script>
+    
     <script>
             // Blazor connection diagnostics and state monitoring
             (function() {
@@ -704,6 +742,68 @@
         </script>
         
     <style>
+            /* Prism.js Code Block Enhancements */
+            .markdown-content pre[class*="language-"] {
+                margin: 1.5em 0;
+                border-radius: 8px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                overflow-x: auto;
+                font-size: 14px;
+                line-height: 1.5;
+            }
+            
+            .markdown-content code[class*="language-"] {
+                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+            }
+            
+            .markdown-content pre[class*="language-"]:before {
+                content: attr(data-language);
+                position: absolute;
+                top: 0.5em;
+                right: 1em;
+                font-size: 0.75em;
+                color: rgba(255,255,255,0.6);
+                text-transform: uppercase;
+                font-weight: bold;
+                letter-spacing: 0.1em;
+            }
+            
+            /* Copy button styling */
+            .markdown-content .copy-to-clipboard-button {
+                position: absolute;
+                top: 0.5em;
+                right: 0.5em;
+                background: rgba(255,255,255,0.1);
+                border: 1px solid rgba(255,255,255,0.2);
+                color: rgba(255,255,255,0.8);
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+            }
+            
+            .markdown-content .copy-to-clipboard-button:hover {
+                background: rgba(255,255,255,0.2);
+                color: white;
+            }
+            
+            /* Line numbers styling */
+            .markdown-content .line-numbers .line-numbers-rows {
+                border-right: 1px solid rgba(255,255,255,0.1);
+                margin-right: 1em;
+            }
+            
+            /* Inline code styling */
+            .markdown-content code:not([class*="language-"]) {
+                background: rgba(0,0,0,0.1);
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+                font-size: 0.9em;
+                color: #e83e8c;
+            }
+            
             /* Format switching UI styles */
             #format-conversion-options {
                 background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);

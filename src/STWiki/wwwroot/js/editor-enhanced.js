@@ -177,6 +177,50 @@ function updatePreview(instance) {
         }
         
         previewElement.innerHTML = html;
+        
+        // Apply Prism.js syntax highlighting to the new content
+        if (typeof Prism !== 'undefined' && Prism.highlightElement) {
+            try {
+                // Wait a bit to ensure all Prism plugins are loaded
+                setTimeout(() => {
+                    try {
+                        // Re-highlight all code blocks in the preview
+                        const codeBlocks = previewElement.querySelectorAll('pre code[class*="language-"]');
+                        codeBlocks.forEach(block => {
+                            try {
+                                // Clear any existing highlighting
+                                block.innerHTML = block.textContent;
+                                
+                                // Ensure the language class is valid
+                                const classList = Array.from(block.classList);
+                                const languageClass = classList.find(cls => cls.startsWith('language-'));
+                                
+                                if (languageClass) {
+                                    const language = languageClass.replace('language-', '');
+                                    // Only highlight if the language is supported
+                                    if (Prism.languages && (Prism.languages[language] || language === 'none')) {
+                                        Prism.highlightElement(block);
+                                    } else {
+                                        // Remove unsupported language class and add generic styling
+                                        block.classList.remove(languageClass);
+                                        block.classList.add('language-none');
+                                        console.warn(`Prism.js: Language '${language}' not supported, using generic styling`);
+                                    }
+                                }
+                            } catch (blockError) {
+                                console.warn('Prism.js: Failed to highlight individual code block:', blockError);
+                                // Continue with other blocks
+                            }
+                        });
+                    } catch (innerError) {
+                        console.warn('Prism.js: Failed to process code blocks:', innerError);
+                    }
+                }, 50);
+            } catch (prismError) {
+                console.warn('Prism.js: Syntax highlighting initialization failed:', prismError);
+                // Don't stop the preview update, just skip highlighting
+            }
+        }
     } catch (error) {
         console.error('Error updating preview:', error);
         if (previewElement) {
@@ -220,8 +264,44 @@ function updateStats(instance) {
 // Basic markdown to HTML conversion
 function markdownToHtml(markdown) {
     let html = markdown;
+    
+    // Store code blocks temporarily to protect them from processing
+    const codeBlocks = [];
+    const codeBlockPlaceholder = '___CODE_BLOCK_PLACEHOLDER___';
+    
+    // Extract and protect code blocks first
+    html = html.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(match, lang, code) {
+        const language = lang ? lang.toLowerCase() : '';
+        const languageClass = language ? ` class="language-${language}"` : '';
+        const preClass = language ? ` class="line-numbers"` : '';
+        
+        // Preserve the code exactly as written, only escaping HTML entities
+        const escapedCode = code
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        const codeBlockHtml = `<pre${preClass}><code${languageClass}>${escapedCode}</code></pre>`;
+        codeBlocks.push(codeBlockHtml);
+        return codeBlockPlaceholder + (codeBlocks.length - 1);
+    });
+    
+    // Extract and protect inline code
+    const inlineCodeBlocks = [];
+    const inlineCodePlaceholder = '___INLINE_CODE_PLACEHOLDER___';
+    
+    html = html.replace(/`([^`]*)`/g, function(match, code) {
+        const escapedCode = code
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        const inlineCodeHtml = `<code class="language-none">${escapedCode}</code>`;
+        inlineCodeBlocks.push(inlineCodeHtml);
+        return inlineCodePlaceholder + (inlineCodeBlocks.length - 1);
+    });
 
-    // Escape HTML
+    // Now process the rest of the markdown (escaping HTML for non-code content)
     html = html.replace(/&/g, '&amp;')
                .replace(/</g, '&lt;')
                .replace(/>/g, '&gt;');
@@ -234,10 +314,6 @@ function markdownToHtml(markdown) {
     // Bold and italic
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-
-    // Code blocks
-    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-    html = html.replace(/`([^`]*)`/g, '<code>$1</code>');
 
     // Links
     html = html.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<a href="$2">$1</a>');
@@ -254,13 +330,23 @@ function markdownToHtml(markdown) {
     html = html.replace(/(<li>.*<\/li>)\n(<li>.*<\/li>)/g, '<ul>$1$2</ul>');
     html = html.replace(/<\/ul>\n<ul>/g, '');
 
-    // Line breaks
+    // Line breaks (but not inside code blocks)
     html = html.replace(/\n\n/g, '</p><p>');
     html = html.replace(/\n/g, '<br>');
 
     // Wrap in paragraphs if needed
     if (html && !html.startsWith('<')) {
         html = '<p>' + html + '</p>';
+    }
+    
+    // Restore inline code blocks first
+    for (let i = 0; i < inlineCodeBlocks.length; i++) {
+        html = html.replace(inlineCodePlaceholder + i, inlineCodeBlocks[i]);
+    }
+
+    // Restore code blocks last
+    for (let i = 0; i < codeBlocks.length; i++) {
+        html = html.replace(codeBlockPlaceholder + i, codeBlocks[i]);
     }
 
     return html;
