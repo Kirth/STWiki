@@ -286,10 +286,114 @@ h3 { font-size: 1.75rem; }
     color: var(--bs-secondary);
 }
 
+/* Collaborative Editing - Remote Cursors and Selections */
+.editor-container {
+    position: relative;
+}
+
+.remote-cursor-overlay {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: hidden;
+    border: 2px solid rgba(255, 0, 0, 0.3); /* DEBUG: Red border to see overlay position */
+}
+
+.remote-cursor {
+    position: absolute;
+    width: 4px; /* DEBUG: Wider cursor for visibility */
+    z-index: 120;
+    pointer-events: none;
+    transition: all 0.3s ease-out, opacity 0.4s ease-out;
+    background: rgba(255, 0, 0, 0.7); /* DEBUG: Red background with 0.7 opacity */
+    opacity: 0; /* Start invisible for fade-in effect */
+}
+
+.remote-cursor.visible {
+    opacity: 0.7; /* Fade in to visible */
+}
+
+.remote-cursor.moving {
+    transition: all 0.2s ease-out, opacity 0.3s ease-out;
+}
+
+.remote-cursor-line {
+    width: 2px;
+    height: 100%;
+    background-color: currentColor;
+    position: relative;
+}
+
+.remote-cursor-label {
+    position: absolute;
+    top: -25px;
+    left: -1px;
+    background-color: currentColor;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transform: translateY(5px);
+    transition: all 0.2s ease-out;
+}
+
+.remote-cursor:hover .remote-cursor-label,
+.remote-cursor.active .remote-cursor-label {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.remote-selection {
+    position: absolute;
+    pointer-events: none;
+    z-index: 110;
+    transition: all 0.3s ease-out, opacity 0.4s ease-out;
+    opacity: 0; /* Start invisible for fade-in effect */
+}
+
+.remote-selection.visible {
+    opacity: 1; /* Fade in to visible (opacity is controlled by the highlight element) */
+}
+
+.remote-selection.moving {
+    transition: all 0.2s ease-out, opacity 0.3s ease-out;
+}
+
+.remote-selection-highlight {
+    position: absolute;
+    border-radius: 2px;
+    /* Background color and opacity are set via JavaScript */
+}
+
+.remote-cursor.typing .remote-cursor-line {
+    animation: cursorBlink 1s infinite;
+}
+
+@keyframes cursorBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
     body { padding: 0 10px; }
     .d-md-flex { display: block !important; }
     .justify-content-md-end { justify-content: flex-start !important; }
     .btn { margin-bottom: 0.5rem; width: 100%; }
+    
+    .remote-cursor-label {
+        font-size: 10px;
+        padding: 1px 4px;
+        max-width: 80px;
+    }
 }

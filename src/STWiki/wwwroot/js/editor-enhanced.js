@@ -3,6 +3,11 @@
 
 let editorInstances = new Map();
 
+// Helper function for scoped DOM lookups
+function getScoped(container, selector) {
+    return container ? container.querySelector(selector) : null;
+}
+
 // Initialize the enhanced editor (markdown or HTML)
 window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
     try {
@@ -21,17 +26,20 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
             console.log('Stored component reference on editor container');
         }
 
-        // Detect the current format from the page
-        const formatBadge = document.querySelector('.badge.bg-primary');
+        // Detect format from container-scoped badge
+        const formatBadge = getScoped(editorContainer, '[data-role="format-badge"], .badge.bg-primary');
         const currentFormat = formatBadge ? formatBadge.textContent.toLowerCase() : 'markdown';
         
-        // Create editor instance with safe element lookups
+        // Create editor instance with container-scoped element lookups
         const instance = {
+            id: editorId,
+            container: editorContainer,
             textarea: textarea,
-            previewElement: document.getElementById('preview-content') || null,
-            wordCountElement: document.getElementById('word-count') || null,
-            charCountElement: document.getElementById('char-count') || null,
-            statusElement: document.getElementById('status-text') || null,
+            previewElement: getScoped(editorContainer, '[data-role="preview"], #preview-content'),
+            wordCountElement: getScoped(editorContainer, '[data-role="word-count"], #word-count'),
+            charCountElement: getScoped(editorContainer, '[data-role="char-count"], #char-count'),
+            statusElement: getScoped(editorContainer, '[data-role="status-text"], #status-text'),
+            hiddenField: getScoped(editorContainer, 'textarea[name="Body"], input[name="Body"], [data-role="body"], #body-textarea'),
             lastContent: '',
             updateTimeout: null,
             componentRef: componentRef,
@@ -67,8 +75,8 @@ function setupEventListeners(instance) {
 
     // Live preview updates with debouncing
     textarea.addEventListener('input', function() {
-        // Immediate sync with form textarea on every input
-        syncWithFormTextarea(textarea.value);
+        // Immediate sync with instance-specific form field on every input
+        syncWithFormTextarea(instance, textarea.value);
         
         clearTimeout(instance.updateTimeout);
         instance.updateTimeout = setTimeout(() => {
@@ -162,8 +170,8 @@ function updatePreview(instance) {
         
         instance.lastContent = content;
         
-        // Sync with traditional form textarea
-        syncWithFormTextarea(content);
+        // Sync with instance-specific form field
+        syncWithFormTextarea(instance, content);
         
         if (!content.trim()) {
             previewElement.innerHTML = '<em class="text-muted">Preview will appear here...</em>';
@@ -208,21 +216,21 @@ function updatePreview(instance) {
     }
 }
 
-// Sync editor content with hidden form textarea
-function syncWithFormTextarea(content) {
+// Sync editor content with instance-specific hidden form field
+function syncWithFormTextarea(instance, content) {
     try {
-        const bodyTextarea = document.getElementById('body-textarea');
-        if (bodyTextarea) {
-            bodyTextarea.value = content || '';
+        const hiddenField = instance.hiddenField;
+        if (hiddenField) {
+            hiddenField.value = content || '';
             // Also trigger change event to ensure form validation updates
-            bodyTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-            bodyTextarea.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log('🔄 Synced content to form textarea:', content?.length || 0, 'characters');
+            hiddenField.dispatchEvent(new Event('input', { bubbles: true }));
+            hiddenField.dispatchEvent(new Event('change', { bubbles: true }));
+            console.log(`🔄 [${instance.id}] Synced content to form field:`, content?.length || 0, 'characters');
         } else {
-            console.warn('⚠️ body-textarea not found for syncing');
+            console.warn(`⚠️ [${instance.id}] Hidden form field not found for syncing`);
         }
     } catch (error) {
-        console.error('❌ Error syncing with form textarea:', error);
+        console.error(`❌ [${instance.id}] Error syncing with form field:`, error);
     }
 }
 
@@ -384,7 +392,20 @@ function insertLink(textarea) {
     textarea.focus();
 }
 
-// Global function for toolbar buttons
+// Instance-specific function for toolbar buttons
+window.insertMarkdownFor = function(editorId, before, after) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found for insertMarkdownFor:', editorId);
+        return;
+    }
+
+    wrapSelection(instance.textarea, before, after);
+    updatePreview(instance);
+    updateStats(instance);
+};
+
+// Legacy global function for toolbar buttons (fallback using focus)
 window.insertMarkdown = function(before, after) {
     // Find the active editor (most recent one or focused one)
     let activeInstance = null;
@@ -409,6 +430,7 @@ window.insertMarkdown = function(before, after) {
         return;
     }
 
+    console.warn(`Using legacy insertMarkdown - prefer insertMarkdownFor('${activeId}', ...) for multi-editor setups`);
     wrapSelection(activeInstance.textarea, before, after);
     updatePreview(activeInstance);
     updateStats(activeInstance);
@@ -461,8 +483,22 @@ window.showEditorStatus = function(message) {
     }
 };
 
-// Update editor format when format is switched
-window.updateEditorFormat = function(newFormat) {
+// Update specific editor format
+window.updateEditorFormat = function(editorId, newFormat) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found for updateEditorFormat:', editorId);
+        return;
+    }
+    
+    instance.format = newFormat.toLowerCase();
+    // Trigger a preview update to reflect the new format
+    updatePreview(instance);
+    console.log(`Updated editor ${editorId} to format:`, newFormat);
+};
+
+// Legacy global format update (for compatibility)
+window.updateAllEditorsFormat = function(newFormat) {
     for (const instance of editorInstances.values()) {
         instance.format = newFormat.toLowerCase();
         // Trigger a preview update to reflect the new format
@@ -489,4 +525,569 @@ window.addEventListener('beforeunload', function() {
     }
 });
 
-console.log('Enhanced editor JavaScript loaded');
+// Collaboration features
+let remoteCursors = new Map();
+let isApplyingRemoteOperation = false;
+
+// Set editor content programmatically (for collaboration sync)
+window.setEnhancedEditorContent = function(editorId, content) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found:', editorId);
+        return;
+    }
+    
+    isApplyingRemoteOperation = true;
+    instance.textarea.value = content;
+    updatePreview(instance);
+    updateStats(instance);
+    isApplyingRemoteOperation = false;
+    
+    console.log('✅ Set editor content for collaboration sync');
+};
+
+// Apply insert operation from remote user
+window.applyInsertOperation = function(editorId, position, text) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found:', editorId);
+        return;
+    }
+    
+    isApplyingRemoteOperation = true;
+    
+    const textarea = instance.textarea;
+    const currentValue = textarea.value;
+    const newValue = currentValue.slice(0, position) + text + currentValue.slice(position);
+    
+    textarea.value = newValue;
+    updatePreview(instance);
+    updateStats(instance);
+    
+    isApplyingRemoteOperation = false;
+    
+    console.log(`✅ Applied remote insert: "${text}" at position ${position}`);
+};
+
+// Apply delete operation from remote user
+window.applyDeleteOperation = function(editorId, position, length) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found:', editorId);
+        return;
+    }
+    
+    isApplyingRemoteOperation = true;
+    
+    const textarea = instance.textarea;
+    const currentValue = textarea.value;
+    const newValue = currentValue.slice(0, position) + currentValue.slice(position + length);
+    
+    textarea.value = newValue;
+    updatePreview(instance);
+    updateStats(instance);
+    
+    isApplyingRemoteOperation = false;
+    
+    console.log(`✅ Applied remote delete: ${length} characters at position ${position}`);
+};
+
+// Apply replace operation from remote user
+window.applyReplaceOperation = function(editorId, selectionStart, selectionEnd, newText) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found:', editorId);
+        return;
+    }
+    
+    isApplyingRemoteOperation = true;
+    
+    const textarea = instance.textarea;
+    const currentValue = textarea.value;
+    
+    console.log(`🔄 Applying replace operation:`);
+    console.log(`  Current: "${currentValue}"`);
+    console.log(`  Replace range ${selectionStart}-${selectionEnd} ("${currentValue.slice(selectionStart, selectionEnd)}") with "${newText}"`);
+    
+    const newValue = currentValue.slice(0, selectionStart) + newText + currentValue.slice(selectionEnd);
+    
+    console.log(`  Result: "${newValue}"`);
+    
+    textarea.value = newValue;
+    updatePreview(instance);
+    updateStats(instance);
+    
+    isApplyingRemoteOperation = false;
+    
+    console.log(`✅ Applied remote replace: ${selectionStart}-${selectionEnd} -> "${newText}"`);
+};
+
+// Get current cursor position
+window.getEditorCursorPosition = function(editorId) {
+    const instance = editorInstances.get(editorId);
+    if (!instance) {
+        console.error('Editor instance not found:', editorId);
+        return [0, 0];
+    }
+    
+    const textarea = instance.textarea;
+    return [textarea.selectionStart, textarea.selectionEnd];
+};
+
+// Update remote cursor visualization for specific editor
+window.updateRemoteCursor = function(editorId, userId, start, end, userColor, displayName) {
+    try {
+        console.log(`🎯 [${editorId}] Remote cursor from ${displayName} (${userId}): ${start}-${end}`);
+        
+        const instance = editorInstances.get(editorId);
+        if (!instance) {
+            console.error('Editor instance not found for cursor update:', editorId);
+            return;
+        }
+        
+        remoteCursors.set(`${editorId}_${userId}`, { 
+            editorId,
+            userId,
+            start, 
+            end, 
+            userColor, 
+            displayName,
+            lastUpdate: Date.now() 
+        });
+        
+        renderRemoteCursor(editorId, userId, start, end, userColor, displayName);
+        
+    } catch (error) {
+        console.error(`Failed to update remote cursor for editor ${editorId}:`, error);
+    }
+};
+
+// Remove remote cursor when user leaves specific editor
+window.removeRemoteCursor = function(editorId, userId) {
+    try {
+        const key = `${editorId}_${userId}`;
+        remoteCursors.delete(key);
+        console.log(`🎯 [${editorId}] Removed remote cursor for ${userId}`);
+        
+        // Remove visual cursor indicators from the specific editor
+        const overlay = document.getElementById(`remote-cursor-overlay-${editorId}`);
+        if (overlay) {
+            const cursorElement = overlay.querySelector(`[data-user-id="${userId}"]`);
+            if (cursorElement) {
+                cursorElement.remove();
+            }
+        }
+        
+    } catch (error) {
+        console.error(`Failed to remove remote cursor for editor ${editorId}:`, error);
+    }
+};
+
+// Legacy function - remove from all editors
+window.removeRemoteCursorFromAll = function(userId) {
+    try {
+        // Remove from all editor instances
+        for (const [editorId] of editorInstances) {
+            const key = `${editorId}_${userId}`;
+            remoteCursors.delete(key);
+            
+            const overlay = document.getElementById(`remote-cursor-overlay-${editorId}`);
+            if (overlay) {
+                const cursorElement = overlay.querySelector(`[data-user-id="${userId}"]`);
+                if (cursorElement) {
+                    cursorElement.remove();
+                }
+            }
+        }
+        
+        console.log(`🎯 Removed remote cursor for ${userId} from all editors`);
+        
+    } catch (error) {
+        console.error('Failed to remove remote cursor from all editors:', error);
+    }
+};
+
+// Render remote cursor at specific position
+function renderRemoteCursor(editorId, userId, start, end, userColor, displayName) {
+    try {
+        const overlay = document.getElementById(`remote-cursor-overlay-${editorId}`);
+        const textarea = document.getElementById(editorId);
+        
+        if (!overlay) {
+            console.error('❌ Cursor overlay not found:', `remote-cursor-overlay-${editorId}`);
+            return;
+        }
+        
+        if (!textarea) {
+            console.error('❌ Textarea not found:', editorId);
+            return;
+        }
+        
+        console.log(`🎯 Rendering cursor for ${displayName} (${userId}) at ${start}-${end} with color ${userColor}`);
+        
+        // Remove existing cursor for this user
+        const existingCursor = overlay.querySelector(`[data-user-id="${userId}"]`);
+        if (existingCursor) {
+            existingCursor.remove();
+        }
+        
+        // Calculate cursor position
+        const position = getTextPosition(textarea, start);
+        if (!position) {
+            console.error('❌ Could not calculate cursor position for', start);
+            return;
+        }
+        
+        console.log(`📍 Calculated position:`, position);
+        
+        // Create cursor element
+        const cursorElement = document.createElement('div');
+        cursorElement.className = 'remote-cursor';
+        cursorElement.setAttribute('data-user-id', userId);
+        cursorElement.style.color = userColor;
+        cursorElement.style.left = position.left + 'px';
+        cursorElement.style.top = position.top + 'px';
+        cursorElement.style.height = position.height + 'px';
+        
+        // Create cursor line
+        const cursorLine = document.createElement('div');
+        cursorLine.className = 'remote-cursor-line';
+        cursorElement.appendChild(cursorLine);
+        
+        // Create cursor label
+        const cursorLabel = document.createElement('div');
+        cursorLabel.className = 'remote-cursor-label';
+        cursorLabel.textContent = displayName;
+        cursorElement.appendChild(cursorLabel);
+        
+        // Handle selection highlighting
+        if (start !== end) {
+            renderRemoteSelection(overlay, textarea, start, end, userColor, userId);
+        }
+        
+        // Add cursor to overlay with fade-in effect
+        overlay.appendChild(cursorElement);
+        
+        // Trigger fade-in animation with movement class
+        setTimeout(() => {
+            cursorElement.classList.add('visible', 'moving');
+        }, 10); // Small delay to ensure DOM is ready
+        
+        // Show label temporarily for new cursors and indicate active state
+        cursorElement.classList.add('active');
+        setTimeout(() => {
+            cursorElement.classList.remove('active');
+        }, 2000);
+        
+        setTimeout(() => {
+            cursorElement.classList.remove('moving');
+        }, 300); // Remove moving class after fade animation
+        
+        console.log(`✅ Rendered cursor for ${displayName} at position ${start}-${end}`, cursorElement);
+        console.log(`📍 Cursor element style:`, {
+            left: cursorElement.style.left,
+            top: cursorElement.style.top,
+            height: cursorElement.style.height,
+            color: cursorElement.style.color
+        });
+        
+    } catch (error) {
+        console.error('Failed to render remote cursor:', error);
+    }
+}
+
+// Render remote text selection (SIMPLIFIED)
+function renderRemoteSelection(overlay, textarea, start, end, userColor, userId) {
+    try {
+        console.log(`🎨 Rendering selection for ${userId}: ${start}-${end}`);
+        
+        // Remove existing selection for this user
+        const existingSelection = overlay.querySelector(`[data-selection-user-id="${userId}"]`);
+        if (existingSelection) {
+            existingSelection.remove();
+        }
+        
+        if (start === end) {
+            console.log(`⚠️ No selection - start equals end (${start})`);
+            return; // No selection
+        }
+        
+        const startPos = getTextPosition(textarea, start);
+        const endPos = getTextPosition(textarea, end);
+        
+        if (!startPos || !endPos) {
+            console.log(`❌ Could not calculate selection positions`);
+            return;
+        }
+        
+        console.log(`📍 Selection positions:`, { startPos, endPos });
+        
+        // Create selection highlight
+        const selectionElement = document.createElement('div');
+        selectionElement.className = 'remote-selection';
+        selectionElement.setAttribute('data-selection-user-id', userId);
+        selectionElement.style.color = userColor;
+        
+        // Always render as single-line for now (simplified)
+        const highlight = document.createElement('div');
+        highlight.className = 'remote-selection-highlight';
+        
+        // Calculate selection width
+        let selectionWidth;
+        if (startPos.top === endPos.top) {
+            // Same line - use actual width difference
+            selectionWidth = Math.abs(endPos.left - startPos.left);
+        } else {
+            // Multi-line - for now, just show from start to end of line
+            const textareaWidth = textarea.clientWidth - (parseInt(window.getComputedStyle(textarea).paddingLeft) || 0) * 2;
+            selectionWidth = Math.max(50, textareaWidth - startPos.left);
+        }
+        
+        highlight.style.left = Math.min(startPos.left, endPos.left) + 'px';
+        highlight.style.top = startPos.top + 'px';
+        highlight.style.width = selectionWidth + 'px';
+        highlight.style.height = startPos.height + 'px';
+        highlight.style.backgroundColor = userColor;
+        highlight.style.opacity = '0.7';
+        
+        selectionElement.appendChild(highlight);
+        overlay.appendChild(selectionElement);
+        
+        // Trigger fade-in animation with movement class for selections
+        setTimeout(() => {
+            selectionElement.classList.add('visible', 'moving');
+        }, 10);
+        
+        setTimeout(() => {
+            selectionElement.classList.remove('moving');
+        }, 300); // Remove moving class after fade animation
+        
+        console.log(`✅ Rendered selection highlight:`, {
+            left: highlight.style.left,
+            top: highlight.style.top,
+            width: highlight.style.width,
+            height: highlight.style.height
+        });
+        
+    } catch (error) {
+        console.error('❌ Failed to render remote selection:', error);
+    }
+}
+
+// Calculate text position in pixels relative to textarea (SIMPLIFIED)
+function getTextPosition(textarea, textIndex) {
+    try {
+        const computedStyle = window.getComputedStyle(textarea);
+        const lineHeight = parseInt(computedStyle.lineHeight) || 20;
+        const fontSize = parseInt(computedStyle.fontSize) || 14;
+        const charWidth = fontSize * 0.6; // Approximate character width for monospace
+        
+        // Get textarea padding
+        const paddingLeft = parseInt(computedStyle.paddingLeft) || 0;
+        const paddingTop = parseInt(computedStyle.paddingTop) || 0;
+        
+        // Simple line-by-line calculation
+        const textUpToCursor = textarea.value.substring(0, textIndex);
+        const lines = textUpToCursor.split('\n');
+        const currentLine = lines.length - 1;
+        const charInLine = lines[lines.length - 1].length;
+        
+        // Cursor should appear at the LEFT edge of the current character position
+        // If user is at position 5, cursor should be BEFORE character 5 (after character 4)
+        const position = {
+            left: paddingLeft + (charInLine * charWidth) - 2, // Adjust left by 2px to account for cursor width
+            top: paddingTop + (currentLine * lineHeight),
+            height: lineHeight
+        };
+        
+        console.log(`📍 Simple position calc for index ${textIndex}:`, position);
+        console.log(`📍 Line ${currentLine}, Char ${charInLine} in line`);
+        
+        // Bounds checking - ensure cursor stays within textarea
+        const maxTop = textarea.clientHeight - lineHeight;
+        const maxLeft = textarea.clientWidth - 10;
+        
+        position.top = Math.min(Math.max(position.top, 0), maxTop);
+        position.left = Math.min(Math.max(position.left, 0), maxLeft);
+        
+        return position;
+        
+    } catch (error) {
+        console.error('❌ Failed to calculate text position:', error);
+        
+        // Ultimate fallback - just put cursor at top-left
+        return {
+            left: 10,
+            top: 10,
+            height: 20
+        };
+    }
+}
+
+// Check if Blazor is connected (for collaboration readiness)
+window.checkBlazorConnection = function() {
+    try {
+        // Check if Blazor SignalR connection is working
+        return typeof Blazor !== 'undefined' && Blazor.defaultReconnectionHandler;
+    } catch (error) {
+        return false;
+    }
+};
+
+// Mark content as committed (for collaboration coordination)
+window.markContentAsCommitted = function() {
+    console.log('✅ Content marked as committed - collaboration aware');
+    // This could be extended to notify other collaborators
+};
+
+// Enhanced event listener setup for collaboration
+function setupCollaborativeEventListeners(instance) {
+    const { textarea, componentRef } = instance;
+    
+    if (!componentRef) return;
+    
+    let lastContent = textarea.value;
+    let lastSelectionStart = textarea.selectionStart;
+    let lastSelectionEnd = textarea.selectionEnd;
+    
+    // Detect text changes for operational transform
+    textarea.addEventListener('input', function(e) {
+        if (isApplyingRemoteOperation) {
+            return; // Don't send operations for remote changes
+        }
+        
+        const currentContent = textarea.value;
+        const currentSelectionStart = textarea.selectionStart;
+        const currentSelectionEnd = textarea.selectionEnd;
+        
+        // Detect the type of operation that occurred
+        const operation = detectOperation(lastContent, currentContent, lastSelectionStart, lastSelectionEnd, currentSelectionStart);
+        
+        // Send operation to Blazor component for collaboration
+        if (operation && componentRef) {
+            try {
+                console.log(`📝 [${instance.id}] Detected ${operation.type} operation:`, operation);
+                
+                if (operation.type === 'replace') {
+                    componentRef.invokeMethodAsync('OnTextReplace', 
+                        operation.selectionStart, 
+                        operation.selectionEnd, 
+                        operation.newText);
+                } else {
+                    componentRef.invokeMethodAsync('OnTextChange', 
+                        currentContent, 
+                        operation.position, 
+                        operation.type, 
+                        operation.text);
+                }
+            } catch (error) {
+                console.error(`[${instance.id}] Failed to send text change to Blazor:`, error);
+            }
+        }
+        
+        lastContent = currentContent;
+        lastSelectionStart = currentSelectionStart;
+        lastSelectionEnd = currentSelectionEnd;
+    });
+    
+    // Track cursor position changes
+    textarea.addEventListener('selectionchange', function() {
+        if (isApplyingRemoteOperation) return;
+        
+        // Cursor position changes are handled by the timer in the Blazor component
+    });
+}
+
+// Enhanced operation detection for collaborative editing
+function detectOperation(oldText, newText, oldSelectionStart, oldSelectionEnd, newCursorPos) {
+    const oldLength = oldText.length;
+    const newLength = newText.length;
+    
+    // Check if this was a selection replacement
+    if (oldSelectionStart !== oldSelectionEnd) {
+        // User had text selected - check if it was replaced
+        const selectedText = oldText.slice(oldSelectionStart, oldSelectionEnd);
+        const beforeSelection = oldText.slice(0, oldSelectionStart);
+        const afterSelection = oldText.slice(oldSelectionEnd);
+        
+        // Check if the selection was replaced with new text
+        if (newText.startsWith(beforeSelection) && newText.endsWith(afterSelection)) {
+            // Calculate what was inserted to replace the selection
+            const expectedLength = beforeSelection.length + afterSelection.length;
+            const insertedLength = newText.length - expectedLength;
+            const insertedText = newText.slice(oldSelectionStart, oldSelectionStart + insertedLength);
+            
+            console.log(`🔍 Selection replacement detected:`);
+            console.log(`  Old: "${oldText}" (selected "${selectedText}" at ${oldSelectionStart}-${oldSelectionEnd})`);
+            console.log(`  New: "${newText}" (inserted "${insertedText}")`);
+            
+            return {
+                type: 'replace',
+                selectionStart: oldSelectionStart,
+                selectionEnd: oldSelectionEnd,
+                newText: insertedText,
+                oldText: selectedText
+            };
+        }
+    }
+    
+    // Fallback to simple insert/delete detection
+    if (newLength > oldLength) {
+        // Text was inserted
+        const insertPos = findInsertPosition(oldText, newText);
+        const insertedText = newText.slice(insertPos, insertPos + (newLength - oldLength));
+        return {
+            type: 'insert',
+            position: insertPos,
+            text: insertedText
+        };
+    } else if (newLength < oldLength) {
+        // Text was deleted
+        const deletePos = findDeletePosition(oldText, newText);
+        const deletedText = oldText.slice(deletePos, deletePos + (oldLength - newLength));
+        return {
+            type: 'delete',
+            position: deletePos,
+            text: deletedText
+        };
+    }
+    
+    return null; // No change detected
+}
+
+// Helper function to find where text was inserted
+function findInsertPosition(oldText, newText) {
+    let i = 0;
+    while (i < oldText.length && i < newText.length && oldText[i] === newText[i]) {
+        i++;
+    }
+    return i;
+}
+
+// Helper function to find where text was deleted
+function findDeletePosition(oldText, newText) {
+    let i = 0;
+    while (i < oldText.length && i < newText.length && oldText[i] === newText[i]) {
+        i++;
+    }
+    return i;
+}
+
+// Update the initEnhancedEditor function to include collaborative features
+const originalInitEnhancedEditor = window.initEnhancedEditor;
+window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
+    const success = originalInitEnhancedEditor(editorId, initialContent, componentRef);
+    
+    if (success && componentRef) {
+        const instance = editorInstances.get(editorId);
+        if (instance) {
+            // Setup collaborative event listeners
+            setupCollaborativeEventListeners(instance);
+            console.log('✅ Collaborative features initialized for editor:', editorId);
+        }
+    }
+    
+    return success;
+};
+
+console.log('Enhanced editor JavaScript with collaboration features loaded');

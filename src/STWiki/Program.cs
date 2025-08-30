@@ -23,8 +23,19 @@ builder.Services.AddSingleton<STWiki.Services.MarkdownService>();
 builder.Services.AddSingleton<STWiki.Services.DiffService>();
 builder.Services.AddScoped<STWiki.Services.TemplateService>();
 builder.Services.AddScoped<STWiki.Services.IRedirectService, STWiki.Services.RedirectService>();
+builder.Services.AddSingleton<STWiki.Services.IEditSessionService, STWiki.Services.EditSessionService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
+
+// Add configuration options
+builder.Services.Configure<STWiki.Models.CollaborationOptions>(
+    builder.Configuration.GetSection(STWiki.Models.CollaborationOptions.SectionName));
+
+// Add SignalR
+builder.Services.AddSignalR();
+
+// Add background services
+builder.Services.AddHostedService<STWiki.BackgroundServices.EditSessionCleanupService>();
 
 // Add authentication
 builder.Services.AddAuthentication(options =>
@@ -161,6 +172,7 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 app.MapBlazorHub();
+app.MapHub<STWiki.Hubs.EditHub>("/editHub");
 app.MapControllers();
 
 // Default redirect to home page
