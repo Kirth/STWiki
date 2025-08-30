@@ -1,4 +1,4 @@
-@page "/{slug}/history"
+@page "/{*slug:regex(.*\\/history$)}"
 @model STWiki.Pages.Wiki.HistoryModel
 @{
     ViewData["Title"] = $"History - {Model.Page?.Title ?? Model.Slug}";

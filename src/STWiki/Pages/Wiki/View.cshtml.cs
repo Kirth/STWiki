@@ -18,13 +18,15 @@ public class ViewModel : PageModel
     private readonly MarkdownService _markdownService;
     private readonly TemplateService _templateService;
     private readonly IRedirectService _redirectService;
+    private readonly ActivityService _activityService;
 
-    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService, IRedirectService redirectService)
+    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService, IRedirectService redirectService, ActivityService activityService)
     {
         _context = context;
         _markdownService = markdownService;
         _templateService = templateService;
         _redirectService = redirectService;
+        _activityService = activityService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
@@ -62,6 +64,19 @@ public class ViewModel : PageModel
                 "html" => await _templateService.ProcessTemplatesAsync(Page.Body), // Process templates in HTML too
                 _ => $"<pre>{Page.Body}</pre>" // Plain text fallback
             };
+
+            // Log page view activity (only for authenticated users to avoid spam)
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var currentUser = User.Identity.Name ?? "Unknown";
+                await _activityService.LogPageViewedAsync(
+                    currentUser, 
+                    currentUser, 
+                    Page, 
+                    HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
+                    HttpContext.Request.Headers.UserAgent.ToString()
+                );
+            }
         }
 
         return Page();

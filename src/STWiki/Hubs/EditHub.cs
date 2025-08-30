@@ -91,16 +91,19 @@ public class EditHub : Hub
     {
         try
         {
-            // Apply operational transform and get the final operation
-            var finalOperation = await _editSessionService.ApplyOperationAsync(pageId, operation);
+            // Queue operation for sequential processing to prevent race conditions
+            var processedOperations = await _editSessionService.QueueAndProcessOperationAsync(pageId, operation);
             
-            if (finalOperation != null)
+            foreach (var finalOperation in processedOperations)
             {
-                // Broadcast the transformed operation to all other users in the room
+                // Broadcast the processed operation to all other users in the room
                 await Clients.OthersInGroup($"edit_{pageId}").SendAsync("ReceiveOperation", finalOperation);
                 
-                // Confirm operation back to sender
-                await Clients.Caller.SendAsync("OperationConfirmed", finalOperation.OperationId);
+                // Confirm operation back to sender if it's their operation
+                if (finalOperation.UserId == operation.UserId && finalOperation.OperationId == operation.OperationId)
+                {
+                    await Clients.Caller.SendAsync("OperationConfirmed", finalOperation.OperationId, finalOperation.ServerSequenceNumber);
+                }
             }
         }
         catch (Exception ex)
@@ -132,12 +135,60 @@ public class EditHub : Hub
             var session = await _editSessionService.GetSessionAsync(pageId);
             if (session != null)
             {
-                await Clients.Caller.SendAsync("DocumentState", session.CurrentContent, session.OperationCounter);
+                await Clients.Caller.SendAsync("DocumentState", session.CurrentContent, session.OperationCounter, session.GlobalSequenceNumber);
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error syncing document for page {PageId}", pageId);
+        }
+    }
+    
+    /// <summary>
+    /// Update client's last known sequence number for operation history tracking
+    /// </summary>
+    public async Task UpdateClientState(string pageId, long sequenceNumber)
+    {
+        try
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? 
+                        Context.User?.FindFirst("sub")?.Value ?? "";
+            
+            if (!string.IsNullOrEmpty(userId))
+            {
+                var session = await _editSessionService.GetSessionAsync(pageId);
+                session?.UpdateClientState(userId, sequenceNumber);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating client state for page {PageId}", pageId);
+        }
+    }
+    
+    /// <summary>
+    /// Get operations since client's last known state
+    /// </summary>
+    public async Task RequestOperationsSince(string pageId, long clientSequenceNumber)
+    {
+        try
+        {
+            var userId = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? 
+                        Context.User?.FindFirst("sub")?.Value ?? "";
+            
+            if (!string.IsNullOrEmpty(userId))
+            {
+                var session = await _editSessionService.GetSessionAsync(pageId);
+                if (session != null)
+                {
+                    var operations = session.GetOperationsSinceClientState(userId, clientSequenceNumber);
+                    await Clients.Caller.SendAsync("OperationsSinceState", operations);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting operations since state for page {PageId}", pageId);
         }
     }
     

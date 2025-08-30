@@ -181,7 +181,16 @@
     private string CollaborationStatus = "Offline";
     private string CollaborationStatusClass = "bg-secondary";
     private bool IsCollaborationEnabled = false;
+    
+    // Cursor state tracking
+    private int _lastCursorStart = -1;
+    private int _lastCursorEnd = -1;
     private Queue<TextOperation> _pendingOperations = new();
+    
+    // Enhanced state tracking for race condition prevention
+    private long _lastKnownSequenceNumber = 0;
+    private readonly Dictionary<string, TextOperation> _pendingOperationMap = new();
+    private readonly Dictionary<string, string> _operationContentBackup = new();
     private int _localOperationCounter = 0;
     private int _serverOperationCounter = 0;
     
@@ -647,7 +656,7 @@
             _editHubConnection.On<UserState>("UserJoined", OnUserJoined);
             _editHubConnection.On<string>("UserLeft", OnUserLeft);
             _editHubConnection.On<List<UserState>>("UserList", OnUserList);
-            _editHubConnection.On<string>("OperationConfirmed", OnOperationConfirmed);
+            _editHubConnection.On<string, long>("OperationConfirmed", OnOperationConfirmed);
             _editHubConnection.On<string, string>("OperationRejected", OnOperationRejected);
             _editHubConnection.On<string>("Error", OnCollaborationError);
 
@@ -813,19 +822,54 @@
         return Task.CompletedTask;
     }
 
-    private Task OnOperationConfirmed(string operationId)
+    private async Task OnOperationConfirmed(string operationId, long serverSequenceNumber)
     {
-        // Remove confirmed operation from pending queue
+        // Remove confirmed operation from pending structures
         _pendingOperations = new Queue<TextOperation>(_pendingOperations.Where(op => op.OperationId != operationId));
-        Console.WriteLine($"✅ Operation confirmed: {operationId}");
-        return Task.CompletedTask;
+        _pendingOperationMap.Remove(operationId);
+        _operationContentBackup.Remove(operationId);
+        
+        // Update sequence number tracking
+        _lastKnownSequenceNumber = Math.Max(_lastKnownSequenceNumber, serverSequenceNumber);
+        
+        // Update server with our latest state
+        if (_editHubConnection?.State == HubConnectionState.Connected)
+        {
+            await _editHubConnection.InvokeAsync("UpdateClientState", PageId.ToString(), _lastKnownSequenceNumber);
+        }
+        
+        Console.WriteLine($"✅ Operation confirmed: {operationId} (seq: {serverSequenceNumber})");
     }
 
-    private Task OnOperationRejected(string operationId, string reason)
+    private async Task OnOperationRejected(string operationId, string reason)
     {
         Console.WriteLine($"❌ Operation rejected: {operationId} - {reason}");
-        // TODO: Handle operation rejection (e.g., revert changes)
-        return Task.CompletedTask;
+        
+        // Rollback the rejected operation
+        if (_pendingOperationMap.TryGetValue(operationId, out var rejectedOperation) &&
+            _operationContentBackup.TryGetValue(operationId, out var backupContent))
+        {
+            try
+            {
+                // Restore content from backup
+                await JS.InvokeVoidAsync("setEnhancedEditorContent", _editorId, backupContent);
+                Console.WriteLine($"🔄 Rolled back rejected operation: {operationId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Failed to rollback operation {operationId}: {ex.Message}");
+                // Request document sync as fallback
+                if (_editHubConnection?.State == HubConnectionState.Connected)
+                {
+                    await _editHubConnection.InvokeAsync("RequestDocumentSync", PageId.ToString());
+                }
+            }
+        }
+        
+        // Clean up pending operation
+        _pendingOperations = new Queue<TextOperation>(_pendingOperations.Where(op => op.OperationId != operationId));
+        _pendingOperationMap.Remove(operationId);
+        _operationContentBackup.Remove(operationId);
     }
 
     private Task OnCollaborationError(string error)
@@ -870,14 +914,25 @@
             var cursorInfo = await JS.InvokeAsync<int[]>("getEditorCursorPosition", _editorId);
             if (cursorInfo?.Length >= 2)
             {
-                var cursor = new CursorPosition
+                var currentStart = cursorInfo[0];
+                var currentEnd = cursorInfo[1];
+                
+                // Only broadcast if cursor position has changed
+                if (currentStart != _lastCursorStart || currentEnd != _lastCursorEnd)
                 {
-                    UserId = userId,
-                    Start = cursorInfo[0],
-                    End = cursorInfo[1]
-                };
+                    var cursor = new CursorPosition
+                    {
+                        UserId = userId,
+                        Start = currentStart,
+                        End = currentEnd
+                    };
 
-                await _editHubConnection.InvokeAsync("SendCursorUpdate", PageId.ToString(), cursor);
+                    await _editHubConnection.InvokeAsync("SendCursorUpdate", PageId.ToString(), cursor);
+                    
+                    // Update last known position
+                    _lastCursorStart = currentStart;
+                    _lastCursorEnd = currentEnd;
+                }
             }
         }
         catch (Exception ex)
@@ -912,6 +967,11 @@
 
             if (operation != null)
             {
+                // Store content backup before sending operation for potential rollback
+                var contentBeforeOperation = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+                _operationContentBackup[operation.OperationId] = contentBeforeOperation;
+                _pendingOperationMap[operation.OperationId] = operation;
+                
                 _pendingOperations.Enqueue(operation);
                 _localOperationCounter++;
                 
@@ -938,6 +998,11 @@
                         Guid.NewGuid().ToString();
 
             var operation = TextOperation.Replace(selectionStart, selectionEnd, newText, userId);
+            
+            // Store content backup before sending operation for potential rollback
+            var contentBeforeOperation = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+            _operationContentBackup[operation.OperationId] = contentBeforeOperation;
+            _pendingOperationMap[operation.OperationId] = operation;
             
             _pendingOperations.Enqueue(operation);
             _localOperationCounter++;

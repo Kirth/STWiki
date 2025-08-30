@@ -1,0 +1,165 @@
+@using STWiki.Services
+@inject BreadcrumbService BreadcrumbService
+
+@if (Items?.Any() == true)
+{
+    <nav aria-label="breadcrumb" class="@CssClass">
+        <ol class="breadcrumb @BreadcrumbClass">
+            @foreach (var item in Items)
+            {
+                @if (item.IsActive)
+                {
+                    <li class="breadcrumb-item active" aria-current="page" title="@item.Description">
+                        @if (!string.IsNullOrEmpty(item.Icon))
+                        {
+                            <i class="@item.Icon me-1"></i>
+                        }
+                        @item.Text
+                        @if (ShowLevel && item.Level > 0)
+                        {
+                            <span class="badge bg-secondary ms-1">L@item.Level</span>
+                        }
+                    </li>
+                }
+                else
+                {
+                    <li class="breadcrumb-item" title="@item.Description">
+                        <a href="/@item.Slug" class="text-decoration-none">
+                            @if (!string.IsNullOrEmpty(item.Icon))
+                            {
+                                <i class="@item.Icon me-1"></i>
+                            }
+                            @item.Text
+                        </a>
+                        @if (ShowLevel && item.Level > 0)
+                        {
+                            <span class="badge bg-secondary ms-1">L@item.Level</span>
+                        }
+                    </li>
+                }
+            }
+            
+            @if (ShowActions && Actions != null)
+            {
+                <li class="breadcrumb-item">
+                    <div class="dropdown">
+                        <button class="btn btn-link btn-sm text-muted p-0" type="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-three-dots"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            @Actions
+                        </ul>
+                    </div>
+                </li>
+            }
+        </ol>
+        
+        @if (ShowSiblings && Siblings?.Any() == true)
+        {
+            <div class="breadcrumb-siblings mt-2">
+                <small class="text-muted">Related: </small>
+                @foreach (var sibling in Siblings.Take(5))
+                {
+                    <a href="/@sibling.Slug" class="badge bg-light text-dark text-decoration-none me-1" 
+                       title="@sibling.Description">
+                        @sibling.Text
+                    </a>
+                }
+                @if (Siblings.Count > 5)
+                {
+                    <span class="text-muted small">and @(Siblings.Count - 5) more...</span>
+                }
+            </div>
+        }
+    </nav>
+}
+
+@code {
+    [Parameter] public List<BreadcrumbItem>? Items { get; set; }
+    [Parameter] public List<BreadcrumbItem>? Siblings { get; set; }
+    [Parameter] public string? CurrentSlug { get; set; }
+    [Parameter] public BreadcrumbOptions? Options { get; set; }
+    [Parameter] public bool ShowLevel { get; set; } = false;
+    [Parameter] public bool ShowSiblings { get; set; } = false;
+    [Parameter] public bool ShowActions { get; set; } = false;
+    [Parameter] public string CssClass { get; set; } = "";
+    [Parameter] public string BreadcrumbClass { get; set; } = "";
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Auto-build breadcrumbs if not provided
+        if (Items == null && !string.IsNullOrEmpty(CurrentSlug))
+        {
+            await BuildBreadcrumbs();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Rebuild if slug changed
+        if (Items == null && !string.IsNullOrEmpty(CurrentSlug))
+        {
+            await BuildBreadcrumbs();
+        }
+    }
+
+    private async Task BuildBreadcrumbs()
+    {
+        try
+        {
+            Items = await BreadcrumbService.BuildBreadcrumbsAsync(CurrentSlug!, Options);
+            
+            if (ShowSiblings && !string.IsNullOrEmpty(CurrentSlug))
+            {
+                Siblings = await BreadcrumbService.GetSiblingPagesAsync(CurrentSlug);
+            }
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error building breadcrumbs: {ex.Message}");
+            Items = new List<BreadcrumbItem>();
+            Siblings = new List<BreadcrumbItem>();
+        }
+    }
+
+    public async Task RefreshAsync()
+    {
+        await BuildBreadcrumbs();
+    }
+}
+
+<style>
+    .breadcrumb-siblings .badge {
+        font-size: 0.7rem;
+        border: 1px solid var(--bs-border-color);
+    }
+    
+    .breadcrumb-siblings .badge:hover {
+        background-color: var(--bs-primary) !important;
+        color: white !important;
+        border-color: var(--bs-primary);
+    }
+    
+    [data-bs-theme="dark"] .breadcrumb-siblings .badge {
+        background-color: var(--bs-dark) !important;
+        color: var(--bs-light) !important;
+        border-color: var(--bs-secondary);
+    }
+    
+    .breadcrumb-item .dropdown button {
+        border: none !important;
+        padding: 0.1rem 0.3rem;
+    }
+    
+    .breadcrumb-item .dropdown button:hover {
+        background-color: transparent;
+        color: var(--bs-primary);
+    }
+    
+    .breadcrumb-item a:hover i {
+        color: var(--bs-primary);
+    }
+</style>

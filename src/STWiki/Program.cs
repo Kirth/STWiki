@@ -13,7 +13,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    // Set route ordering to ensure Edit pages are processed before View pages  
+    options.Conventions.AddPageRoute("/Wiki/Edit", "/{*slug:regex(.*\\/edit$)}");
+    options.Conventions.AddPageRoute("/Wiki/Edit", "/edit");
+});
 builder.Services.AddServerSideBlazor();
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
@@ -24,6 +29,8 @@ builder.Services.AddSingleton<STWiki.Services.DiffService>();
 builder.Services.AddScoped<STWiki.Services.TemplateService>();
 builder.Services.AddScoped<STWiki.Services.IRedirectService, STWiki.Services.RedirectService>();
 builder.Services.AddSingleton<STWiki.Services.IEditSessionService, STWiki.Services.EditSessionService>();
+builder.Services.AddScoped<STWiki.Services.ActivityService>();
+builder.Services.AddScoped<STWiki.Services.BreadcrumbService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
@@ -100,6 +107,25 @@ builder.Services.AddAuthentication(options =>
                     logger.LogInformation("Token claim: {Type} = {Value}", claim.Type, claim.Value);
                 }
             }
+            
+            // Log user login activity
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var activityService = context.HttpContext.RequestServices.GetRequiredService<STWiki.Services.ActivityService>();
+                    var userName = context.Principal?.Identity?.Name ?? "Unknown";
+                    var ipAddress = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+                    var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
+                    
+                    await activityService.LogUserLoginAsync(userName, userName, ipAddress, userAgent);
+                    logger.LogInformation("Logged login activity for user: {UserName}", userName);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to log user login activity");
+                }
+            });
             
             return Task.CompletedTask;
         },

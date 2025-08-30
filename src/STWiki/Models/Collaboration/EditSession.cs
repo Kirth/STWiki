@@ -12,9 +12,81 @@ public class EditSession
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int OperationCounter { get; set; } = 0;
     
+    // Enhanced sequencing for race condition prevention
+    public long GlobalSequenceNumber { get; set; } = 0;
+    public readonly object _operationLock = new object();
+    public readonly Queue<TextOperation> _operationQueue = new Queue<TextOperation>();
+    public readonly Dictionary<string, long> _clientStates = new Dictionary<string, long>();
+    
     private readonly object _lockObject = new object();
     
+    /// <summary>
+    /// Queue operation for sequential processing to prevent race conditions
+    /// </summary>
+    public void QueueOperation(TextOperation operation)
+    {
+        lock (_operationLock)
+        {
+            _operationQueue.Enqueue(operation);
+        }
+    }
+    
+    /// <summary>
+    /// Process queued operations with strict sequencing
+    /// </summary>
+    public List<TextOperation> ProcessQueuedOperations()
+    {
+        var processedOperations = new List<TextOperation>();
+        
+        lock (_operationLock)
+        {
+            while (_operationQueue.Count > 0)
+            {
+                var operation = _operationQueue.Dequeue();
+                
+                // Assign server-side sequence number for strict ordering
+                operation.ServerSequenceNumber = ++GlobalSequenceNumber;
+                
+                // Add to history and apply
+                AddOperationInternal(operation);
+                processedOperations.Add(operation);
+            }
+        }
+        
+        return processedOperations;
+    }
+    
+    /// <summary>
+    /// Update client state tracking for operation history management
+    /// </summary>
+    public void UpdateClientState(string userId, long sequenceNumber)
+    {
+        lock (_operationLock)
+        {
+            _clientStates[userId] = sequenceNumber;
+        }
+    }
+    
+    /// <summary>
+    /// Get operations that a client hasn't seen yet
+    /// </summary>
+    public List<TextOperation> GetOperationsSinceClientState(string userId, long clientSequenceNumber)
+    {
+        lock (_lockObject)
+        {
+            return OperationHistory
+                .Where(op => op.ServerSequenceNumber > clientSequenceNumber)
+                .OrderBy(op => op.ServerSequenceNumber)
+                .ToList();
+        }
+    }
+    
     public void AddOperation(TextOperation operation)
+    {
+        AddOperationInternal(operation);
+    }
+    
+    private void AddOperationInternal(TextOperation operation)
     {
         lock (_lockObject)
         {

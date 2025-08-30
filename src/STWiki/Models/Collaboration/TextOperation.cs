@@ -14,6 +14,9 @@ public class TextOperation
     public int SelectionStart { get; set; } // For replace operations
     public int SelectionEnd { get; set; }   // For replace operations
     
+    // Server-assigned sequence number for strict ordering (prevents race conditions)
+    public long ServerSequenceNumber { get; set; } = 0;
+    
     public static TextOperation Insert(int position, string content, string userId)
     {
         return new TextOperation

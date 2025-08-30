@@ -512,6 +512,16 @@ window.destroyEnhancedEditor = function(editorId) {
     const instance = editorInstances.get(editorId);
     if (instance) {
         clearTimeout(instance.updateTimeout);
+        
+        // Clean up mirror div for this textarea if it exists
+        if (mirrorDivCache.has(instance.textarea)) {
+            const mirrorDiv = mirrorDivCache.get(instance.textarea);
+            if (mirrorDiv && mirrorDiv.parentNode) {
+                mirrorDiv.parentNode.removeChild(mirrorDiv);
+            }
+            mirrorDivCache.delete(instance.textarea);
+        }
+        
         editorInstances.delete(editorId);
         console.log('Enhanced editor destroyed:', editorId);
     }
@@ -812,6 +822,11 @@ function renderRemoteSelection(overlay, textarea, start, end, userColor, userId)
             return; // No selection
         }
         
+        // Ensure start <= end
+        if (start > end) {
+            [start, end] = [end, start];
+        }
+        
         const startPos = getTextPosition(textarea, start);
         const endPos = getTextPosition(textarea, end);
         
@@ -822,104 +837,274 @@ function renderRemoteSelection(overlay, textarea, start, end, userColor, userId)
         
         console.log(`📍 Selection positions:`, { startPos, endPos });
         
-        // Create selection highlight
+        // Create selection container
         const selectionElement = document.createElement('div');
         selectionElement.className = 'remote-selection';
         selectionElement.setAttribute('data-selection-user-id', userId);
         selectionElement.style.color = userColor;
         
-        // Always render as single-line for now (simplified)
-        const highlight = document.createElement('div');
-        highlight.className = 'remote-selection-highlight';
+        const textValue = textarea.value;
+        const computedStyle = window.getComputedStyle(textarea);
+        const textareaWidth = textarea.clientWidth - 
+            (parseInt(computedStyle.paddingLeft) || 0) - 
+            (parseInt(computedStyle.paddingRight) || 0) -
+            (parseInt(computedStyle.borderLeftWidth) || 0) -
+            (parseInt(computedStyle.borderRightWidth) || 0);
         
-        // Calculate selection width
-        let selectionWidth;
-        if (startPos.top === endPos.top) {
-            // Same line - use actual width difference
-            selectionWidth = Math.abs(endPos.left - startPos.left);
+        // Check if this is a single-line or multi-line selection
+        if (Math.abs(startPos.top - endPos.top) < startPos.height / 2) {
+            // Single-line selection
+            const highlight = createSelectionHighlight(
+                Math.min(startPos.left, endPos.left),
+                startPos.top,
+                Math.abs(endPos.left - startPos.left),
+                startPos.height,
+                userColor
+            );
+            selectionElement.appendChild(highlight);
         } else {
-            // Multi-line - for now, just show from start to end of line
-            const textareaWidth = textarea.clientWidth - (parseInt(window.getComputedStyle(textarea).paddingLeft) || 0) * 2;
-            selectionWidth = Math.max(50, textareaWidth - startPos.left);
+            // Multi-line selection - render each line separately
+            const textBeforeStart = textValue.substring(0, start);
+            const selectedText = textValue.substring(start, end);
+            const lines = selectedText.split('\n');
+            
+            let currentIndex = start;
+            
+            lines.forEach((line, lineIndex) => {
+                if (lineIndex === 0) {
+                    // First line: from start position to end of line
+                    const lineEndPos = getTextPosition(textarea, currentIndex + line.length);
+                    const highlight = createSelectionHighlight(
+                        startPos.left,
+                        startPos.top,
+                        Math.max(lineEndPos.left - startPos.left, 0),
+                        startPos.height,
+                        userColor
+                    );
+                    selectionElement.appendChild(highlight);
+                } else if (lineIndex === lines.length - 1) {
+                    // Last line: from beginning of line to end position
+                    const lineStartPos = getTextPosition(textarea, currentIndex);
+                    const highlight = createSelectionHighlight(
+                        lineStartPos.left,
+                        lineStartPos.top,
+                        Math.max(endPos.left - lineStartPos.left, 0),
+                        endPos.height,
+                        userColor
+                    );
+                    selectionElement.appendChild(highlight);
+                } else {
+                    // Middle lines: full width
+                    const lineStartPos = getTextPosition(textarea, currentIndex);
+                    const highlight = createSelectionHighlight(
+                        lineStartPos.left,
+                        lineStartPos.top,
+                        textareaWidth - lineStartPos.left + parseInt(computedStyle.paddingLeft || 0),
+                        lineStartPos.height,
+                        userColor
+                    );
+                    selectionElement.appendChild(highlight);
+                }
+                
+                // Move to next line (including the newline character except for the last line)
+                currentIndex += line.length;
+                if (lineIndex < lines.length - 1) {
+                    currentIndex += 1; // Add 1 for the newline character
+                }
+            });
         }
         
-        highlight.style.left = Math.min(startPos.left, endPos.left) + 'px';
-        highlight.style.top = startPos.top + 'px';
-        highlight.style.width = selectionWidth + 'px';
-        highlight.style.height = startPos.height + 'px';
-        highlight.style.backgroundColor = userColor;
-        highlight.style.opacity = '0.7';
-        
-        selectionElement.appendChild(highlight);
         overlay.appendChild(selectionElement);
         
-        // Trigger fade-in animation with movement class for selections
+        // Trigger fade-in animation
         setTimeout(() => {
             selectionElement.classList.add('visible', 'moving');
         }, 10);
         
         setTimeout(() => {
             selectionElement.classList.remove('moving');
-        }, 300); // Remove moving class after fade animation
+        }, 300);
         
-        console.log(`✅ Rendered selection highlight:`, {
-            left: highlight.style.left,
-            top: highlight.style.top,
-            width: highlight.style.width,
-            height: highlight.style.height
-        });
+        console.log(`✅ Rendered multi-line selection for ${userId}`);
         
     } catch (error) {
         console.error('❌ Failed to render remote selection:', error);
     }
 }
 
-// Calculate text position in pixels relative to textarea (SIMPLIFIED)
+// Helper function to create individual selection highlight rectangles
+function createSelectionHighlight(left, top, width, height, userColor) {
+    const highlight = document.createElement('div');
+    highlight.className = 'remote-selection-highlight';
+    highlight.style.position = 'absolute';
+    highlight.style.left = left + 'px';
+    highlight.style.top = top + 'px';
+    highlight.style.width = Math.max(width, 0) + 'px';
+    highlight.style.height = height + 'px';
+    highlight.style.backgroundColor = userColor;
+    highlight.style.opacity = '0.3';
+    highlight.style.pointerEvents = 'none';
+    return highlight;
+}
+
+// Cache for mirror divs to avoid recreating them
+const mirrorDivCache = new WeakMap();
+
+// Create a mirror div that exactly matches the textarea's styling
+function createMirrorDiv(textarea) {
+    // Check cache first
+    if (mirrorDivCache.has(textarea)) {
+        const cachedDiv = mirrorDivCache.get(textarea);
+        // Update width in case textarea was resized
+        cachedDiv.style.width = (textarea.clientWidth - 
+            (parseInt(getComputedStyle(textarea).paddingLeft) || 0) - 
+            (parseInt(getComputedStyle(textarea).paddingRight) || 0) -
+            (parseInt(getComputedStyle(textarea).borderLeftWidth) || 0) -
+            (parseInt(getComputedStyle(textarea).borderRightWidth) || 0)) + 'px';
+        return cachedDiv;
+    }
+    
+    const computedStyle = window.getComputedStyle(textarea);
+    const mirrorDiv = document.createElement('div');
+    
+    // Copy essential textarea styles for accurate text rendering
+    const stylesToCopy = [
+        'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant',
+        'line-height', 'letter-spacing', 'word-spacing', 'text-indent',
+        'padding-top', 'padding-left', 'padding-right', 'padding-bottom',
+        'border-top-width', 'border-left-width', 'border-right-width', 'border-bottom-width',
+        'white-space', 'word-wrap', 'overflow-wrap', 'word-break',
+        'text-transform', 'direction', 'tab-size'
+    ];
+    
+    stylesToCopy.forEach(style => {
+        const value = computedStyle.getPropertyValue(style);
+        if (value) {
+            mirrorDiv.style.setProperty(style, value);
+        }
+    });
+    
+    // Calculate the actual content width (excluding padding and borders)
+    const contentWidth = textarea.clientWidth - 
+        (parseInt(computedStyle.paddingLeft) || 0) - 
+        (parseInt(computedStyle.paddingRight) || 0) -
+        (parseInt(computedStyle.borderLeftWidth) || 0) -
+        (parseInt(computedStyle.borderRightWidth) || 0);
+    
+    // Mirror-specific styles for precise positioning
+    mirrorDiv.style.position = 'absolute';
+    mirrorDiv.style.top = '-9999px';
+    mirrorDiv.style.left = '-9999px';
+    mirrorDiv.style.visibility = 'hidden';
+    mirrorDiv.style.width = contentWidth + 'px';
+    mirrorDiv.style.height = 'auto';
+    mirrorDiv.style.overflow = 'visible';
+    mirrorDiv.style.whiteSpace = 'pre-wrap';
+    mirrorDiv.style.wordWrap = 'break-word';
+    mirrorDiv.style.overflowWrap = 'break-word';
+    mirrorDiv.style.boxSizing = 'content-box';
+    
+    // Ensure consistent rendering
+    mirrorDiv.style.margin = '0';
+    mirrorDiv.style.border = 'none';
+    mirrorDiv.style.outline = 'none';
+    mirrorDiv.style.resize = 'none';
+    
+    document.body.appendChild(mirrorDiv);
+    
+    // Cache the mirror div
+    mirrorDivCache.set(textarea, mirrorDiv);
+    
+    return mirrorDiv;
+}
+
+// Calculate text position in pixels relative to textarea using mirror div technique
 function getTextPosition(textarea, textIndex) {
     try {
-        const computedStyle = window.getComputedStyle(textarea);
-        const lineHeight = parseInt(computedStyle.lineHeight) || 20;
-        const fontSize = parseInt(computedStyle.fontSize) || 14;
-        const charWidth = fontSize * 0.6; // Approximate character width for monospace
+        const textValue = textarea.value;
         
-        // Get textarea padding
+        // Clamp textIndex to valid range
+        textIndex = Math.max(0, Math.min(textIndex, textValue.length));
+        
+        const mirrorDiv = createMirrorDiv(textarea);
+        
+        // Get the text up to the cursor position
+        const textBeforeCursor = textValue.substring(0, textIndex);
+        
+        // Create a zero-width span element to mark the cursor position
+        const cursorSpan = document.createElement('span');
+        cursorSpan.style.position = 'absolute';
+        cursorSpan.style.width = '0';
+        cursorSpan.style.height = '1em';
+        
+        // Set mirror content with only text before cursor + cursor marker
+        mirrorDiv.innerHTML = '';
+        
+        // Add text before cursor as plain text node to maintain exact formatting
+        if (textBeforeCursor) {
+            const textNode = document.createTextNode(textBeforeCursor);
+            mirrorDiv.appendChild(textNode);
+        }
+        
+        // Add the cursor marker span
+        mirrorDiv.appendChild(cursorSpan);
+        
+        // Force layout computation
+        mirrorDiv.offsetHeight;
+        
+        // Get the computed style for offsets
+        const computedStyle = window.getComputedStyle(textarea);
         const paddingLeft = parseInt(computedStyle.paddingLeft) || 0;
         const paddingTop = parseInt(computedStyle.paddingTop) || 0;
+        const borderLeft = parseInt(computedStyle.borderLeftWidth) || 0;
+        const borderTop = parseInt(computedStyle.borderTopWidth) || 0;
         
-        // Simple line-by-line calculation
-        const textUpToCursor = textarea.value.substring(0, textIndex);
-        const lines = textUpToCursor.split('\n');
-        const currentLine = lines.length - 1;
-        const charInLine = lines[lines.length - 1].length;
+        // Get textarea's bounding rect for absolute positioning reference
+        const textareaRect = textarea.getBoundingClientRect();
         
-        // Cursor should appear at the LEFT edge of the current character position
-        // If user is at position 5, cursor should be BEFORE character 5 (after character 4)
+        // Get the precise position of the cursor span
+        const spanRect = cursorSpan.getBoundingClientRect();
+        
+        // Calculate position relative to the textarea's content area
         const position = {
-            left: paddingLeft + (charInLine * charWidth) - 2, // Adjust left by 2px to account for cursor width
-            top: paddingTop + (currentLine * lineHeight),
-            height: lineHeight
+            left: paddingLeft + (spanRect.left - textareaRect.left - borderLeft),
+            top: paddingTop + (spanRect.top - textareaRect.top - borderTop),
+            height: parseInt(computedStyle.lineHeight) || parseFloat(computedStyle.fontSize) || 16
         };
         
-        console.log(`📍 Simple position calc for index ${textIndex}:`, position);
-        console.log(`📍 Line ${currentLine}, Char ${charInLine} in line`);
+        // Ensure position is not negative
+        position.left = Math.max(paddingLeft, position.left);
+        position.top = Math.max(paddingTop, position.top);
         
-        // Bounds checking - ensure cursor stays within textarea
-        const maxTop = textarea.clientHeight - lineHeight;
-        const maxLeft = textarea.clientWidth - 10;
-        
-        position.top = Math.min(Math.max(position.top, 0), maxTop);
-        position.left = Math.min(Math.max(position.left, 0), maxLeft);
+        console.log(`📍 Mirror div position calc for index ${textIndex}:`, position);
         
         return position;
         
     } catch (error) {
-        console.error('❌ Failed to calculate text position:', error);
+        console.error('❌ Failed to calculate text position with mirror div:', error);
         
-        // Ultimate fallback - just put cursor at top-left
+        // Fallback: use a more conservative approximation
+        const computedStyle = window.getComputedStyle(textarea);
+        const fontSize = parseInt(computedStyle.fontSize) || 14;
+        const lineHeight = parseInt(computedStyle.lineHeight) || fontSize * 1.2;
+        const paddingLeft = parseInt(computedStyle.paddingLeft) || 0;
+        const paddingTop = parseInt(computedStyle.paddingTop) || 0;
+        
+        // Count newlines to estimate row
+        const textValue = textarea.value;
+        const textBeforeIndex = textValue.substring(0, textIndex);
+        const lines = textBeforeIndex.split('\n');
+        const row = lines.length - 1;
+        
+        // Estimate column position using average character width
+        const lastLine = lines[lines.length - 1] || '';
+        const avgCharWidth = fontSize * 0.6; // More conservative estimate
+        const col = lastLine.length;
+        
         return {
-            left: 10,
-            top: 10,
-            height: 20
+            left: paddingLeft + (col * avgCharWidth),
+            top: paddingTop + (row * lineHeight),
+            height: lineHeight
         };
     }
 }

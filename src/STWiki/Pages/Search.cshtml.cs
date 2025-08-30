@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using STWiki.Data;
 using STWiki.Data.Entities;
+using STWiki.Services;
 using System.Text.RegularExpressions;
 
 namespace STWiki.Pages;
@@ -19,17 +20,19 @@ public class SearchResult
 public class SearchModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly ActivityService _activityService;
 
-    public SearchModel(AppDbContext context)
+    public SearchModel(AppDbContext context, ActivityService activityService)
     {
         _context = context;
+        _activityService = activityService;
     }
 
     [BindProperty(SupportsGet = true, Name = "q")]
     public string? Query { get; set; }
     
     [BindProperty(SupportsGet = true, Name = "page")]
-    public int Page { get; set; } = 1;
+    public new int Page { get; set; } = 1;
     
     public List<SearchResult> Results { get; set; } = new();
     
@@ -68,6 +71,20 @@ public class SearchModel : PageModel
                     
                 // Create enhanced search results with highlighting
                 Results = pages.Select(page => CreateSearchResult(page, searchTerm)).ToList();
+                
+                // Log search activity
+                if (User.Identity?.IsAuthenticated == true)
+                {
+                    var currentUser = User.Identity.Name ?? "Unknown";
+                    await _activityService.LogSearchAsync(
+                        currentUser, 
+                        currentUser, 
+                        searchTerm, 
+                        TotalResults, 
+                        HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
+                        HttpContext.Request.Headers.UserAgent.ToString()
+                    );
+                }
                 
             }
             catch (Exception ex)

@@ -13,6 +13,7 @@ public interface IEditSessionService
     Task<UserState> AddUserToSessionAsync(string pageId, string userId, string displayName, string email, string connectionId);
     Task RemoveUserFromSessionAsync(string pageId, string userId);
     Task<TextOperation> ApplyOperationAsync(string pageId, TextOperation operation);
+    Task<List<TextOperation>> QueueAndProcessOperationAsync(string pageId, TextOperation operation);
     Task UpdateUserCursorAsync(string pageId, string userId, CursorPosition cursor);
     Task CleanupIdleSessionsAsync();
     IEnumerable<EditSession> GetAllSessions();
@@ -154,6 +155,70 @@ public class EditSessionService : IEditSessionService
         }
         
         return finalOperation ?? operation;
+    }
+    
+    /// <summary>
+    /// Queue operation and process all queued operations with strict sequencing
+    /// </summary>
+    public async Task<List<TextOperation>> QueueAndProcessOperationAsync(string pageId, TextOperation operation)
+    {
+        var session = await GetSessionAsync(pageId);
+        if (session == null)
+        {
+            throw new InvalidOperationException($"No edit session found for page {pageId}");
+        }
+        
+        // Queue the operation for sequential processing
+        session.QueueOperation(operation);
+        
+        // Process all queued operations with proper sequencing and transformation
+        var processedOperations = new List<TextOperation>();
+        
+        lock (session._operationLock)
+        {
+            // Get operations that need transformation
+            var operationsToTransform = new Queue<TextOperation>(session._operationQueue);
+            session._operationQueue.Clear();
+            
+            while (operationsToTransform.Count > 0)
+            {
+                var currentOp = operationsToTransform.Dequeue();
+                
+                // Transform against ALL operations that have been processed since this operation's conception
+                var relevantHistory = session.OperationHistory
+                    .Where(op => op.ServerSequenceNumber > 0) // Only server-sequenced operations
+                    .OrderBy(op => op.ServerSequenceNumber)
+                    .ToList();
+                
+                var transformedOps = relevantHistory.Any() 
+                    ? OperationalTransform.TransformAgainstHistory(currentOp, relevantHistory)
+                    : new List<TextOperation> { currentOp };
+                
+                // Apply the first valid transformed operation
+                var finalOperation = transformedOps.FirstOrDefault();
+                if (finalOperation != null)
+                {
+                    // Assign server sequence number for strict ordering
+                    finalOperation.ServerSequenceNumber = ++session.GlobalSequenceNumber;
+                    
+                    // Add to session
+                    session.AddOperation(finalOperation);
+                    processedOperations.Add(finalOperation);
+                    
+                    _logger.LogDebug("Processed operation {OpType} with sequence {Seq} at position {Position} by user {UserId} to page {PageId}", 
+                        finalOperation.OpType, finalOperation.ServerSequenceNumber, finalOperation.Position, finalOperation.UserId, pageId);
+                }
+            }
+            
+            // Cleanup operation history
+            if (session.OperationHistory.Count > _options.MaxOperationHistorySize)
+            {
+                var excess = session.OperationHistory.Count - _options.MaxOperationHistorySize;
+                session.OperationHistory.RemoveRange(0, excess);
+            }
+        }
+        
+        return processedOperations;
     }
     
     public async Task UpdateUserCursorAsync(string pageId, string userId, CursorPosition cursor)

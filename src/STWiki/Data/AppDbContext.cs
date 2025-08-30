@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<Page> Pages { get; set; } = default!;
     public DbSet<Revision> Revisions { get; set; } = default!;
     public DbSet<Redirect> Redirects { get; set; } = default!;
+    public DbSet<Activity> Activities { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +54,27 @@ public class AppDbContext : DbContext
             entity.HasIndex(e => e.FromSlug)
                 .IsUnique()
                 .HasDatabaseName("IX_Redirects_FromSlug");
+        });
+
+        // Activity configuration and indexes
+        modelBuilder.Entity<Activity>(entity =>
+        {
+            entity.HasOne(a => a.Page)
+                .WithMany()
+                .HasForeignKey(a => a.PageId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Composite index for activity feed queries
+            entity.HasIndex(e => new { e.CreatedAt, e.ActivityType })
+                .HasDatabaseName("IX_Activities_CreatedAt_Type");
+
+            // Index for user activity queries
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt })
+                .HasDatabaseName("IX_Activities_UserId_CreatedAt");
+
+            // Index for page activity queries
+            entity.HasIndex(e => new { e.PageId, e.CreatedAt })
+                .HasDatabaseName("IX_Activities_PageId_CreatedAt");
         });
     }
 }

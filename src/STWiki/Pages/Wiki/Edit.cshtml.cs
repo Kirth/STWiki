@@ -14,11 +14,13 @@ public class EditModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly IRedirectService _redirectService;
+    private readonly ActivityService _activityService;
 
-    public EditModel(AppDbContext context, IRedirectService redirectService)
+    public EditModel(AppDbContext context, IRedirectService redirectService, ActivityService activityService)
     {
         _context = context;
         _redirectService = redirectService;
+        _activityService = activityService;
     }
 
     [BindProperty]
@@ -58,6 +60,14 @@ public class EditModel : PageModel
         Console.WriteLine($"============== EDIT ONGETASYNC START ==============");
         Console.WriteLine($"🎯 OnGetAsync called with slug: '{slug}'");
         Console.WriteLine($"============== THREAD: {System.Threading.Thread.CurrentThread.ManagedThreadId} ==============");
+
+        // Handle /edit suffix
+        if (!string.IsNullOrEmpty(slug) && slug.EndsWith("/edit"))
+        {
+            slug = slug.Substring(0, slug.Length - 5); // Remove "/edit"
+            Console.WriteLine($"🎯 Processed slug after removing /edit: '{slug}'");
+        }
+
 
         if (string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
@@ -207,6 +217,15 @@ public class EditModel : PageModel
             _context.Revisions.Add(initialRevision);
             await _context.SaveChangesAsync();
 
+            // Log page creation activity
+            await _activityService.LogPageCreatedAsync(
+                currentUser, 
+                currentUser, 
+                newPage, 
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
+                HttpContext.Request.Headers.UserAgent.ToString()
+            );
+
             // Redirect to the actual generated slug, not "new"
             return RedirectToPage("/Wiki/View", new { slug = Slug });
         }
@@ -248,6 +267,15 @@ public class EditModel : PageModel
 
                 _context.Revisions.Add(initialRevision);
                 await _context.SaveChangesAsync();
+
+                // Log page creation activity
+                await _activityService.LogPageCreatedAsync(
+                    currentUser, 
+                    currentUser, 
+                    newPage, 
+                    HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
+                    HttpContext.Request.Headers.UserAgent.ToString()
+                );
 
                 // Redirect to the new page
                 return RedirectToPage("/Wiki/View", new { slug = slug });
@@ -322,6 +350,16 @@ public class EditModel : PageModel
 
             await _context.SaveChangesAsync();
             Console.WriteLine($"✅ FORM SUBMIT - Page updated successfully");
+
+            // Log page update activity
+            await _activityService.LogPageUpdatedAsync(
+                currentUser, 
+                currentUser, 
+                existingPage, 
+                Summary ?? "Updated page content",
+                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
+                HttpContext.Request.Headers.UserAgent.ToString()
+            );
 
             // Redirect to the new slug if it changed, otherwise the original slug
             var targetSlug = slugHasChanged ? Slug : slug;

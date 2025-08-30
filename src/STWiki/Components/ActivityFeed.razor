@@ -1,0 +1,253 @@
+@using STWiki.Data.Entities
+@inject STWiki.Services.ActivityService ActivityService
+
+<div class="activity-feed">
+    @if (ShowTitle)
+    {
+        <h5 class="mb-3">
+            <i class="bi bi-activity me-2"></i>
+            @Title
+        </h5>
+    }
+
+    @if (Activities?.Any() == true)
+    {
+        <div class="list-group list-group-flush">
+            @foreach (var activity in Activities)
+            {
+                <div class="list-group-item activity-item" data-activity-type="@activity.ActivityType">
+                    <div class="d-flex">
+                        <!-- Activity Icon -->
+                        <div class="flex-shrink-0 me-3">
+                            <div class="activity-icon activity-@activity.ActivityType">
+                                @GetActivityIcon(activity.ActivityType)
+                            </div>
+                        </div>
+
+                        <!-- Activity Content -->
+                        <div class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <div class="activity-description">
+                                    @if (ShowUserName)
+                                    {
+                                        <strong>@activity.UserDisplayName</strong>
+                                    }
+                                    
+                                    <span>@GetActivityVerb(activity.ActivityType)</span>
+                                    
+                                    @if (!string.IsNullOrEmpty(activity.PageSlug))
+                                    {
+                                        <a href="/wiki/@activity.PageSlug" class="text-decoration-none fw-medium">
+                                            @activity.PageTitle
+                                        </a>
+                                    }
+                                    else if (activity.ActivityType == ActivityTypes.SearchPerformed && !string.IsNullOrEmpty(activity.Description))
+                                    {
+                                        <span class="text-muted">"@ExtractSearchTerm(activity.Description)"</span>
+                                    }
+                                </div>
+                                
+                                @if (ShowTimestamp)
+                                {
+                                    <small class="text-muted" title="@activity.CreatedAt.ToString("F")">
+                                        @GetTimeAgo(activity.CreatedAt)
+                                    </small>
+                                }
+                            </div>
+                            
+                            @if (ShowDescription && !string.IsNullOrEmpty(activity.Description) && activity.ActivityType != ActivityTypes.SearchPerformed)
+                            {
+                                <div class="text-muted small">
+                                    @activity.Description
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (ShowLoadMore && Activities.Count >= MaxItems)
+        {
+            <div class="text-center mt-3">
+                <button class="btn btn-outline-secondary btn-sm" @onclick="LoadMoreActivities">
+                    <i class="bi bi-arrow-down-circle me-2"></i>
+                    Load More
+                </button>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="text-center py-4 text-muted">
+            @if (IsLoading)
+            {
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span>Loading activities...</span>
+            }
+            else
+            {
+                <i class="bi bi-clock-history display-6 mb-2 d-block"></i>
+                <p class="mb-0">@EmptyMessage</p>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<Activity>? Activities { get; set; }
+    [Parameter] public string? UserId { get; set; }
+    [Parameter] public Guid? PageId { get; set; }
+    [Parameter] public string? ActivityType { get; set; }
+    [Parameter] public int MaxItems { get; set; } = 20;
+    [Parameter] public bool ShowTitle { get; set; } = true;
+    [Parameter] public bool ShowUserName { get; set; } = true;
+    [Parameter] public bool ShowTimestamp { get; set; } = true;
+    [Parameter] public bool ShowDescription { get; set; } = true;
+    [Parameter] public bool ShowLoadMore { get; set; } = true;
+    [Parameter] public string Title { get; set; } = "Recent Activity";
+    [Parameter] public string EmptyMessage { get; set; } = "No recent activity";
+    [Parameter] public bool IsLoading { get; set; } = false;
+    [Parameter] public EventCallback OnLoadMore { get; set; }
+
+    private int currentOffset = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Activities == null)
+        {
+            await LoadActivities();
+        }
+    }
+
+    private async Task LoadActivities()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(UserId))
+            {
+                Activities = await ActivityService.GetUserActivitiesAsync(UserId, MaxItems, ActivityType);
+            }
+            else if (PageId.HasValue)
+            {
+                Activities = await ActivityService.GetPageActivitiesAsync(PageId.Value, MaxItems, ActivityType);
+            }
+            else
+            {
+                Activities = await ActivityService.GetRecentActivitiesAsync(MaxItems, ActivityType);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading activities: {ex.Message}");
+            Activities = new List<Activity>();
+        }
+        finally
+        {
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadMoreActivities()
+    {
+        if (OnLoadMore.HasDelegate)
+        {
+            await OnLoadMore.InvokeAsync();
+        }
+        else
+        {
+            currentOffset += MaxItems;
+            // TODO: Implement pagination logic
+            await LoadActivities();
+        }
+    }
+
+    private RenderFragment GetActivityIcon(string activityType) => builder =>
+    {
+        var iconClass = activityType switch
+        {
+            ActivityTypes.PageCreated => "bi bi-file-plus text-primary",
+            ActivityTypes.PageUpdated => "bi bi-pencil-square text-success",
+            ActivityTypes.PageViewed => "bi bi-eye text-info",
+            ActivityTypes.PageDeleted => "bi bi-trash text-danger",
+            ActivityTypes.UserLogin => "bi bi-person-check text-secondary",
+            ActivityTypes.SearchPerformed => "bi bi-search text-warning",
+            ActivityTypes.RedirectCreated => "bi bi-arrow-right-circle text-info",
+            ActivityTypes.RedirectDeleted => "bi bi-arrow-right-circle text-muted",
+            _ => "bi bi-activity text-muted"
+        };
+
+        builder.OpenElement(0, "i");
+        builder.AddAttribute(1, "class", iconClass);
+        builder.CloseElement();
+    };
+
+    private string GetActivityVerb(string activityType) => activityType switch
+    {
+        ActivityTypes.PageCreated => "created",
+        ActivityTypes.PageUpdated => "updated",
+        ActivityTypes.PageViewed => "viewed",
+        ActivityTypes.PageDeleted => "deleted",
+        ActivityTypes.UserLogin => "logged in",
+        ActivityTypes.SearchPerformed => "searched for",
+        ActivityTypes.RedirectCreated => "created redirect to",
+        ActivityTypes.RedirectDeleted => "deleted redirect to",
+        _ => "performed action on"
+    };
+
+    private string GetTimeAgo(DateTimeOffset timestamp)
+    {
+        var timeSpan = DateTimeOffset.UtcNow - timestamp;
+
+        return timeSpan.TotalMinutes < 1 ? "just now" :
+               timeSpan.TotalMinutes < 60 ? $"{(int)timeSpan.TotalMinutes}m ago" :
+               timeSpan.TotalHours < 24 ? $"{(int)timeSpan.TotalHours}h ago" :
+               timeSpan.TotalDays < 30 ? $"{(int)timeSpan.TotalDays}d ago" :
+               timestamp.ToString("MMM d, yyyy");
+    }
+
+    private string ExtractSearchTerm(string description)
+    {
+        // Extract search term from description like "Searched for 'term' (5 results)"
+        var startIndex = description.IndexOf('\'');
+        var endIndex = description.LastIndexOf('\'');
+        
+        if (startIndex >= 0 && endIndex > startIndex)
+        {
+            return description.Substring(startIndex + 1, endIndex - startIndex - 1);
+        }
+        
+        return "unknown";
+    }
+}
+
+<style>
+    .activity-feed .activity-icon {
+        width: 2.5rem;
+        height: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--bs-gray-100);
+        border-radius: 50%;
+        font-size: 1.1rem;
+    }
+
+    [data-bs-theme="dark"] .activity-feed .activity-icon {
+        background-color: var(--bs-gray-800);
+    }
+
+    .activity-feed .activity-item:hover {
+        background-color: var(--bs-gray-50);
+    }
+
+    [data-bs-theme="dark"] .activity-feed .activity-item:hover {
+        background-color: var(--bs-gray-800);
+    }
+
+    .activity-feed .activity-description a:hover {
+        text-decoration: underline !important;
+    }
+</style>

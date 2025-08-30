@@ -39,10 +39,17 @@ public class NewModel : PageModel
     [Required]
     public string BodyFormat { get; set; } = "markdown";
 
-    public IActionResult OnGet()
+    public IActionResult OnGet(string? parent = null)
     {
         // Initialize defaults
         BodyFormat = "markdown";
+        
+        // Set parent path if provided in query string
+        if (!string.IsNullOrEmpty(parent))
+        {
+            ParentPath = parent;
+        }
+        
         return Page();
     }
 
@@ -129,6 +136,6 @@ public class NewModel : PageModel
         await _context.SaveChangesAsync();
 
         // Redirect to edit the content
-        return RedirectToPage("/Wiki/Edit", new { slug = finalSlug });
+        return Redirect($"/{finalSlug}/edit");
     }
 }
