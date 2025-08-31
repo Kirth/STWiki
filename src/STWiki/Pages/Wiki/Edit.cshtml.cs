@@ -52,10 +52,19 @@ public class EditModel : PageModel
     public string? UpdatedBy { get; set; }
 
     // Original slug for tracking changes
+    [BindProperty]
     public string? OriginalSlug { get; set; }
 
     // Page locking status
     public bool IsLocked { get; set; }
+
+    // Slug segment properties for hierarchical editing
+    [BindProperty]
+    public string? ParentSlugPath { get; set; }
+    
+    [BindProperty]
+    [StringLength(100)]
+    public string? PageSlugSegment { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string? slug)
     {
@@ -68,6 +77,21 @@ public class EditModel : PageModel
         {
             slug = slug.Substring(0, slug.Length - 5); // Remove "/edit"
             Console.WriteLine($"🎯 Processed slug after removing /edit: '{slug}'");
+        }
+
+        // Ensure slug doesn't end with reserved suffixes
+        if (!string.IsNullOrEmpty(slug))
+        {
+            if (slug.EndsWith("/edit", StringComparison.OrdinalIgnoreCase))
+            {
+                slug = slug.Substring(0, slug.Length - 5);
+                Console.WriteLine($"🎯 Removed /edit suffix from slug: '{slug}'");
+            }
+            if (slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase))
+            {
+                slug = slug.Substring(0, slug.Length - 8);
+                Console.WriteLine($"🎯 Removed /history suffix from slug: '{slug}'");
+            }
         }
 
 
@@ -91,8 +115,20 @@ public class EditModel : PageModel
         {
             // Page doesn't exist - redirect to create it
             IsNew = true;
-            Slug = CleanStringForBlazor(slug) ?? "";
-            Title = slug.Replace("-", " ").ToTitleCase();
+            
+            // Use the cleaned slug (already processed above) to extract segments
+            ParentSlugPath = _pageHierarchyService.GetParentSlugPath(slug);
+            PageSlugSegment = _pageHierarchyService.ExtractPageSlugFromFullPath(slug);
+            Slug = PageSlugSegment; // Show only the page segment in the form
+            
+            // Clear model state to prevent interference with URL parameter values
+            ModelState.Clear();
+            
+            Console.WriteLine($"🔍 DEBUG - New page ParentSlugPath: '{ParentSlugPath}'");
+            Console.WriteLine($"🔍 DEBUG - New page PageSlugSegment: '{PageSlugSegment}'");
+            Console.WriteLine($"🔍 DEBUG - New page Slug property set to: '{Slug}'");
+            
+            Title = PageSlugSegment.Replace("-", " ").ToTitleCase();
             Body = ""; // Initialize with empty string instead of null
             BodyFormat = "markdown";
             return Page();
@@ -103,8 +139,23 @@ public class EditModel : PageModel
         IsNew = false;
         PageId = existingPage.Id;
         Title = existingPage.Title;
-        Slug = CleanStringForBlazor(existingPage.Slug);
         OriginalSlug = existingPage.Slug; // Store original slug for change detection
+        
+        // Extract parent path and page segment from the existing page slug (from database, not URL)
+        Console.WriteLine($"🔍 DEBUG - About to extract segments from existingPage.Slug: '{existingPage.Slug}'");
+        ParentSlugPath = _pageHierarchyService.GetParentSlugPath(existingPage.Slug);
+        PageSlugSegment = _pageHierarchyService.ExtractPageSlugFromFullPath(existingPage.Slug);
+        Console.WriteLine($"🔍 DEBUG - Extracted ParentSlugPath: '{ParentSlugPath}'");
+        Console.WriteLine($"🔍 DEBUG - Extracted PageSlugSegment: '{PageSlugSegment}'");
+        
+        Slug = PageSlugSegment; // Show only the page segment in the form
+        
+        // Clear model state to prevent interference with URL parameter values
+        ModelState.Clear();
+        
+        Console.WriteLine($"🔍 DEBUG - Final Slug property set to: '{Slug}'");
+        Console.WriteLine($"🔍 DEBUG - Original slug from DB: '{OriginalSlug}'");
+        
         Summary = existingPage.Summary;
         Body = CleanStringForBlazor(existingPage.Body);
         BodyFormat = existingPage.BodyFormat;
@@ -120,17 +171,56 @@ public class EditModel : PageModel
             ViewData["LockWarning"] = "This page is currently locked. You can view the content but cannot save changes.";
         }
 
+        // Final debug check before returning to view
+        Console.WriteLine($"🔍 FINAL CHECK - About to return to view with Slug = '{Slug}'");
+
         return Page();
     }
 
-    public async Task<IActionResult> OnPostAsync(string? slug)
+    public async Task<IActionResult> OnPostAsync(string? routeSlug)
     {
-        Console.WriteLine($"📝 FORM SUBMIT - OnPostAsync called with slug: '{slug}'");
+        Console.WriteLine($"📝 FORM SUBMIT - OnPostAsync called with routeSlug: '{routeSlug}'");
         Console.WriteLine($"📝 FORM SUBMIT - Body length: {Body?.Length ?? -1}");
         Console.WriteLine($"📝 FORM SUBMIT - Title: '{Title}'");
         Console.WriteLine($"📝 FORM SUBMIT - BodyFormat: '{BodyFormat}'");
-        Console.WriteLine($"📝 FORM SUBMIT - Form Slug field: '{Slug}'");
+        Console.WriteLine($"📝 FORM SUBMIT - Form Slug field: '{Slug}' (page segment)");
+        Console.WriteLine($"📝 FORM SUBMIT - PageSlugSegment: '{PageSlugSegment}'");
+        Console.WriteLine($"📝 FORM SUBMIT - ParentSlugPath: '{ParentSlugPath}'");
         Console.WriteLine($"📝 FORM SUBMIT - OriginalSlug field: '{OriginalSlug}'");
+
+        // Reconstruct full slug from parent path and page segment
+        // Use Slug field (which contains the edited page segment) to create the full path
+        string reconstructedSlug;
+        
+        Console.WriteLine($"🔧 RECONSTRUCTION DEBUG:");
+        Console.WriteLine($"  - Slug (user input): '{Slug}'");
+        Console.WriteLine($"  - PageSlugSegment (original): '{PageSlugSegment}'");
+        Console.WriteLine($"  - ParentSlugPath: '{ParentSlugPath}'");
+        
+        if (!string.IsNullOrEmpty(Slug))
+        {
+            // User edited the slug field, use that as the page segment
+            Console.WriteLine($"🔧 Using Slug field for reconstruction");
+            reconstructedSlug = _pageHierarchyService.ConstructFullSlugPath(ParentSlugPath, Slug);
+        }
+        else if (!string.IsNullOrEmpty(PageSlugSegment))
+        {
+            // Fallback to original page segment
+            Console.WriteLine($"🔧 Using PageSlugSegment for reconstruction");
+            reconstructedSlug = _pageHierarchyService.ConstructFullSlugPath(ParentSlugPath, PageSlugSegment);
+        }
+        else
+        {
+            // No slug provided, will need to generate from title
+            Console.WriteLine($"🔧 No slug provided, will generate from title");
+            reconstructedSlug = string.Empty;
+        }
+
+        Console.WriteLine($"📝 FORM SUBMIT - Reconstructed full slug: '{reconstructedSlug}'");
+
+        // Update the Slug property to contain the full reconstructed path for the rest of the method
+        var originalSlugInput = Slug; // Save the user's input
+        Slug = reconstructedSlug;
 
         if (Body?.Length > 50)
         {
@@ -139,6 +229,19 @@ public class EditModel : PageModel
         else
         {
             Console.WriteLine($"📝 FORM SUBMIT - Full Body: '{Body ?? "NULL"}'");
+        }
+
+        // Validate slug doesn't end with reserved suffixes
+        if (!string.IsNullOrEmpty(Slug))
+        {
+            if (Slug.EndsWith("/edit", StringComparison.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(nameof(Slug), "Slug cannot end with '/edit' - this is a reserved routing suffix");
+            }
+            if (Slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(nameof(Slug), "Slug cannot end with '/history' - this is a reserved routing suffix");
+            }
         }
 
         if (!ModelState.IsValid)
@@ -154,7 +257,17 @@ public class EditModel : PageModel
                 }
             }
             
-            IsNew = string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase);
+            // Restore the page segment view in the form (not the full path)
+            if (!string.IsNullOrEmpty(originalSlugInput))
+            {
+                Slug = originalSlugInput; // Show the user's input, not the full reconstructed path
+            }
+            else
+            {
+                Slug = _pageHierarchyService.ExtractPageSlugFromFullPath(reconstructedSlug);
+            }
+            
+            IsNew = string.IsNullOrEmpty(routeSlug) || routeSlug.Equals("new", StringComparison.OrdinalIgnoreCase);
             return Page();
         }
 
@@ -162,12 +275,14 @@ public class EditModel : PageModel
         var now = DateTime.UtcNow;
 
 
-        if (string.IsNullOrEmpty(slug) || slug.Equals("new", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(routeSlug) || routeSlug.Equals("new", StringComparison.OrdinalIgnoreCase))
         {
             IsNew = true;
             if (string.IsNullOrWhiteSpace(Slug))
             {
-                Slug = SlugService.GenerateSlug(Title);
+                // Generate slug from title and reconstruct full path
+                var generatedSegment = SlugService.GenerateSlug(Title);
+                Slug = _pageHierarchyService.ConstructFullSlugPath(ParentSlugPath, generatedSegment);
             }
 
             Slug = CleanStringForBlazor(Slug);
@@ -233,24 +348,24 @@ public class EditModel : PageModel
             );
 
             // Redirect to the actual generated slug, not "new"
-            return RedirectToPage("/Wiki/View", new { slug = Slug });
+            return Redirect($"/{Slug}");
         }
         else
         {
-            // Update existing page
+            // Update existing page - use OriginalSlug to find the existing record
             var existingPage = await _context.Pages
-                .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+                .FirstOrDefaultAsync(p => p.Slug.ToLower() == OriginalSlug!.ToLower());
 
             if (existingPage == null)
             {
                 // Get parent ID based on slug hierarchy
-                var parentId = await _pageHierarchyService.GetParentIdFromSlugAsync(slug!);
+                var parentId = await _pageHierarchyService.GetParentIdFromSlugAsync(routeSlug!);
 
                 // Page doesn't exist, so create it using the slug from the URL
                 var newPage = new STWiki.Data.Entities.Page
                 {
                     Id = Guid.NewGuid(),
-                    Slug = slug!,
+                    Slug = routeSlug!,
                     Title = Title,
                     Summary = Summary ?? string.Empty,
                     Body = CleanStringForBlazor(Body),
@@ -288,7 +403,7 @@ public class EditModel : PageModel
                 );
 
                 // Redirect to the new page
-                return RedirectToPage("/Wiki/View", new { slug = slug });
+                return Redirect($"/{routeSlug}");
             }
 
             // Check if page is locked
@@ -372,8 +487,8 @@ public class EditModel : PageModel
             );
 
             // Redirect to the new slug if it changed, otherwise the original slug
-            var targetSlug = slugHasChanged ? Slug : slug;
-            return RedirectToPage("/Wiki/View", new { slug = targetSlug });
+            var targetSlug = slugHasChanged ? Slug : routeSlug;
+            return Redirect($"/{targetSlug}");
         }
     }
 

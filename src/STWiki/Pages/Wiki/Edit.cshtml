@@ -5,7 +5,7 @@
 }
 
 <div class="container-fluid px-4">
-    <form method="post" class="mb-4" id="edit-form">
+    <form method="post" class="mb-4" id="edit-form" asp-route-slug="@Model.OriginalSlug">
         <!-- Clean Header Section -->
         <div class="edit-header bg-white rounded-3 shadow-sm border p-4 mb-4">
             <div class="row align-items-center">
@@ -108,11 +108,13 @@
         </div>
     }
 
-        <!-- Hidden field to track original slug for redirect creation -->
+        <!-- Hidden fields to track slug information -->
         @if (!Model.IsNew)
         {
             <input type="hidden" asp-for="OriginalSlug" />
         }
+        <input type="hidden" asp-for="ParentSlugPath" />
+        <input type="hidden" asp-for="PageSlugSegment" />
         
         <div class="row g-4">
             <!-- Main Content Area -->
@@ -155,22 +157,46 @@
                             <div class="col-md-6">
                                 @if (Model.IsNew)
                                 {
-                                    <label asp-for="Slug" class="form-label fw-medium">URL Slug</label>
-                                    <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                    <label asp-for="Slug" class="form-label fw-medium">Page Name</label>
+                                    @if (!string.IsNullOrEmpty(Model.ParentSlugPath))
+                                    {
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-light text-muted">@Model.ParentSlugPath/</span>
+                                            <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                    }
                                     <div class="form-text">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        Leave blank to auto-generate from title
+                                        Enter just the page name. Leave blank to auto-generate from title.
                                     </div>
                                     <span asp-validation-for="Slug" class="text-danger small"></span>
                                 }
                                 else
                                 {
-                                    <label asp-for="Slug" class="form-label fw-medium">URL Slug</label>
-                                    <input asp-for="Slug" class="form-control" />
-                                    <div class="form-text">
-                                        <i class="bi bi-arrow-repeat text-success me-1"></i>
-                                        Changing the URL will create an automatic redirect
-                                    </div>
+                                    <label asp-for="Slug" class="form-label fw-medium">Page Name</label>
+                                    @if (!string.IsNullOrEmpty(Model.ParentSlugPath))
+                                    {
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-light text-muted">@Model.ParentSlugPath/</span>
+                                            <input asp-for="Slug" class="form-control" />
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="bi bi-arrow-repeat text-success me-1"></i>
+                                            Edit just the page name. Full URL: <code>@Model.ParentSlugPath/@Model.Slug</code>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <input asp-for="Slug" class="form-control" />
+                                        <div class="form-text">
+                                            <i class="bi bi-arrow-repeat text-success me-1"></i>
+                                            This is a top-level page. Changing the name will create an automatic redirect.
+                                        </div>
+                                    }
                                     <span asp-validation-for="Slug" class="text-danger small"></span>
                                 }
                             </div>

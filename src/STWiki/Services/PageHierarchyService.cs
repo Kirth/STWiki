@@ -11,6 +11,11 @@ public interface IPageHierarchyService
     Task<List<Page>> GetChildPagesAsync(Guid pageId);
     Task UpdateChildrenSlugsAsync(Page parentPage, string oldSlug, string newSlug);
     Task<bool> ValidateHierarchyConsistencyAsync();
+    
+    // Slug manipulation utilities
+    string ExtractPageSlugFromFullPath(string fullSlug);
+    string? GetParentSlugPath(string fullSlug);
+    string ConstructFullSlugPath(string? parentPath, string pageSlug);
 }
 
 public class PageHierarchyService : IPageHierarchyService
@@ -163,5 +168,54 @@ public class PageHierarchyService : IPageHierarchyService
         }
 
         return isConsistent;
+    }
+
+    /// <summary>
+    /// Extracts the individual page slug from a full hierarchical path
+    /// </summary>
+    /// <param name="fullSlug">Full hierarchical slug path (e.g., "parent/child/page")</param>
+    /// <returns>Individual page slug (e.g., "page")</returns>
+    public string ExtractPageSlugFromFullPath(string fullSlug)
+    {
+        if (string.IsNullOrEmpty(fullSlug))
+            return string.Empty;
+
+        var parts = fullSlug.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 ? parts.Last() : fullSlug;
+    }
+
+    /// <summary>
+    /// Gets the parent slug path from a full hierarchical slug
+    /// </summary>
+    /// <param name="fullSlug">Full hierarchical slug path (e.g., "parent/child/page")</param>
+    /// <returns>Parent path (e.g., "parent/child") or null for top-level pages</returns>
+    public string? GetParentSlugPath(string fullSlug)
+    {
+        if (string.IsNullOrEmpty(fullSlug))
+            return null;
+
+        var parts = fullSlug.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length <= 1)
+            return null; // Top-level page, no parent
+
+        // Return all parts except the last one
+        return string.Join("/", parts.Take(parts.Length - 1));
+    }
+
+    /// <summary>
+    /// Constructs a full hierarchical slug path from parent path and page slug
+    /// </summary>
+    /// <param name="parentPath">Parent slug path (can be null for top-level pages)</param>
+    /// <param name="pageSlug">Individual page slug</param>
+    /// <returns>Full hierarchical slug path</returns>
+    public string ConstructFullSlugPath(string? parentPath, string pageSlug)
+    {
+        if (string.IsNullOrEmpty(pageSlug))
+            throw new ArgumentException("Page slug cannot be empty", nameof(pageSlug));
+
+        if (string.IsNullOrEmpty(parentPath))
+            return pageSlug;
+
+        return $"{parentPath}/{pageSlug}";
     }
 }
