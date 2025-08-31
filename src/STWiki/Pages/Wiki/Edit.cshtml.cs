@@ -462,8 +462,15 @@ public class EditModel : PageModel
 
                 Console.WriteLine($"📝 Slug changed from '{existingPage.Slug}' to '{Slug}' - creating redirect");
 
+                // Update child page slugs BEFORE creating redirects and updating parent
+                await _pageHierarchyService.UpdateChildrenSlugsAsync(existingPage, existingPage.Slug, Slug!);
+                Console.WriteLine($"📝 Updated child page slugs for parent: {existingPage.Slug}");
+
                 // Create redirect from old slug to new slug
                 await _redirectService.CreateRedirectAsync(existingPage.Slug, Slug!);
+
+                // Update any redirects that pointed to child pages under the old slug
+                await _redirectService.UpdateChildRedirectsAsync(existingPage.Slug, Slug!);
 
                 // Clean up any existing redirects that pointed to the old slug
                 await _redirectService.CleanupRedirectChainAsync(existingPage.Slug);
