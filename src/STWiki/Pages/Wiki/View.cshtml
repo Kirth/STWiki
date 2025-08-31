@@ -27,6 +27,7 @@ else
                            param-CurrentSlug="@Model.Slug"
                            param-ShowSiblings="true"
                            param-ShowActions="false"
+                           param-Options="@(new STWiki.Services.BreadcrumbOptions { ShowSingleLevel = true })"
                            param-CssClass="@("mb-0")">
                 </component>
             </div>
@@ -100,7 +101,7 @@ else
         
         // Copy page URL to clipboard
         function copyPageUrl(event) {
-          if (event != null) { e.preventDefault(); }
+          if (event != null) { event.preventDefault(); }
             const url = window.location.href;
             navigator.clipboard.writeText(url).then(function() {
                 const toast = document.createElement('div');
