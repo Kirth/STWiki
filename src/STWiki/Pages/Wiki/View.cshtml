@@ -1,3 +1,4 @@
+
 @page "/{*slug}"
 @model STWiki.Pages.Wiki.ViewModel
 @{
@@ -18,38 +19,39 @@
 else
 {
     <div class="wiki-page">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <div class="flex-grow-1">
+        <!-- Header row: Breadcrumbs left, Actions right -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div class="flex-grow-1 min-w-0">
                 <component type="typeof(STWiki.Components.Breadcrumb)" 
-                         render-mode="ServerPrerendered"
-                         param-CurrentSlug="@Model.Slug"
-                         param-ShowSiblings="true"
-                         param-ShowActions="true"
-                         param-CssClass="@("mb-2")">
-                    <Actions>
-                        <div class="d-flex gap-3">
-                            @if (User.Identity?.IsAuthenticated == true)
-                            {
-                                <a href="/@Model.Slug/edit" class="text-decoration-none text-muted">
-                                    <i class="bi bi-pencil me-1"></i>Edit Page
-                                </a>
-                                <a href="/@Model.Slug/history" class="text-decoration-none text-muted">
-                                    <i class="bi bi-clock-history me-1"></i>View History
-                                </a>
-                                <a href="/new?parent=@Model.Slug" class="text-decoration-none text-muted">
-                                    <i class="bi bi-file-plus me-1"></i>New Sub-page
-                                </a>
-                            }
-                            <a href="#" onclick="copyPageUrl()" class="text-decoration-none text-muted">
-                                <i class="bi bi-link me-1"></i>Copy Link
-                            </a>
-                        </div>
-                    </Actions>
+                           render-mode="ServerPrerendered"
+                           param-CurrentSlug="@Model.Slug"
+                           param-ShowSiblings="true"
+                           param-ShowActions="false"
+                           param-CssClass="@("mb-0")">
                 </component>
-                <h1 class="mb-0">@Model.Page.Title</h1>
             </div>
+
+            <nav class="d-flex flex-wrap gap-3 ms-3 small text-muted">
+                @if (User.Identity?.IsAuthenticated == true)
+                {
+                    <a href="/@Model.Slug/edit" class="text-decoration-none text-muted">
+                        <i class="bi bi-pencil me-1"></i>Edit Page
+                    </a>
+                    <a href="/@Model.Slug/history" class="text-decoration-none text-muted">
+                        <i class="bi bi-clock-history me-1"></i>View History
+                    </a>
+                    <a href="/new?parent=@Model.Slug" class="text-decoration-none text-muted">
+                        <i class="bi bi-file-plus me-1"></i>New Sub-page
+                    </a>
+                }
+                <a href="#" onclick="copyPageUrl(event)" class="text-decoration-none text-muted">
+                    <i class="bi bi-link me-1"></i>Copy Link
+                </a>
+            </nav>
         </div>
-       
+
+        <h1 class="mb-0 text-truncate">@Model.Page.Title</h1>
+
         @*
         if (!string.IsNullOrEmpty(Model.Page.Summary))
         {
@@ -97,10 +99,10 @@ else
         });
         
         // Copy page URL to clipboard
-        function copyPageUrl() {
+        function copyPageUrl(event) {
+          if (event != null) { e.preventDefault(); }
             const url = window.location.href;
             navigator.clipboard.writeText(url).then(function() {
-                // Show toast or temporary message
                 const toast = document.createElement('div');
                 toast.className = 'toast-notification';
                 toast.textContent = 'Page URL copied to clipboard!';
@@ -137,6 +139,7 @@ else
             overflow-x: auto;
             font-size: 14px;
             line-height: 1.5;
+            position: relative;
         }
         
         .wiki-content code[class*="language-"] {
@@ -164,28 +167,19 @@ else
             font-size: 0.9em;
             color: #e83e8c;
         }
+
+        /* Keep breadcrumb/actions tight on one line when possible */
+        .wiki-page .min-w-0 { min-width: 0; }
+        .wiki-page nav a:hover { text-decoration: underline; }
         
-        /* Toast notification animations */
         @@keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
-            }
-            to {
-                transform: translateX(0);
-                opacity: 1;
-            }
+            from { transform: translateX(100%); opacity: 0; }
+            to   { transform: translateX(0);    opacity: 1; }
         }
-        
         @@keyframes slideOut {
-            from {
-                transform: translateX(0);
-                opacity: 1;
-            }
-            to {
-                transform: translateX(100%);
-                opacity: 0;
-            }
+            from { transform: translateX(0);    opacity: 1; }
+            to   { transform: translateX(100%); opacity: 0; }
         }
     </style>
 }
+

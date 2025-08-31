@@ -497,8 +497,8 @@ public class EditModel : PageModel
                 HttpContext.Request.Headers.UserAgent.ToString()
             );
 
-            // Redirect to the new slug if it changed, otherwise the original slug
-            var targetSlug = slugHasChanged ? Slug : routeSlug;
+            // Redirect to the new slug if it changed, otherwise the existing page slug
+            var targetSlug = slugHasChanged ? Slug : existingPage.Slug;
             return Redirect($"/{targetSlug}");
         }
     }
