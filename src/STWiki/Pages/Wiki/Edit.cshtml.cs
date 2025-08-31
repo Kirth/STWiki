@@ -177,9 +177,11 @@ public class EditModel : PageModel
         return Page();
     }
 
-    public async Task<IActionResult> OnPostAsync(string? routeSlug)
+    public async Task<IActionResult> OnPostAsync(string? slug)
     {
-        Console.WriteLine($"📝 FORM SUBMIT - OnPostAsync called with routeSlug: '{routeSlug}'");
+        // Use route slug with fallback to OriginalSlug
+        var routeSlug = slug ?? OriginalSlug;
+        Console.WriteLine($"📝 FORM SUBMIT - OnPostAsync called with slug: '{slug}', using routeSlug: '{routeSlug}'");
         Console.WriteLine($"📝 FORM SUBMIT - Body length: {Body?.Length ?? -1}");
         Console.WriteLine($"📝 FORM SUBMIT - Title: '{Title}'");
         Console.WriteLine($"📝 FORM SUBMIT - BodyFormat: '{BodyFormat}'");
@@ -217,6 +219,15 @@ public class EditModel : PageModel
         }
 
         Console.WriteLine($"📝 FORM SUBMIT - Reconstructed full slug: '{reconstructedSlug}'");
+
+        // Safety check to prevent regressions
+        if (string.IsNullOrWhiteSpace(routeSlug))
+        {
+            // bail: we don't know which page to update
+            ModelState.AddModelError("", "Missing page identifier.");
+            IsNew = true; // Fallback to new page mode for display
+            return Page();
+        }
 
         // Update the Slug property to contain the full reconstructed path for the rest of the method
         var originalSlugInput = Slug; // Save the user's input

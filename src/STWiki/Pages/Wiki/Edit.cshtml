@@ -1,4 +1,4 @@
-@page
+@page "{slug?}"
 @model STWiki.Pages.Wiki.EditModel
 @{
     ViewData["Title"] = Model.IsNew ? "Create New Page" : $"Edit {Model.Title}";
@@ -38,7 +38,7 @@
                                 @(Model.IsLocked ? "Unlock" : "Lock")
                             </button>
                             
-                            <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">
+                            <a asp-page="/Wiki/View" asp-route-slug="@Model.OriginalSlug" class="btn btn-outline-secondary">
                                 <i class="bi bi-x-lg me-1"></i> Cancel
                             </a>
                         }
@@ -73,7 +73,7 @@
                         </div>
                     </div>
                     <div class="col-md-4 text-end">
-                        <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm">
+                        <a asp-page="/Wiki/History" asp-route-slug="@Model.OriginalSlug" class="btn btn-outline-info btn-sm">
                             <i class="bi bi-clock-history me-1"></i>
                             History
                         </a>
