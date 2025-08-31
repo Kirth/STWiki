@@ -1,5 +1,6 @@
 using Markdig;
 using ReverseMarkdown;
+using STWiki.Data.Entities;
 
 namespace STWiki.Services;
 
@@ -25,7 +26,7 @@ public class MarkdownService
         return Markdown.ToHtml(markdown, _pipeline);
     }
 
-    public async Task<string> RenderToHtmlAsync(string markdown, TemplateService? templateService = null)
+    public async Task<string> RenderToHtmlAsync(string markdown, TemplateService? templateService = null, Page? currentPage = null)
     {
         if (string.IsNullOrEmpty(markdown))
             return string.Empty;
@@ -33,7 +34,7 @@ public class MarkdownService
         // Process templates first if template service is provided
         if (templateService != null)
         {
-            markdown = await templateService.ProcessTemplatesAsync(markdown);
+            markdown = await templateService.ProcessTemplatesAsync(markdown, currentPage);
         }
 
         return Markdown.ToHtml(markdown, _pipeline);
@@ -56,7 +57,7 @@ public class MarkdownService
         }
     }
 
-    public async Task<string> ConvertHtmlToMarkdownAsync(string html, TemplateService? templateService = null)
+    public async Task<string> ConvertHtmlToMarkdownAsync(string html, TemplateService? templateService = null, Page? currentPage = null)
     {
         if (string.IsNullOrEmpty(html))
             return string.Empty;
@@ -65,7 +66,7 @@ public class MarkdownService
         string processedHtml = html;
         if (templateService != null)
         {
-            processedHtml = await templateService.ProcessTemplatesAsync(html);
+            processedHtml = await templateService.ProcessTemplatesAsync(html, currentPage);
         }
 
         return ConvertHtmlToMarkdown(processedHtml);

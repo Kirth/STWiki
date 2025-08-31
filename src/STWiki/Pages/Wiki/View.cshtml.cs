@@ -50,8 +50,8 @@ public class ViewModel : PageModel
             // Render content based on format
             RenderedContent = Page.BodyFormat switch
             {
-                "markdown" => await _markdownService.RenderToHtmlAsync(Page.Body, _templateService),
-                "html" => await _templateService.ProcessTemplatesAsync(Page.Body), // Process templates in HTML too
+                "markdown" => await _markdownService.RenderToHtmlAsync(Page.Body, _templateService, Page),
+                "html" => await _templateService.ProcessTemplatesAsync(Page.Body, Page), // Process templates in HTML too
                 _ => $"<pre>{Page.Body}</pre>" // Plain text fallback
             };
 
