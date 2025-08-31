@@ -34,6 +34,7 @@ builder.Services.AddSingleton<STWiki.Services.IEditSessionService, STWiki.Servic
 builder.Services.AddScoped<STWiki.Services.ActivityService>();
 builder.Services.AddScoped<STWiki.Services.BreadcrumbService>();
 builder.Services.AddScoped<STWiki.Services.IPageHierarchyService, STWiki.Services.PageHierarchyService>();
+builder.Services.AddScoped<STWiki.Services.AdvancedSearchService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 

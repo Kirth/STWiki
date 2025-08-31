@@ -14,18 +14,22 @@ public class SearchResult
     public string HighlightedTitle { get; set; } = "";
     public string HighlightedSummary { get; set; } = "";
     public string BodySnippet { get; set; } = "";
-    public string MatchType { get; set; } = ""; // "title", "summary", "body"
+    public string MatchType { get; set; } = ""; // "title", "summary", "body", "code"
+    public string? CodeLanguage { get; set; }
+    public double Score { get; set; }
 }
 
 public class SearchModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly ActivityService _activityService;
+    private readonly AdvancedSearchService _advancedSearchService;
 
-    public SearchModel(AppDbContext context, ActivityService activityService)
+    public SearchModel(AppDbContext context, ActivityService activityService, AdvancedSearchService advancedSearchService)
     {
         _context = context;
         _activityService = activityService;
+        _advancedSearchService = advancedSearchService;
     }
 
     [BindProperty(SupportsGet = true, Name = "q")]
@@ -33,12 +37,32 @@ public class SearchModel : PageModel
     
     [BindProperty(SupportsGet = true, Name = "page")]
     public new int Page { get; set; } = 1;
+
+    // Advanced search filters
+    [BindProperty(SupportsGet = true)]
+    public bool SearchInTitle { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public bool SearchInContent { get; set; } = true;
+
+    [BindProperty(SupportsGet = true)]
+    public bool SearchInCode { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public bool SearchInSummary { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? Language { get; set; }
+
+    [BindProperty(SupportsGet = true)]
+    public string? Author { get; set; }
     
     public List<SearchResult> Results { get; set; } = new();
     
     public int TotalResults { get; set; }
     public int TotalPages { get; set; }
     public int PageSize { get; set; } = 10;
+    public bool UseAdvancedSearch => HasAdvancedFilters();
 
     public async Task OnGetAsync()
     {
@@ -48,29 +72,14 @@ public class SearchModel : PageModel
             
             try
             {
-                // Get total count for pagination
-                TotalResults = await _context.Pages
-                    .Where(p => 
-                        EF.Functions.ILike(p.Title, $"%{searchTerm}%") ||
-                        EF.Functions.ILike(p.Body, $"%{searchTerm}%") ||
-                        EF.Functions.ILike(p.Summary, $"%{searchTerm}%"))
-                    .CountAsync();
-                    
-                TotalPages = (int)Math.Ceiling((double)TotalResults / PageSize);
-                
-                // Get paginated results
-                var pages = await _context.Pages
-                    .Where(p => 
-                        EF.Functions.ILike(p.Title, $"%{searchTerm}%") ||
-                        EF.Functions.ILike(p.Body, $"%{searchTerm}%") ||
-                        EF.Functions.ILike(p.Summary, $"%{searchTerm}%"))
-                    .OrderByDescending(p => p.UpdatedAt)
-                    .Skip((Page - 1) * PageSize)
-                    .Take(PageSize)
-                    .ToListAsync();
-                    
-                // Create enhanced search results with highlighting
-                Results = pages.Select(page => CreateSearchResult(page, searchTerm)).ToList();
+                if (UseAdvancedSearch)
+                {
+                    await PerformAdvancedSearchAsync(searchTerm);
+                }
+                else
+                {
+                    await PerformLegacySearchAsync(searchTerm);
+                }
                 
                 // Log search activity
                 if (User.Identity?.IsAuthenticated == true)
@@ -95,6 +104,125 @@ public class SearchModel : PageModel
                 TotalPages = 0;
             }
         }
+    }
+
+    private async Task PerformAdvancedSearchAsync(string searchTerm)
+    {
+        // Build advanced query from filters
+        var queryBuilder = new List<string> { searchTerm };
+        
+        // Add search scope filters
+        var scopes = new List<string>();
+        if (SearchInTitle) scopes.Add("title");
+        if (SearchInContent) scopes.Add("content");
+        if (SearchInCode) scopes.Add("code");
+        if (SearchInSummary) scopes.Add("summary");
+
+        // If specific scopes are selected, add them to query
+        if (scopes.Any() && !(scopes.Count == 1 && scopes.Contains("content")))
+        {
+            foreach (var scope in scopes)
+            {
+                queryBuilder.Add($"in:{scope}");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(Language))
+            queryBuilder.Add($"lang:{Language}");
+
+        if (!string.IsNullOrWhiteSpace(Author))
+            queryBuilder.Add($"author:{Author}");
+
+        var fullQuery = string.Join(" ", queryBuilder);
+        
+        var options = new AdvancedSearchOptions
+        {
+            MaxResults = 1000, // Get all results for pagination
+            HighlightMatches = true
+        };
+
+        var advancedResults = await _advancedSearchService.SearchAsync(fullQuery, options);
+        
+        // Convert to legacy format with highlighting
+        var convertedResults = new List<SearchResult>();
+        foreach (var result in advancedResults.Results)
+        {
+            var page = await _context.Pages.FindAsync(result.PageId);
+            if (page != null)
+            {
+                var searchResult = new SearchResult
+                {
+                    Page = page,
+                    HighlightedTitle = HighlightText(page.Title, searchTerm),
+                    HighlightedSummary = !string.IsNullOrWhiteSpace(page.Summary) 
+                        ? HighlightText(page.Summary, searchTerm)
+                        : "",
+                    BodySnippet = result.MatchType.ToLower().Contains("code") 
+                        ? $"<pre class=\"bg-light p-2 rounded mb-0\"><code>{HighlightText(result.Snippet, searchTerm)}</code></pre>"
+                        : HighlightText(result.Snippet, searchTerm),
+                    MatchType = result.MatchType.ToLower().Contains("code") ? "code" : result.MatchType.ToLower(),
+                    CodeLanguage = result.CodeLanguage,
+                    Score = result.Score
+                };
+
+                convertedResults.Add(searchResult);
+            }
+        }
+
+        TotalResults = convertedResults.Count;
+        TotalPages = (int)Math.Ceiling((double)TotalResults / PageSize);
+        
+        // Apply pagination
+        Results = convertedResults
+            .Skip((Page - 1) * PageSize)
+            .Take(PageSize)
+            .ToList();
+    }
+
+    private async Task PerformLegacySearchAsync(string searchTerm)
+    {
+        // Original search implementation
+        TotalResults = await _context.Pages
+            .Where(p => 
+                EF.Functions.ILike(p.Title, $"%{searchTerm}%") ||
+                EF.Functions.ILike(p.Body, $"%{searchTerm}%") ||
+                EF.Functions.ILike(p.Summary, $"%{searchTerm}%"))
+            .CountAsync();
+            
+        TotalPages = (int)Math.Ceiling((double)TotalResults / PageSize);
+        
+        // Get paginated results
+        var pages = await _context.Pages
+            .Where(p => 
+                EF.Functions.ILike(p.Title, $"%{searchTerm}%") ||
+                EF.Functions.ILike(p.Body, $"%{searchTerm}%") ||
+                EF.Functions.ILike(p.Summary, $"%{searchTerm}%"))
+            .OrderByDescending(p => p.UpdatedAt)
+            .Skip((Page - 1) * PageSize)
+            .Take(PageSize)
+            .ToListAsync();
+            
+        // Create enhanced search results with highlighting
+        Results = pages.Select(page => CreateSearchResult(page, searchTerm)).ToList();
+    }
+
+    private bool HasAdvancedFilters()
+    {
+        // Check checkbox filters
+        var hasCheckboxFilters = SearchInTitle || SearchInCode || SearchInSummary ||
+               !string.IsNullOrWhiteSpace(Language) ||
+               !string.IsNullOrWhiteSpace(Author) ||
+               (!SearchInContent && (SearchInTitle || SearchInCode || SearchInSummary));
+        
+        // Check for advanced syntax in query string
+        var hasAdvancedSyntax = !string.IsNullOrWhiteSpace(Query) && (
+            Query.Contains("in:") ||
+            Query.Contains("title:") ||
+            Query.Contains("lang:") ||
+            Query.Contains("author:") ||
+            Query.Contains("\""));
+        
+        return hasCheckboxFilters || hasAdvancedSyntax;
     }
     
     private SearchResult CreateSearchResult(STWiki.Data.Entities.Page page, string searchTerm)
