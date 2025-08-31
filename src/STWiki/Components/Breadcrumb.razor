@@ -4,60 +4,55 @@
 @if (Items?.Any() == true)
 {
     <nav aria-label="breadcrumb" class="@CssClass">
-        <ol class="breadcrumb @BreadcrumbClass">
-            @foreach (var item in Items)
-            {
-                @if (item.IsActive)
+        <div class="d-flex justify-content-between align-items-center">
+            <ol class="breadcrumb mb-0 @BreadcrumbClass">
+                @foreach (var item in Items)
                 {
-                    <li class="breadcrumb-item active" aria-current="page" title="@item.Description">
-                        @if (!string.IsNullOrEmpty(item.Icon))
-                        {
-                            <i class="@item.Icon me-1"></i>
-                        }
-                        @item.Text
-                        @if (ShowLevel && item.Level > 0)
-                        {
-                            <span class="badge bg-secondary ms-1">L@item.Level</span>
-                        }
-                    </li>
-                }
-                else
-                {
-                    <li class="breadcrumb-item" title="@item.Description">
-                        <a href="/@item.Slug" class="text-decoration-none">
+                    @if (item.IsActive)
+                    {
+                        <li class="breadcrumb-item active" aria-current="page" title="@item.Description">
                             @if (!string.IsNullOrEmpty(item.Icon))
                             {
                                 <i class="@item.Icon me-1"></i>
                             }
                             @item.Text
-                        </a>
-                        @if (ShowLevel && item.Level > 0)
-                        {
-                            <span class="badge bg-secondary ms-1">L@item.Level</span>
-                        }
-                    </li>
+                            @if (ShowLevel && item.Level > 0)
+                            {
+                                <span class="badge bg-secondary ms-1">L@item.Level</span>
+                            }
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="breadcrumb-item" title="@item.Description">
+                            <a href="/@item.Slug" class="text-decoration-none">
+                                @if (!string.IsNullOrEmpty(item.Icon))
+                                {
+                                    <i class="@item.Icon me-1"></i>
+                                }
+                                @item.Text
+                            </a>
+                            @if (ShowLevel && item.Level > 0)
+                            {
+                                <span class="badge bg-secondary ms-1">L@item.Level</span>
+                            }
+                        </li>
+                    }
                 }
-            }
+            </ol>
             
             @if (ShowActions && Actions != null)
             {
-                <li class="breadcrumb-item">
-                    <div class="dropdown">
-                        <button class="btn btn-link btn-sm text-muted p-0" type="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-three-dots"></i>
-                        </button>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            @Actions
-                        </ul>
-                    </div>
-                </li>
+                <div class="breadcrumb-actions">
+                    @Actions
+                </div>
             }
-        </ol>
+        </div>
         
         @if (ShowSiblings && Siblings?.Any() == true)
         {
             <div class="breadcrumb-siblings mt-2">
-                <small class="text-muted">Related: </small>
+                <small class="text-muted me-2">Related:</small>
                 @foreach (var sibling in Siblings.Take(5))
                 {
                     <a href="/@sibling.Slug" class="badge bg-light text-dark text-decoration-none me-1" 
@@ -131,35 +126,3 @@
     }
 }
 
-<style>
-    .breadcrumb-siblings .badge {
-        font-size: 0.7rem;
-        border: 1px solid var(--bs-border-color);
-    }
-    
-    .breadcrumb-siblings .badge:hover {
-        background-color: var(--bs-primary) !important;
-        color: white !important;
-        border-color: var(--bs-primary);
-    }
-    
-    [data-bs-theme="dark"] .breadcrumb-siblings .badge {
-        background-color: var(--bs-dark) !important;
-        color: var(--bs-light) !important;
-        border-color: var(--bs-secondary);
-    }
-    
-    .breadcrumb-item .dropdown button {
-        border: none !important;
-        padding: 0.1rem 0.3rem;
-    }
-    
-    .breadcrumb-item .dropdown button:hover {
-        background-color: transparent;
-        color: var(--bs-primary);
-    }
-    
-    .breadcrumb-item a:hover i {
-        color: var(--bs-primary);
-    }
-</style>

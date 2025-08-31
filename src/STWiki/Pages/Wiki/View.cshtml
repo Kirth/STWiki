@@ -27,22 +27,23 @@ else
                          param-ShowActions="true"
                          param-CssClass="@("mb-2")">
                     <Actions>
-                        @if (User.Identity?.IsAuthenticated == true)
-                        {
-                            <li><a class="dropdown-item" href="/@Model.Slug/edit">
-                                <i class="bi bi-pencil me-2"></i>Edit Page
-                            </a></li>
-                            <li><a class="dropdown-item" href="/@Model.Slug/history">
-                                <i class="bi bi-clock-history me-2"></i>View History
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/new?parent=@Model.Slug">
-                                <i class="bi bi-file-plus me-2"></i>New Sub-page
-                            </a></li>
-                        }
-                        <li><a class="dropdown-item" href="#" onclick="copyPageUrl()">
-                            <i class="bi bi-link me-2"></i>Copy Link
-                        </a></li>
+                        <div class="d-flex gap-3">
+                            @if (User.Identity?.IsAuthenticated == true)
+                            {
+                                <a href="/@Model.Slug/edit" class="text-decoration-none text-muted">
+                                    <i class="bi bi-pencil me-1"></i>Edit Page
+                                </a>
+                                <a href="/@Model.Slug/history" class="text-decoration-none text-muted">
+                                    <i class="bi bi-clock-history me-1"></i>View History
+                                </a>
+                                <a href="/new?parent=@Model.Slug" class="text-decoration-none text-muted">
+                                    <i class="bi bi-file-plus me-1"></i>New Sub-page
+                                </a>
+                            }
+                            <a href="#" onclick="copyPageUrl()" class="text-decoration-none text-muted">
+                                <i class="bi bi-link me-1"></i>Copy Link
+                            </a>
+                        </div>
                     </Actions>
                 </component>
                 <h1 class="mb-0">@Model.Page.Title</h1>

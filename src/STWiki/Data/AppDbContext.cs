@@ -18,7 +18,7 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Unique index on lowercase slug
+        // Unique index on lowercase slug and parent-child relationships
         modelBuilder.Entity<Page>(entity =>
         {
             entity.HasIndex(e => e.Slug)
@@ -29,6 +29,16 @@ public class AppDbContext : DbContext
             
             entity.Property(e => e.Slug)
                 .UseCollation("C");
+                
+            // Configure parent-child relationship
+            entity.HasOne(p => p.Parent)
+                .WithMany(p => p.Children)
+                .HasForeignKey(p => p.ParentId)
+                .OnDelete(DeleteBehavior.Restrict); // Prevent cascade deletion
+                
+            // Index on ParentId for efficient child queries
+            entity.HasIndex(e => e.ParentId)
+                .HasDatabaseName("IX_Pages_ParentId");
         });
 
         // Foreign key relationship and performance indexes

@@ -15,12 +15,14 @@ public class EditModel : PageModel
     private readonly AppDbContext _context;
     private readonly IRedirectService _redirectService;
     private readonly ActivityService _activityService;
+    private readonly IPageHierarchyService _pageHierarchyService;
 
-    public EditModel(AppDbContext context, IRedirectService redirectService, ActivityService activityService)
+    public EditModel(AppDbContext context, IRedirectService redirectService, ActivityService activityService, IPageHierarchyService pageHierarchyService)
     {
         _context = context;
         _redirectService = redirectService;
         _activityService = activityService;
+        _pageHierarchyService = pageHierarchyService;
     }
 
     [BindProperty]
@@ -186,6 +188,9 @@ public class EditModel : PageModel
                 return Page();
             }
 
+            // Get parent ID based on slug hierarchy
+            var parentId = await _pageHierarchyService.GetParentIdFromSlugAsync(Slug);
+
             // Create new page
             var newPage = new STWiki.Data.Entities.Page
             {
@@ -195,6 +200,7 @@ public class EditModel : PageModel
                 Summary = Summary ?? string.Empty,
                 Body = CleanStringForBlazor(Body),
                 BodyFormat = BodyFormat,
+                ParentId = parentId,
                 CreatedAt = now,
                 UpdatedAt = now,
                 UpdatedBy = currentUser,
@@ -237,6 +243,9 @@ public class EditModel : PageModel
 
             if (existingPage == null)
             {
+                // Get parent ID based on slug hierarchy
+                var parentId = await _pageHierarchyService.GetParentIdFromSlugAsync(slug!);
+
                 // Page doesn't exist, so create it using the slug from the URL
                 var newPage = new STWiki.Data.Entities.Page
                 {
@@ -246,6 +255,7 @@ public class EditModel : PageModel
                     Summary = Summary ?? string.Empty,
                     Body = CleanStringForBlazor(Body),
                     BodyFormat = BodyFormat,
+                    ParentId = parentId,
                     CreatedAt = now,
                     UpdatedAt = now,
                     UpdatedBy = currentUser,

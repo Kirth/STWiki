@@ -13,10 +13,12 @@ namespace STWiki.Pages.Wiki;
 public class NewModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly IPageHierarchyService _pageHierarchyService;
 
-    public NewModel(AppDbContext context)
+    public NewModel(AppDbContext context, IPageHierarchyService pageHierarchyService)
     {
         _context = context;
+        _pageHierarchyService = pageHierarchyService;
     }
 
     [BindProperty]
@@ -97,6 +99,9 @@ public class NewModel : PageModel
             return Page();
         }
 
+        // Get parent ID based on slug hierarchy
+        var parentId = await _pageHierarchyService.GetParentIdFromSlugAsync(finalSlug);
+
         // Create new page with minimal placeholder content
         var placeholderContent = BodyFormat switch
         {
@@ -113,6 +118,7 @@ public class NewModel : PageModel
             Summary = Summary ?? string.Empty,
             Body = placeholderContent,
             BodyFormat = BodyFormat,
+            ParentId = parentId,
             CreatedAt = now,
             UpdatedAt = now,
             UpdatedBy = currentUser,

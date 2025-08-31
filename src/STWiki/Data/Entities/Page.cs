@@ -31,5 +31,10 @@ public class Page
     [MaxLength(255)]
     public string UpdatedBy { get; set; } = "";
 
+    // Hierarchical relationships
+    public Guid? ParentId { get; set; }
+    public virtual Page? Parent { get; set; }
+    public virtual ICollection<Page> Children { get; set; } = new List<Page>();
+
     public virtual ICollection<Revision> Revisions { get; set; } = new List<Revision>();
 }

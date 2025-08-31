@@ -46,8 +46,13 @@ public class HistoryModel : PageModel
         Slug = slug;
         CurrentPage = Math.Max(1, page);
         
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+        
         Page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (Page != null)
         {
@@ -87,8 +92,13 @@ public class HistoryModel : PageModel
         Slug = slug;
         CurrentPage = Math.Max(1, page);
         
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+        
         Page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (Page == null)
             return NotFound();
@@ -150,8 +160,13 @@ public class HistoryModel : PageModel
             return Forbid();
         }
 
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+
         var page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (page == null)
             return NotFound();
@@ -186,7 +201,7 @@ public class HistoryModel : PageModel
 
         await _context.SaveChangesAsync();
 
-        return RedirectToPage("/Wiki/View", new { slug });
+        return RedirectToPage("/Wiki/View", new { slug = pageSlug });
     }
 
     public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId, int page = 1)
@@ -194,8 +209,13 @@ public class HistoryModel : PageModel
         Slug = slug;
         CurrentPage = Math.Max(1, page);
         
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+        
         Page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (Page == null)
             return NotFound();

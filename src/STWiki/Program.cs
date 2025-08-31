@@ -18,6 +18,8 @@ builder.Services.AddRazorPages(options =>
     // Set route ordering to ensure Edit pages are processed before View pages  
     options.Conventions.AddPageRoute("/Wiki/Edit", "/{*slug:regex(.*\\/edit$)}");
     options.Conventions.AddPageRoute("/Wiki/Edit", "/edit");
+    options.Conventions.AddPageRoute("/Wiki/History", "/{*slug:regex(.*\\/history$)}");
+    options.Conventions.AddPageRoute("/Wiki/History", "/history");
 });
 builder.Services.AddServerSideBlazor();
 builder.Services.AddControllers();
@@ -31,6 +33,7 @@ builder.Services.AddScoped<STWiki.Services.IRedirectService, STWiki.Services.Red
 builder.Services.AddSingleton<STWiki.Services.IEditSessionService, STWiki.Services.EditSessionService>();
 builder.Services.AddScoped<STWiki.Services.ActivityService>();
 builder.Services.AddScoped<STWiki.Services.BreadcrumbService>();
+builder.Services.AddScoped<STWiki.Services.IPageHierarchyService, STWiki.Services.PageHierarchyService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
@@ -204,5 +207,18 @@ app.MapControllers();
 // Default redirect to home page
 app.MapGet("/", () => Results.Redirect("/main-page"));
 
+// Handle command-line arguments for admin tasks
+if (args.Contains("--populate-hierarchy"))
+{
+    using var scope = app.Services.CreateScope();
+    var hierarchyService = scope.ServiceProvider.GetRequiredService<STWiki.Services.IPageHierarchyService>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    logger.LogInformation("Starting ParentId population from command line");
+    var updatedCount = await hierarchyService.PopulateParentIdsFromSlugsAsync();
+    logger.LogInformation("Completed ParentId population. Updated {Count} pages", updatedCount);
+    
+    return; // Exit without starting the web server
+}
 
 app.Run();

@@ -8,10 +8,15 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1>Page History</h1>
         <div>
-            <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-primary">View Page</a>
+            @{
+                var pageSlug = Model.Slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+                    ? Model.Slug.Substring(0, Model.Slug.Length - "/history".Length)
+                    : Model.Slug;
+            }
+            <a asp-page="/Wiki/View" asp-route-slug="@pageSlug" class="btn btn-outline-primary">View Page</a>
             @if (User.Identity?.IsAuthenticated == true)
             {
-                <a asp-page="/Wiki/Edit" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">Edit Page</a>
+                <a asp-page="/Wiki/Edit" asp-route-slug="@pageSlug" class="btn btn-outline-secondary">Edit Page</a>
             }
         </div>
     </div>
@@ -23,7 +28,7 @@
             <p>The page "@Model.Slug" does not exist.</p>
             @if (User.Identity?.IsAuthenticated == true)
             {
-                <a asp-page="/Wiki/Edit" asp-route-slug="@Model.Slug" class="btn btn-primary">Create Page</a>
+                <a asp-page="/Wiki/Edit" asp-route-slug="@pageSlug" class="btn btn-primary">Create Page</a>
             }
         </div>
     }
