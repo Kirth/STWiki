@@ -1,0 +1,354 @@
+@page "/admin/pages"
+@model STWiki.Pages.Admin.PagesModel
+@{
+    ViewData["Title"] = "Page Management";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-shield-check"></i> Admin Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/admin/dashboard" class="list-group-item list-group-item-action">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                    <a href="/admin/users" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people"></i> User Management
+                    </a>
+                    <a href="/admin/pages" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-file-earmark-text"></i> Page Management
+                    </a>
+                    <a href="/admin/activity" class="list-group-item list-group-item-action">
+                        <i class="bi bi-activity"></i> Activity Monitor
+                    </a>
+                    <a href="/admin/settings" class="list-group-item list-group-item-action">
+                        <i class="bi bi-gear"></i> System Settings
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="bi bi-file-earmark-text me-2"></i>Page Management
+                </h2>
+                <div class="d-flex align-items-center">
+                    <span class="text-muted me-3">
+                        <i class="bi bi-files me-1"></i>@Model.TotalPagesCount total pages
+                    </span>
+                    <a href="/new" class="btn btn-primary">
+                        <i class="bi bi-plus-circle me-2"></i>New Page
+                    </a>
+                </div>
+            </div>
+
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    @TempData["SuccessMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    @TempData["ErrorMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <!-- Search and Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row align-items-end">
+                        <div class="col-md-8">
+                            <label for="search" class="form-label">Search Pages</label>
+                            <input type="text" class="form-control" id="search" name="search" value="@Model.SearchTerm" 
+                                   placeholder="Search by title, slug, or summary...">
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search me-2"></i>Search
+                            </button>
+                            @if (!string.IsNullOrEmpty(Model.SearchTerm))
+                            {
+                                <a href="/admin/pages" class="btn btn-outline-secondary ms-2">
+                                    <i class="bi bi-x-circle me-1"></i>Clear
+                                </a>
+                            }
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Pages Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Pages</h6>
+                    @if (!string.IsNullOrEmpty(Model.SearchTerm))
+                    {
+                        <small class="text-muted">
+                            Showing @Model.Pages.Count results for "@Model.SearchTerm"
+                        </small>
+                    }
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Pages.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Title</th>
+                                        <th>Slug</th>
+                                        <th>Parent</th>
+                                        <th>Status</th>
+                                        <th>Updated</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var page in Model.Pages)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div>
+                                                    <div class="fw-bold">
+                                                        <a href="/@(page.Slug)" class="text-decoration-none" target="_blank">
+                                                            @(page.Title)
+                                                        </a>
+                                                    </div>
+                                                    @if (!string.IsNullOrEmpty(page.Summary))
+                                                    {
+                                                        <small class="text-muted">@(page.Summary)</small>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <code class="small">/@(page.Slug)</code>
+                                            </td>
+                                            <td>
+                                                @if (page.Parent != null)
+                                                {
+                                                    <a href="/@(page.Parent.Slug)" class="text-decoration-none small" target="_blank">
+                                                        @(page.Parent.Title)
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small">Root</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-column">
+                                                    @if (page.IsLocked)
+                                                    {
+                                                        <span class="badge bg-danger mb-1">Locked</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success mb-1">Unlocked</span>
+                                                    }
+                                                    
+                                                    @switch (page.BodyFormat)
+                                                    {
+                                                        case "markdown":
+                                                            <span class="badge bg-info">Markdown</span>
+                                                            break;
+                                                        case "html":
+                                                            <span class="badge bg-warning">HTML</span>
+                                                            break;
+                                                        default:
+                                                            <span class="badge bg-secondary">@(page.BodyFormat)</span>
+                                                            break;
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span title="@(page.UpdatedAt.ToString("F"))">
+                                                    @GetTimeAgo(page.UpdatedAt)
+                                                </span>
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="/@(page.Slug)" class="btn btn-outline-primary" title="View Page" target="_blank">
+                                                        <i class="bi bi-eye"></i>
+                                                    </a>
+                                                    <a href="/@(page.Slug)/edit" class="btn btn-outline-secondary" title="Edit Page" target="_blank">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </a>
+                                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split" 
+                                                            data-bs-toggle="dropdown">
+                                                        <span class="visually-hidden">Toggle Dropdown</span>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <a class="dropdown-item" href="/@(page.Slug)" target="_blank">
+                                                                <i class="bi bi-eye me-2"></i>View Page
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item" href="/@(page.Slug)/edit" target="_blank">
+                                                                <i class="bi bi-pencil me-2"></i>Edit Page
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item" href="/@(page.Slug)/history" target="_blank">
+                                                                <i class="bi bi-clock-history me-2"></i>View History
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li>
+                                                            <form method="post" asp-page-handler="ToggleLock" class="d-inline">
+                                                                <input type="hidden" name="pageId" value="@(page.Id)" />
+                                                                <input type="hidden" name="locked" value="@(!page.IsLocked)" />
+                                                                <button type="submit" class="dropdown-item">
+                                                                    @if (page.IsLocked)
+                                                                    {
+                                                                        <text><i class="bi bi-unlock me-2 text-success"></i>Unlock Page</text>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <text><i class="bi bi-lock me-2 text-warning"></i>Lock Page</text>
+                                                                    }
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li>
+                                                            <button type="button" class="dropdown-item text-danger" 
+                                                                    onclick="confirmDeletePage('@(page.Id)', '@Html.Raw(Html.Encode(page.Title))')">
+                                                                <i class="bi bi-trash me-2"></i>Delete Page
+                                                            </button>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        @if (Model.TotalPages > 1)
+                        {
+                            <div class="card-footer">
+                                <nav aria-label="Page pagination">
+                                    <ul class="pagination justify-content-center mb-0">
+                                        <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+                                            <a class="page-link" href="/admin/pages?page=@(Model.CurrentPage - 1)&search=@Uri.EscapeDataString(Model.SearchTerm)">
+                                                <i class="bi bi-chevron-left"></i>
+                                            </a>
+                                        </li>
+
+                                        @for (int i = Math.Max(1, Model.CurrentPage - 2); i <= Math.Min(Model.TotalPages, Model.CurrentPage + 2); i++)
+                                        {
+                                            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                                <a class="page-link" href="/admin/pages?page=@i&search=@Uri.EscapeDataString(Model.SearchTerm)">@i</a>
+                                            </li>
+                                        }
+
+                                        <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+                                            <a class="page-link" href="/admin/pages?page=@(Model.CurrentPage + 1)&search=@Uri.EscapeDataString(Model.SearchTerm)">
+                                                <i class="bi bi-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        Page @Model.CurrentPage of @Model.TotalPages 
+                                        (@Model.TotalPagesCount total pages)
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-file-earmark-text display-1 text-muted"></i>
+                            <h4 class="text-muted mt-3">No Pages Found</h4>
+                            @if (!string.IsNullOrEmpty(Model.SearchTerm))
+                            {
+                                <p class="text-muted">No pages match your search criteria.</p>
+                                <a href="/admin/pages" class="btn btn-primary">View All Pages</a>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No pages have been created yet.</p>
+                                <a href="/new" class="btn btn-primary">Create First Page</a>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deletePageModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Page</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the page <strong id="deletePageTitle"></strong>?</p>
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    This action cannot be undone. All page content and history will be permanently deleted.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="post" asp-page-handler="DeletePage" id="deletePageForm" class="d-inline">
+                    <input type="hidden" name="pageId" id="deletePageId" />
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-2"></i>Delete Page
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private string GetTimeAgo(DateTimeOffset timestamp)
+    {
+        var timeSpan = DateTimeOffset.UtcNow - timestamp;
+        
+        if (timeSpan.TotalMinutes < 1) return "just now";
+        if (timeSpan.TotalMinutes < 60) return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24) return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7) return $"{(int)timeSpan.TotalDays}d ago";
+        if (timeSpan.TotalDays < 30) return $"{(int)(timeSpan.TotalDays / 7)}w ago";
+        
+        return timestamp.ToString("MMM d, yyyy");
+    }
+}
+
+@section Scripts {
+    <script>
+        function confirmDeletePage(pageId, pageTitle) {
+            document.getElementById('deletePageId').value = pageId;
+            document.getElementById('deletePageTitle').textContent = pageTitle;
+            
+            var deleteModal = new bootstrap.Modal(document.getElementById('deletePageModal'));
+            deleteModal.show();
+        }
+    </script>
+}

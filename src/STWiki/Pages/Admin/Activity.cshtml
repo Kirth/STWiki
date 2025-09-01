@@ -1,0 +1,346 @@
+@page "/admin/activity"
+@model STWiki.Pages.Admin.ActivityModel
+@{
+    ViewData["Title"] = "Activity Monitor";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-shield-check"></i> Admin Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/admin/dashboard" class="list-group-item list-group-item-action">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                    <a href="/admin/users" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people"></i> User Management
+                    </a>
+                    <a href="/admin/pages" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-text"></i> Page Management
+                    </a>
+                    <a href="/admin/activity" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-activity"></i> Activity Monitor
+                    </a>
+                    <a href="/admin/settings" class="list-group-item list-group-item-action">
+                        <i class="bi bi-gear"></i> System Settings
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="bi bi-activity me-2"></i>Activity Monitor
+                </h2>
+                <div class="text-muted">
+                    <i class="bi bi-list-ul me-1"></i>@Model.TotalActivities activities found
+                </div>
+            </div>
+
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    @TempData["ErrorMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <!-- Filters -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-funnel me-2"></i>Filters
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form method="get">
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label for="activityType" class="form-label">Activity Type</label>
+                                <select class="form-select" id="activityType" name="activityType">
+                                    <option value="">All Types</option>
+                                    @foreach (var activityType in Model.AvailableActivityTypes)
+                                    {
+                                        <option value="@activityType" selected="@(Model.ActivityTypeFilter == activityType)">
+                                            @FormatActivityType(activityType)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="user" class="form-label">User</label>
+                                <input type="text" class="form-control" id="user" name="user" 
+                                       value="@Model.UserFilter" placeholder="Search by user...">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="from" class="form-label">From Date</label>
+                                <input type="date" class="form-control" id="from" name="from" 
+                                       value="@(Model.DateFrom?.ToString("yyyy-MM-dd"))">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="to" class="form-label">To Date</label>
+                                <input type="date" class="form-control" id="to" name="to" 
+                                       value="@(Model.DateTo?.ToString("yyyy-MM-dd"))">
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search me-2"></i>Apply Filters
+                            </button>
+                            <a href="/admin/activity" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle me-1"></i>Clear All
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Activity Log -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Activity Log</h6>
+                    <div class="d-flex align-items-center">
+                        <button class="btn btn-sm btn-outline-secondary me-2" onclick="refreshActivities()">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                        </button>
+                        @if (Model.Activities.Any())
+                        {
+                            <small class="text-muted">
+                                Page @Model.CurrentPage of @Model.TotalPages
+                            </small>
+                        }
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Activities.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>User</th>
+                                        <th>Activity</th>
+                                        <th>Page</th>
+                                        <th>IP Address</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var activity in Model.Activities)
+                                    {
+                                        <tr>
+                                            <td class="text-nowrap">
+                                                <div title="@activity.CreatedAt.ToString("F")">
+                                                    <div class="fw-bold small">@activity.CreatedAt.ToString("MMM d")</div>
+                                                    <div class="text-muted small">@activity.CreatedAt.ToString("h:mm tt")</div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div>
+                                                    <div class="fw-bold small">@Html.UserLink(activity.User, activity.UserDisplayName)</div>
+                                                    <div class="text-muted small" style="font-size: 0.7em; font-family: monospace;">@activity.UserId</div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    @switch (activity.ActivityType)
+                                                    {
+                                                        case "page_created":
+                                                            <i class="bi bi-file-earmark-plus text-success me-2"></i>
+                                                            break;
+                                                        case "page_updated":
+                                                            <i class="bi bi-pencil-square text-primary me-2"></i>
+                                                            break;
+                                                        case "page_deleted":
+                                                            <i class="bi bi-trash text-danger me-2"></i>
+                                                            break;
+                                                        case "page_locked":
+                                                            <i class="bi bi-lock text-warning me-2"></i>
+                                                            break;
+                                                        case "page_unlocked":
+                                                            <i class="bi bi-unlock text-success me-2"></i>
+                                                            break;
+                                                        case "user_login":
+                                                            <i class="bi bi-box-arrow-in-right text-info me-2"></i>
+                                                            break;
+                                                        case "user_logout":
+                                                            <i class="bi bi-box-arrow-right text-secondary me-2"></i>
+                                                            break;
+                                                        case "search_performed":
+                                                            <i class="bi bi-search text-info me-2"></i>
+                                                            break;
+                                                        case "page_viewed":
+                                                            <i class="bi bi-eye text-muted me-2"></i>
+                                                            break;
+                                                        default:
+                                                            <i class="bi bi-activity text-muted me-2"></i>
+                                                            break;
+                                                    }
+                                                    <span class="small">@FormatActivityType(activity.ActivityType)</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(activity.PageTitle))
+                                                {
+                                                    <div>
+                                                        <div class="fw-bold small">
+                                                            <a href="/@activity.PageSlug" class="text-decoration-none" target="_blank">
+                                                                @activity.PageTitle
+                                                            </a>
+                                                        </div>
+                                                        <div class="text-muted small">/@activity.PageSlug</div>
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">-</span>
+                                                }
+                                            </td>
+                                            <td class="text-muted small">
+                                                @if (!string.IsNullOrEmpty(activity.IpAddress))
+                                                {
+                                                    <code>@activity.IpAddress</code>
+                                                }
+                                                else
+                                                {
+                                                    <span>-</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(activity.Description))
+                                                {
+                                                    <small class="text-muted">@activity.Description</small>
+                                                }
+                                                @if (!string.IsNullOrEmpty(activity.Details))
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" 
+                                                            data-bs-toggle="popover" 
+                                                            data-bs-content="@activity.Details" 
+                                                            data-bs-trigger="hover focus">
+                                                        <i class="bi bi-info-circle"></i>
+                                                    </button>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        @if (Model.TotalPages > 1)
+                        {
+                            <div class="card-footer">
+                                <nav aria-label="Activity pagination">
+                                    <ul class="pagination justify-content-center mb-0">
+                                        <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+                                            <a class="page-link" href="/admin/activity?page=@(Model.CurrentPage - 1)&activityType=@(Model.ActivityTypeFilter)&user=@(Model.UserFilter)&from=@(Model.From)&to=@(Model.To)">
+                                                <i class="bi bi-chevron-left"></i>
+                                            </a>
+                                        </li>
+
+                                        @for (int i = Math.Max(1, Model.CurrentPage - 2); i <= Math.Min(Model.TotalPages, Model.CurrentPage + 2); i++)
+                                        {
+                                            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                                <a class="page-link" href="/admin/activity?page=@(i)&activityType=@(Model.ActivityTypeFilter)&user=@(Model.UserFilter)&from=@(Model.From)&to=@(Model.To)">@i</a>
+                                            </li>
+                                        }
+
+                                        <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+                                            <a class="page-link" href="/admin/activity?page=@(Model.CurrentPage + 1)&activityType=@(Model.ActivityTypeFilter)&user=@(Model.UserFilter)&from=@(Model.From)&to=@(Model.To)">
+                                                <i class="bi bi-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        Showing @((Model.CurrentPage - 1) * Model.PageSize + 1)-@Math.Min(Model.CurrentPage * Model.PageSize, Model.TotalActivities) of @Model.TotalActivities activities
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-activity display-1 text-muted"></i>
+                            <h4 class="text-muted mt-3">No Activities Found</h4>
+                            <p class="text-muted">No activities match your current filters.</p>
+                            <a href="/admin/activity" class="btn btn-primary">Clear Filters</a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private string FormatActivityType(string activityType)
+    {
+        return activityType switch
+        {
+            "page_created" => "Page Created",
+            "page_updated" => "Page Updated", 
+            "page_deleted" => "Page Deleted",
+            "page_locked" => "Page Locked",
+            "page_unlocked" => "Page Unlocked",
+            "page_viewed" => "Page Viewed",
+            "user_login" => "User Login",
+            "user_logout" => "User Logout",
+            "search_performed" => "Search Performed",
+            _ => System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(activityType.Replace("_", " "))
+        };
+    }
+}
+
+@section Scripts {
+    <script>
+        // Initialize popovers for activity details
+        var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'));
+        var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl);
+        });
+
+        function refreshActivities() {
+            location.reload();
+        }
+
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            if (!document.hidden) {
+                location.reload();
+            }
+        }, 30000);
+    </script>
+}
+
+@section Styles {
+    <style>
+        .table th {
+            border-top: none;
+            font-weight: 600;
+            color: #6c757d;
+            font-size: 0.875rem;
+        }
+        
+        .table td {
+            border-color: #f8f9fa;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: rgba(0, 0, 0, 0.02);
+        }
+    </style>
+}

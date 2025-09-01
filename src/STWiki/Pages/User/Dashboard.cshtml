@@ -1,0 +1,274 @@
+@page "/user/dashboard"
+@model STWiki.Pages.User.DashboardModel
+@{
+    ViewData["Title"] = "Control Panel";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-gear"></i> Control Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/user/dashboard" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-house"></i> Dashboard
+                    </a>
+                    <a href="/user/settings/profile" class="list-group-item list-group-item-action">
+                        <i class="bi bi-person"></i> Profile Settings
+                    </a>
+                    <a href="/user/settings/preferences" class="list-group-item list-group-item-action">
+                        <i class="bi bi-sliders"></i> Preferences
+                    </a>
+                    <a href="/user/settings/security" class="list-group-item list-group-item-action">
+                        <i class="bi bi-shield-lock"></i> Security
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a href="/user/@Model.UserProfile.PreferredUsername" class="list-group-item list-group-item-action">
+                        <i class="bi bi-eye"></i> View Public Profile
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <!-- Welcome Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    @if (!string.IsNullOrEmpty(Model.UserProfile.AvatarUrl))
+                                    {
+                                        <img src="@Model.UserProfile.AvatarUrl" alt="Avatar" class="rounded-circle" width="60" height="60">
+                                    }
+                                    else
+                                    {
+                                        <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+                                            <i class="bi bi-person fs-3"></i>
+                                        </div>
+                                    }
+                                </div>
+                                <div>
+                                    <h4 class="mb-1">Welcome back, @Model.UserProfile.DisplayName</h4>
+                                    <p class="text-muted mb-0">@Model.UserProfile.Email</p>
+                                    <small class="text-muted">
+                                        Member since @Model.UserProfile.CreatedAt.ToString("MMMM yyyy")
+                                        @if (Model.UserProfile.LastLoginAt.HasValue)
+                                        {
+                                            <span class="ms-2">• Last active @Model.UserProfile.LastLoginAt.Value.ToString("MMM d 'at' h:mm tt")</span>
+                                        }
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <div class="text-primary mb-2">
+                                <i class="bi bi-activity fs-1"></i>
+                            </div>
+                            <h4 class="mb-0">@Model.UserStats.GetValueOrDefault("TotalActivities", 0)</h4>
+                            <small class="text-muted">Total Activities</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <div class="text-success mb-2">
+                                <i class="bi bi-file-earmark-plus fs-1"></i>
+                            </div>
+                            <h4 class="mb-0">@Model.UserStats.GetValueOrDefault("PagesCreated", 0)</h4>
+                            <small class="text-muted">Pages Created</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <div class="text-warning mb-2">
+                                <i class="bi bi-pencil-square fs-1"></i>
+                            </div>
+                            <h4 class="mb-0">@Model.UserStats.GetValueOrDefault("PagesUpdated", 0)</h4>
+                            <small class="text-muted">Pages Updated</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <div class="text-info mb-2">
+                                <i class="bi bi-clock-history fs-1"></i>
+                            </div>
+                            <h4 class="mb-0">
+                                @if (Model.UserStats.ContainsKey("FirstActivityDate") && Model.UserStats["FirstActivityDate"] != null)
+                                {
+                                    @((int)((DateTimeOffset.UtcNow - (DateTimeOffset)Model.UserStats["FirstActivityDate"]).TotalDays))
+                                }
+                                else
+                                {
+                                    <span>0</span>
+                                }
+                            </h4>
+                            <small class="text-muted">Days Active</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Recent Activity -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Recent Activity</h6>
+                            <a href="/user/@Model.UserProfile.PreferredUsername/contributions" class="btn btn-sm btn-outline-primary">View All</a>
+                        </div>
+                        <div class="card-body">
+                            @if (Model.RecentActivity.Any())
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var activity in Model.RecentActivity)
+                                    {
+                                        <div class="list-group-item px-0 py-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-3">
+                                                    @switch (activity.ActivityType)
+                                                    {
+                                                        case "page_created":
+                                                            <i class="bi bi-file-earmark-plus text-success"></i>
+                                                            break;
+                                                        case "page_updated":
+                                                            <i class="bi bi-pencil-square text-warning"></i>
+                                                            break;
+                                                        case "page_viewed":
+                                                            <i class="bi bi-eye text-info"></i>
+                                                            break;
+                                                        default:
+                                                            <i class="bi bi-activity text-muted"></i>
+                                                            break;
+                                                    }
+                                                </div>
+                                                <div class="flex-grow-1">
+                                                    <div class="small">
+                                                        @if (!string.IsNullOrEmpty(activity.PageSlug))
+                                                        {
+                                                            <a href="/@activity.PageSlug" class="text-decoration-none">@activity.PageTitle</a>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span>@activity.Description</span>
+                                                        }
+                                                    </div>
+                                                    <div class="text-muted small">@activity.CreatedAt.ToString("MMM d 'at' h:mm tt")</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted mb-0">No recent activity</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Contributions -->
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Recent Contributions (30 days)</h6>
+                        </div>
+                        <div class="card-body">
+                            @if (Model.RecentContributions.Any())
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var contribution in Model.RecentContributions)
+                                    {
+                                        <div class="list-group-item px-0 py-2">
+                                            <div class="d-flex align-items-center">
+                                                <div class="me-3">
+                                                    @if (contribution.ActivityType == "page_created")
+                                                    {
+                                                        <i class="bi bi-file-earmark-plus text-success"></i>
+                                                    }
+                                                    else
+                                                    {
+                                                        <i class="bi bi-pencil-square text-warning"></i>
+                                                    }
+                                                </div>
+                                                <div class="flex-grow-1">
+                                                    <div class="small">
+                                                        <a href="/@contribution.PageSlug" class="text-decoration-none">@contribution.PageTitle</a>
+                                                        <span class="text-muted">
+                                                            @(contribution.ActivityType == "page_created" ? "created" : "updated")
+                                                        </span>
+                                                    </div>
+                                                    <div class="text-muted small">@contribution.CreatedAt.ToString("MMM d")</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted mb-0">No contributions in the last 30 days</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">Quick Actions</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <a href="/new" class="btn btn-primary w-100 mb-2">
+                                        <i class="bi bi-plus-circle me-2"></i>Create New Page
+                                    </a>
+                                </div>
+                                <div class="col-md-3">
+                                    <a href="/user/settings/profile" class="btn btn-outline-primary w-100 mb-2">
+                                        <i class="bi bi-person-gear me-2"></i>Edit Profile
+                                    </a>
+                                </div>
+                                <div class="col-md-3">
+                                    <a href="/search" class="btn btn-outline-primary w-100 mb-2">
+                                        <i class="bi bi-search me-2"></i>Search Pages
+                                    </a>
+                                </div>
+                                <div class="col-md-3">
+                                    <a href="/user/@Model.UserProfile.PreferredUsername" class="btn btn-outline-secondary w-100 mb-2">
+                                        <i class="bi bi-eye me-2"></i>View Public Profile
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

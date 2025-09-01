@@ -1,0 +1,236 @@
+@page "/user/settings/preferences"
+@model STWiki.Pages.User.Settings.PreferencesModel
+@{
+    ViewData["Title"] = "Preferences";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-gear"></i> Control Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/user/dashboard" class="list-group-item list-group-item-action">
+                        <i class="bi bi-house"></i> Dashboard
+                    </a>
+                    <a href="/user/settings/profile" class="list-group-item list-group-item-action">
+                        <i class="bi bi-person"></i> Profile Settings
+                    </a>
+                    <a href="/user/settings/preferences" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-sliders"></i> Preferences
+                    </a>
+                    <a href="/user/settings/security" class="list-group-item list-group-item-action">
+                        <i class="bi bi-shield-lock"></i> Security
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a href="/user/@Model.UserProfile.PreferredUsername" class="list-group-item list-group-item-action">
+                        <i class="bi bi-eye"></i> View Public Profile
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-sliders me-2"></i>Preferences
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (TempData["SuccessMessage"] != null)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @TempData["SuccessMessage"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form method="post">
+                        <div asp-validation-summary="All" class="alert alert-danger" style="display: none;"></div>
+
+                        <!-- Privacy Settings -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-shield-check me-2"></i>Privacy Settings
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch mb-3">
+                                            <input asp-for="IsProfilePublic" class="form-check-input" type="checkbox" id="isProfilePublic">
+                                            <label class="form-check-label" for="isProfilePublic">
+                                                <strong>Public Profile</strong>
+                                            </label>
+                                            <div class="form-text">Allow others to view your profile page and basic information.</div>
+                                        </div>
+                                        
+                                        <div class="form-check form-switch mb-3">
+                                            <input asp-for="ShowActivityPublic" class="form-check-input" type="checkbox" id="showActivityPublic">
+                                            <label class="form-check-label" for="showActivityPublic">
+                                                <strong>Show Activity Publicly</strong>
+                                            </label>
+                                            <div class="form-text">Display your recent activities and statistics on your public profile.</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch mb-3">
+                                            <input asp-for="ShowContributionsPublic" class="form-check-input" type="checkbox" id="showContributionsPublic">
+                                            <label class="form-check-label" for="showContributionsPublic">
+                                                <strong>Show Contributions Publicly</strong>
+                                            </label>
+                                            <div class="form-text">Display your page contributions and edit history on your public profile.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="alert alert-info mt-3">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    <strong>Note:</strong> Even with a private profile, your username may still appear in page edit histories and activity logs for transparency purposes.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Appearance Settings -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-palette me-2"></i>Appearance
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label for="themePreference" class="form-label">
+                                        <strong>Theme Preference</strong>
+                                    </label>
+                                    <select asp-for="ThemePreference" class="form-select" id="themePreference">
+                                        <option value="auto">Auto (System Default)</option>
+                                        <option value="light">Light Theme</option>
+                                        <option value="dark">Dark Theme</option>
+                                    </select>
+                                    <div class="form-text">Choose how the site appears to you. Auto will follow your system's theme setting.</div>
+                                </div>
+
+                                <div id="theme-preview" class="mt-3">
+                                    <small class="text-muted">Theme will be applied when you save your preferences.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notification Settings -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-bell me-2"></i>Notifications
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="form-check form-switch mb-3">
+                                    <input asp-for="EmailNotifications" class="form-check-input" type="checkbox" id="emailNotifications">
+                                    <label class="form-check-label" for="emailNotifications">
+                                        <strong>Email Notifications</strong>
+                                    </label>
+                                    <div class="form-text">Receive email notifications for important updates and mentions (when available).</div>
+                                </div>
+
+                                <div class="alert alert-warning">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    <strong>Coming Soon:</strong> Email notification features are planned for future releases.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Advanced Settings -->
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-gear me-2"></i>Advanced Settings
+                                </h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    <strong>Data Export:</strong> You can request an export of your data by contacting the system administrator.
+                                </div>
+                                
+                                <div class="alert alert-secondary">
+                                    <i class="bi bi-database me-2"></i>
+                                    <strong>Account Created:</strong> @Model.UserProfile.CreatedAt.ToString("MMMM d, yyyy")
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Save Button -->
+                        <div class="d-flex justify-content-between">
+                            <a href="/user/dashboard" class="btn btn-secondary">
+                                <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-2"></i>Save Preferences
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Theme preference preview
+        document.querySelector('#themePreference').addEventListener('change', function() {
+            const preview = document.querySelector('#theme-preview');
+            const theme = this.value;
+            
+            let previewText = '';
+            switch(theme) {
+                case 'light':
+                    previewText = '<span class="badge bg-light text-dark">Light Theme Selected</span>';
+                    break;
+                case 'dark':
+                    previewText = '<span class="badge bg-dark text-light">Dark Theme Selected</span>';
+                    break;
+                case 'auto':
+                default:
+                    previewText = '<span class="badge bg-secondary">Auto Theme Selected (follows system preference)</span>';
+                    break;
+            }
+            preview.innerHTML = previewText;
+        });
+
+        // Initialize theme preview
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('#themePreference').dispatchEvent(new Event('change'));
+        });
+
+        // Privacy settings helper
+        document.querySelector('#isProfilePublic').addEventListener('change', function() {
+            const activitySwitch = document.querySelector('#showActivityPublic');
+            const contributionsSwitch = document.querySelector('#showContributionsPublic');
+            
+            if (!this.checked) {
+                activitySwitch.checked = false;
+                contributionsSwitch.checked = false;
+                activitySwitch.disabled = true;
+                contributionsSwitch.disabled = true;
+            } else {
+                activitySwitch.disabled = false;
+                contributionsSwitch.disabled = false;
+            }
+        });
+
+        // Initialize privacy settings
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('#isProfilePublic').dispatchEvent(new Event('change'));
+        });
+    </script>
+}
