@@ -125,7 +125,7 @@
                                     <div class="flex-grow-1">
                                         <div class="d-flex justify-content-between align-items-start mb-1">
                                             <div class="activity-description">
-                                                <strong>@activity.UserDisplayName</strong>
+                                                <strong>@Html.UserLink(activity.UserId, activity.UserDisplayName)</strong>
                                                 
                                                 @switch (activity.ActivityType)
                                                 {

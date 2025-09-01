@@ -11,10 +11,30 @@
         <div class="card">
             <div class="card-body text-center">
                 <div class="mb-3">
-                    <i class="bi bi-person-circle display-1 text-muted"></i>
+                    @if (Model.UserProfile != null && !string.IsNullOrEmpty(Model.UserProfile.AvatarUrl))
+                    {
+                        <img src="@Model.UserProfile.AvatarUrl" alt="@Model.DisplayName" class="rounded-circle" width="100" height="100" style="object-fit: cover;">
+                    }
+                    else
+                    {
+                        <i class="bi bi-person-circle display-1 text-muted"></i>
+                    }
                 </div>
                 <h5 class="card-title mb-1">@Model.DisplayName</h5>
-                <p class="text-muted small mb-3">@@(@Model.Username)</p>
+                <p class="text-muted small mb-2">@@(@Model.Username)</p>
+                
+                @if (!string.IsNullOrEmpty(Model.Bio))
+                {
+                    <p class="text-muted small mb-3 text-start">@Model.Bio</p>
+                }
+                
+                @if (Model.UserProfile != null)
+                {
+                    <p class="text-muted small mb-3">
+                        <i class="bi bi-calendar me-1"></i>
+                        Joined @Model.UserProfile.CreatedAt.ToString("MMMM yyyy")
+                    </p>
+                }
                 
                 <div class="row text-center mb-3">
                     <div class="col-6">
@@ -30,6 +50,10 @@
                 @if (Model.IsCurrentUser)
                 {
                     <div class="d-grid gap-2">
+                        <a href="/user/dashboard" class="btn btn-primary btn-sm">
+                            <i class="bi bi-gear me-2"></i>
+                            Control Panel
+                        </a>
                         <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#editProfileModal">
                             <i class="bi bi-pencil me-2"></i>
                             Edit Profile
@@ -38,52 +62,77 @@
                 }
                 else
                 {
-                    <div class="d-grid gap-2">
-                        <a href="/user/@Model.Username/contributions" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-journal-text me-2"></i>
-                            View Contributions
-                        </a>
-                    </div>
+                    @if (!Model.IsProfileVisible)
+                    {
+                        <div class="alert alert-warning small">
+                            <i class="bi bi-eye-slash me-1"></i>
+                            This profile is private
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-grid gap-2">
+                            <a href="/user/@Model.Username/contributions" class="btn btn-outline-primary btn-sm">
+                                <i class="bi bi-journal-text me-2"></i>
+                                View Contributions
+                            </a>
+                        </div>
+                    }
                 }
             </div>
         </div>
 
-        <!-- Quick Stats -->
-        <div class="card mt-3">
-            <div class="card-header">
-                <h6 class="mb-0">
-                    <i class="bi bi-bar-chart me-2"></i>
-                    Activity Stats
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-12 mb-2">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Last Active:</span>
-                            <span>@GetTimeAgo(Model.LastActive)</span>
+        @if (Model.IsProfileVisible && (Model.UserProfile == null || Model.UserProfile.ShowActivityPublic || Model.IsCurrentUser))
+        {
+            <!-- Quick Stats -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-bar-chart me-2"></i>
+                        Activity Stats
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-12 mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Last Active:</span>
+                                <span>@GetTimeAgo(Model.LastActive)</span>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-12 mb-2">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Member Since:</span>
-                            <span>@Model.MemberSince?.ToString("MMM yyyy")</span>
+                        <div class="col-12 mb-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Member Since:</span>
+                                <span>@Model.MemberSince?.ToString("MMM yyyy")</span>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-12">
-                        <div class="d-flex justify-content-between">
-                            <span class="text-muted">Most Active:</span>
-                            <span>@Model.MostActiveDay</span>
+                        <div class="col-12">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Most Active:</span>
+                                <span>@Model.MostActiveDay</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        }
     </div>
 
     <div class="col-md-8 col-lg-9">
-        <!-- Tab Navigation -->
-        <ul class="nav nav-tabs mb-4" id="profileTabs" role="tablist">
+        @if (!Model.IsProfileVisible)
+        {
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-eye-slash display-1 text-muted mb-3"></i>
+                    <h4 class="text-muted">Profile is Private</h4>
+                    <p class="text-muted">This user has chosen to keep their profile private.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs mb-4" id="profileTabs" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab">
                     <i class="bi bi-activity me-2"></i>
@@ -214,6 +263,7 @@
                 </div>
             </div>
         </div>
+        }
     </div>
 </div>
 

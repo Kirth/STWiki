@@ -180,7 +180,7 @@
                                 
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="text-muted">
-                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.Page.UpdatedBy
+                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Html.UserLink(result.Page.UpdatedBy, result.Page.UpdatedBy)
                                         @if (result.Page.CreatedAt != result.Page.UpdatedAt)
                                         {
                                             <span class="ms-2">

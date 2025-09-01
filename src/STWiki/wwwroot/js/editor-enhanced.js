@@ -57,11 +57,16 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
         // Setup keyboard shortcuts  
         setupKeyboardShorts(instance);
         
+        // Setup drag and drop
+        setupDragAndDrop(instance);
+        
         // Initial preview update
         updatePreview(instance);
         updateStats(instance);
 
-        console.log('Enhanced editor initialized successfully');
+        console.log('✅ Enhanced editor initialized successfully with drag-and-drop support');
+        console.log('🎯 Editor container:', container);
+        console.log('📁 Drag overlay found:', !!overlay);
         return true;
     } catch (error) {
         console.error('Failed to initialize enhanced editor:', error);
@@ -100,7 +105,7 @@ function setupEventListeners(instance) {
         }
     });
 
-    // Auto-pair brackets and quotes
+    // Auto-pair brackets and quotes (with wiki template awareness)
     textarea.addEventListener('keydown', function(e) {
         const pairs = {
             '(': ')',
@@ -115,10 +120,31 @@ function setupEventListeners(instance) {
             const end = textarea.selectionEnd;
             
             if (start === end) { // No selection
-                e.preventDefault();
                 const before = textarea.value.substring(0, start);
                 const after = textarea.value.substring(end);
                 
+                // Special handling for brackets to avoid interfering with wiki templates like [[...]]
+                if (e.key === '[') {
+                    // Don't auto-pair if we're already inside [[ ]] template syntax
+                    const precedingText = before.slice(-10); // Check last 10 chars
+                    const followingText = after.slice(0, 10); // Check next 10 chars
+                    
+                    // Skip auto-pairing if this looks like wiki template syntax
+                    if (precedingText.includes('[[') || followingText.includes(']]')) {
+                        console.log('🔧 Skipping bracket auto-pair inside wiki template');
+                        return; // Let the keypress happen normally
+                    }
+                }
+                
+                if (e.key === ']') {
+                    // Don't auto-pair closing bracket if there's already a ] following
+                    if (after.startsWith(']')) {
+                        console.log('🔧 Skipping bracket auto-pair - closing bracket already present');
+                        return; // Let the keypress happen normally  
+                    }
+                }
+                
+                e.preventDefault();
                 textarea.value = before + e.key + pairs[e.key] + after;
                 textarea.selectionStart = textarea.selectionEnd = start + 1;
                 
@@ -1119,6 +1145,245 @@ window.checkBlazorConnection = function() {
     }
 };
 
+// Setup drag and drop functionality
+function setupDragAndDrop(instance) {
+    const { textarea, container, id } = instance;
+    const overlay = document.getElementById(`drag-drop-overlay-${id}`);
+    
+    if (!overlay) {
+        console.warn(`Drag-drop overlay not found for editor ${id}`);
+        return;
+    }
+
+    console.log(`🎯 Setting up drag-and-drop for editor ${id}`);
+
+    let dragCounter = 0;
+
+    // Prevent default drag behaviors on the document level
+    document.addEventListener('dragenter', preventDefaults, false);
+    document.addEventListener('dragover', preventDefaults, false);
+    document.addEventListener('dragleave', preventDefaults, false);
+    document.addEventListener('drop', preventDefaults, false);
+
+    // Prevent default drag behaviors on the textarea
+    textarea.addEventListener('dragenter', handleDragEnter, false);
+    textarea.addEventListener('dragover', handleDragOver, false);
+    textarea.addEventListener('dragleave', handleDragLeave, false);
+    textarea.addEventListener('drop', handleDrop, false);
+
+    // Also handle events on the container for better coverage
+    container.addEventListener('dragenter', handleDragEnter, false);
+    container.addEventListener('dragover', handleDragOver, false);
+    container.addEventListener('dragleave', handleDragLeave, false);
+    container.addEventListener('drop', handleDrop, false);
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function handleDragEnter(e) {
+        console.log('🔽 Drag enter detected', e.target);
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter++;
+        
+        // Only show overlay for files
+        if (e.dataTransfer.types.includes('Files')) {
+            console.log('📁 Files detected, showing overlay');
+            overlay.classList.remove('d-none');
+            overlay.classList.add('drag-over');
+        }
+    }
+
+    function handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (e.dataTransfer.types.includes('Files')) {
+            e.dataTransfer.dropEffect = 'copy';
+        }
+    }
+
+    function handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter--;
+        
+        if (dragCounter <= 0) {
+            console.log('🔼 Drag leave, hiding overlay');
+            dragCounter = 0;
+            overlay.classList.add('d-none');
+            overlay.classList.remove('drag-over');
+        }
+    }
+
+    function handleDrop(e) {
+        console.log('🎯 Drop detected!', e);
+        e.preventDefault();
+        e.stopPropagation();
+        dragCounter = 0;
+        
+        overlay.classList.add('d-none');
+        overlay.classList.remove('drag-over');
+        
+        const files = Array.from(e.dataTransfer.files);
+        console.log('📋 Files dropped:', files);
+        
+        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        
+        if (imageFiles.length === 0) {
+            showNotification('Please drop image files only', 'warning');
+            return;
+        }
+
+        // Process the first image file
+        if (imageFiles.length > 0) {
+            console.log('🖼️ Processing image file:', imageFiles[0]);
+            showUploadModal(imageFiles[0], instance);
+        }
+    }
+}
+
+// Show upload modal with file details
+function showUploadModal(file, instance) {
+    const modalId = `image-upload-modal-${instance.id}`;
+    const modal = new bootstrap.Modal(document.getElementById(modalId));
+    
+    const previewContainer = document.getElementById(`upload-preview-${instance.id}`);
+    const previewImage = document.getElementById(`preview-image-${instance.id}`);
+    const filenameInput = document.getElementById(`upload-filename-${instance.id}`);
+    const descriptionInput = document.getElementById(`upload-description-${instance.id}`);
+    const altTextInput = document.getElementById(`upload-alttext-${instance.id}`);
+    const confirmButton = document.getElementById(`upload-confirm-${instance.id}`);
+    
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        previewImage.src = e.target.result;
+        previewContainer.classList.remove('d-none');
+    };
+    reader.readAsDataURL(file);
+    
+    // Set default filename (without extension)
+    const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+    filenameInput.value = nameWithoutExt;
+    
+    // Clear other fields
+    descriptionInput.value = '';
+    altTextInput.value = '';
+    
+    // Handle upload confirmation
+    confirmButton.onclick = function() {
+        uploadImageFile(file, instance, {
+            filename: filenameInput.value.trim(),
+            description: descriptionInput.value.trim(),
+            altText: altTextInput.value.trim()
+        });
+        modal.hide();
+    };
+    
+    modal.show();
+}
+
+// Upload image file and insert template
+async function uploadImageFile(file, instance, metadata) {
+    const progressContainer = document.getElementById(`upload-progress-${instance.id}`);
+    const progressBar = progressContainer.querySelector('.progress-bar');
+    
+    progressContainer.classList.remove('d-none');
+    progressBar.style.width = '0%';
+    
+    try {
+        const formData = new FormData();
+        
+        // Use custom filename if provided, otherwise use original
+        if (metadata.filename) {
+            const extension = file.name.split('.').pop();
+            const newFile = new File([file], `${metadata.filename}.${extension}`, { type: file.type });
+            formData.append('file', newFile);
+        } else {
+            formData.append('file', file);
+        }
+        
+        if (metadata.description) {
+            formData.append('description', metadata.description);
+        }
+        if (metadata.altText) {
+            formData.append('altText', metadata.altText);
+        }
+
+        const response = await fetch('/api/media/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Upload failed');
+        }
+
+        const result = await response.json();
+        progressBar.style.width = '100%';
+        
+        // Insert media template at cursor position
+        const cursorPos = instance.textarea.selectionStart;
+        const currentContent = instance.textarea.value;
+        const mediaTemplate = `[[media:${result.fileName}]]`;
+        
+        const newContent = currentContent.substring(0, cursorPos) + 
+                          mediaTemplate + 
+                          currentContent.substring(cursorPos);
+        
+        instance.textarea.value = newContent;
+        instance.textarea.selectionStart = instance.textarea.selectionEnd = cursorPos + mediaTemplate.length;
+        
+        // Update preview and sync
+        updatePreview(instance);
+        updateStats(instance);
+        syncWithFormTextarea(instance, newContent);
+        
+        showNotification(`Image "${result.fileName}" uploaded and inserted successfully`, 'success');
+        
+    } catch (error) {
+        console.error('Upload failed:', error);
+        showNotification(`Upload failed: ${error.message}`, 'danger');
+    } finally {
+        progressContainer.classList.add('d-none');
+    }
+}
+
+// Show notification
+function showNotification(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">${message}</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    `;
+    
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+        container.style.zIndex = '1055';
+        document.body.appendChild(container);
+    }
+    
+    container.appendChild(toast);
+    
+    const bsToast = new bootstrap.Toast(toast);
+    bsToast.show();
+    
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
+
 // Mark content as committed (for collaboration coordination)
 window.markContentAsCommitted = function() {
     console.log('✅ Content marked as committed - collaboration aware');
@@ -1203,8 +1468,8 @@ function detectOperation(oldText, newText, oldSelectionStart, oldSelectionEnd, n
             const insertedText = newText.slice(oldSelectionStart, oldSelectionStart + insertedLength);
             
             console.log(`🔍 Selection replacement detected:`);
-            console.log(`  Old: "${oldText}" (selected "${selectedText}" at ${oldSelectionStart}-${oldSelectionEnd})`);
-            console.log(`  New: "${newText}" (inserted "${insertedText}")`);
+            console.log(`  Old: "${oldText}" (length: ${oldText.length}) (selected "${selectedText}" at ${oldSelectionStart}-${oldSelectionEnd})`);
+            console.log(`  New: "${newText}" (length: ${newText.length}) (inserted "${insertedText}" length: ${insertedText.length})`);
             
             return {
                 type: 'replace',

@@ -66,7 +66,7 @@
                                 {
                                     <tr>
                                         <td>@revision.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                                        <td>@revision.Author</td>
+                                        <td>@Html.UserLink(revision.Author, revision.Author)</td>
                                         <td>@(revision.Note ?? "No notes")</td>
                                         <td>
                                             <span class="badge bg-secondary">@revision.Format</span>
@@ -210,10 +210,10 @@
                 </h5>
                 <div class="d-flex gap-2 mb-3">
                     <div class="badge bg-info">
-                        From: @Model.CompareFromRevision.Author (@Model.CompareFromRevision.CreatedAt.ToString("MMM d, HH:mm"))
+                        From: @Html.UserLink(Model.CompareFromRevision.Author, Model.CompareFromRevision.Author) (@Model.CompareFromRevision.CreatedAt.ToString("MMM d, HH:mm"))
                     </div>
                     <div class="badge bg-success">
-                        To: @Model.CompareToRevision.Author (@Model.CompareToRevision.CreatedAt.ToString("MMM d, HH:mm"))
+                        To: @Html.UserLink(Model.CompareToRevision.Author, Model.CompareToRevision.Author) (@Model.CompareToRevision.CreatedAt.ToString("MMM d, HH:mm"))
                     </div>
                 </div>
                 <div class="card">
@@ -231,7 +231,7 @@
             <div class="mt-4">
                 <h5>
                     Revision from @Model.SelectedRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm")
-                    <small class="text-muted">by @Model.SelectedRevision.Author</small>
+                    <small class="text-muted">by @Html.UserLink(Model.SelectedRevision.Author, Model.SelectedRevision.Author)</small>
                 </h5>
                 @if (!string.IsNullOrWhiteSpace(Model.SelectedRevision.Note))
                 {

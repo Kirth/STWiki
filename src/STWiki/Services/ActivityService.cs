@@ -146,6 +146,7 @@ public class ActivityService
     {
         var query = _context.Activities
             .Include(a => a.Page)
+            .Include(a => a.User)
             .OrderByDescending(a => a.CreatedAt);
 
         if (!string.IsNullOrEmpty(activityType))
@@ -162,6 +163,7 @@ public class ActivityService
     {
         var query = _context.Activities
             .Include(a => a.Page)
+            .Include(a => a.User)
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.CreatedAt);
 
@@ -179,6 +181,7 @@ public class ActivityService
     {
         var query = _context.Activities
             .Include(a => a.Page)
+            .Include(a => a.User)
             .Where(a => a.PageId == pageId)
             .OrderByDescending(a => a.CreatedAt);
 

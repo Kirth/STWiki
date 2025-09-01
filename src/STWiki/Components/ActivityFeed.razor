@@ -30,7 +30,7 @@
                                 <div class="activity-description">
                                     @if (ShowUserName)
                                     {
-                                        <strong>@activity.UserDisplayName</strong>
+                                        <strong>@CreateUserLink(activity.User, activity.UserId, activity.UserDisplayName)</strong>
                                     }
                                     
                                     <span>@GetActivityVerb(activity.ActivityType)</span>
@@ -220,6 +220,59 @@
         }
         
         return "unknown";
+    }
+
+    private MarkupString CreateUserLink(STWiki.Data.Entities.User? user, string? userId, string? userDisplayName)
+    {
+        if (user != null)
+        {
+            // Use actual User object - get current display name and proper slug
+            var currentDisplayName = user.DisplayName ?? "User";
+            var slug = GetUserSlugFromUser(user);
+            var encodedDisplayName = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(currentDisplayName);
+            var encodedSlug = Uri.EscapeDataString(slug);
+            
+            return new MarkupString($"<a href=\"/user/{encodedSlug}\" class=\"text-decoration-none\">{encodedDisplayName}</a>");
+        }
+        else if (!string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(userDisplayName))
+        {
+            // Fallback to stored data if User object is not available
+            var slug = IsUserFriendlyIdentifier(userDisplayName) ? userDisplayName : userId;
+            var encodedDisplayName = System.Text.Encodings.Web.HtmlEncoder.Default.Encode(userDisplayName);
+            var encodedSlug = Uri.EscapeDataString(slug);
+            
+            return new MarkupString($"<a href=\"/user/{encodedSlug}\" class=\"text-decoration-none\">{encodedDisplayName}</a>");
+        }
+        else
+        {
+            return new MarkupString("<span class=\"text-muted\">Unknown User</span>");
+        }
+    }
+
+    private string GetUserSlugFromUser(STWiki.Data.Entities.User user)
+    {
+        if (!string.IsNullOrEmpty(user.PreferredUsername))
+            return user.PreferredUsername;
+        if (!string.IsNullOrEmpty(user.DisplayName))
+            return user.DisplayName;
+        return user.UserId;
+    }
+
+    private bool IsUserFriendlyIdentifier(string? identifier)
+    {
+        if (string.IsNullOrEmpty(identifier))
+            return false;
+            
+        // Check if it's a long base64-like string (sub claim)
+        if (identifier.Length > 40 && !identifier.Contains(" "))
+            return false;
+        
+        // Check if it's an email
+        if (identifier.Contains("@"))
+            return false;
+        
+        // Assume it's user-friendly if it's short and contains spaces or looks like a name
+        return identifier.Length <= 30;
     }
 }
 

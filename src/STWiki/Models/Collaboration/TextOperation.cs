@@ -56,6 +56,14 @@ public class TextOperation
     
     public static TextOperation Replace(int selectionStart, int selectionEnd, string newContent, string userId)
     {
+        // Validate and log potentially problematic content
+        if (!string.IsNullOrEmpty(newContent) && newContent.Contains("]]") && newContent.Contains("media:"))
+        {
+            Console.WriteLine($"🎯 Creating Replace operation with media template:");
+            Console.WriteLine($"  Content: '{newContent}' (length: {newContent.Length})");
+            Console.WriteLine($"  Range: {selectionStart}-{selectionEnd}");
+        }
+        
         return new TextOperation
         {
             OpType = OperationType.Replace,

@@ -74,12 +74,18 @@ namespace STWiki.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
+                    b.Property<long?>("UserEntityId")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserEntityId")
+                        .HasDatabaseName("IX_Activities_UserEntityId");
 
                     b.HasIndex("CreatedAt", "ActivityType")
                         .HasDatabaseName("IX_Activities_CreatedAt_Type");
@@ -91,6 +97,134 @@ namespace STWiki.Migrations
                         .HasDatabaseName("IX_Activities_UserId_CreatedAt");
 
                     b.ToTable("Activities");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.MediaFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AltText")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("BucketName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("StoredFileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("UploadedByUserId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OriginalFileName")
+                        .HasDatabaseName("IX_MediaFiles_OriginalFileName");
+
+                    b.HasIndex("UploadedAt")
+                        .HasDatabaseName("IX_MediaFiles_UploadedAt");
+
+                    b.HasIndex("UploadedByUserId")
+                        .HasDatabaseName("IX_MediaFiles_UploadedByUserId");
+
+                    b.HasIndex("IsDeleted", "IsPublic")
+                        .HasDatabaseName("IX_MediaFiles_IsDeleted_IsPublic");
+
+                    b.ToTable("MediaFiles");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.MediaThumbnail", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("BucketName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Height")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("MediaFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ObjectKey")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("StoredFileName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Width")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaFileId", "Width")
+                        .HasDatabaseName("IX_MediaThumbnails_MediaFileId_Width");
+
+                    b.ToTable("MediaThumbnails");
                 });
 
             modelBuilder.Entity("STWiki.Data.Entities.Page", b =>
@@ -153,6 +287,34 @@ namespace STWiki.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Slug"), "btree");
 
                     b.ToTable("Pages");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.PageMediaReference", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("MediaFileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PageId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaFileId")
+                        .HasDatabaseName("IX_PageMediaReferences_MediaFileId");
+
+                    b.HasIndex("PageId")
+                        .HasDatabaseName("IX_PageMediaReferences_PageId");
+
+                    b.ToTable("PageMediaReferences");
                 });
 
             modelBuilder.Entity("STWiki.Data.Entities.Redirect", b =>
@@ -232,6 +394,82 @@ namespace STWiki.Migrations
                     b.ToTable("Revisions");
                 });
 
+            modelBuilder.Entity("STWiki.Data.Entities.User", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("AvatarUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Bio")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("EmailNotifications")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsProfilePublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreferredUsername")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("ShowActivityPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowContributionsPublic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ThemePreference")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Email")
+                        .HasDatabaseName("IX_Users_Email");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Users_UserId");
+
+                    b.ToTable("Users");
+                });
+
             modelBuilder.Entity("STWiki.Data.Entities.Activity", b =>
                 {
                     b.HasOne("STWiki.Data.Entities.Page", "Page")
@@ -239,7 +477,37 @@ namespace STWiki.Migrations
                         .HasForeignKey("PageId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("STWiki.Data.Entities.User", "User")
+                        .WithMany("Activities")
+                        .HasForeignKey("UserId")
+                        .HasPrincipalKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .IsRequired();
+
                     b.Navigation("Page");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.MediaFile", b =>
+                {
+                    b.HasOne("STWiki.Data.Entities.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.MediaThumbnail", b =>
+                {
+                    b.HasOne("STWiki.Data.Entities.MediaFile", "MediaFile")
+                        .WithMany("Thumbnails")
+                        .HasForeignKey("MediaFileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaFile");
                 });
 
             modelBuilder.Entity("STWiki.Data.Entities.Page", b =>
@@ -250,6 +518,25 @@ namespace STWiki.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Parent");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.PageMediaReference", b =>
+                {
+                    b.HasOne("STWiki.Data.Entities.MediaFile", "MediaFile")
+                        .WithMany("PageReferences")
+                        .HasForeignKey("MediaFileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("STWiki.Data.Entities.Page", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaFile");
+
+                    b.Navigation("Page");
                 });
 
             modelBuilder.Entity("STWiki.Data.Entities.Revision", b =>
@@ -263,11 +550,23 @@ namespace STWiki.Migrations
                     b.Navigation("Page");
                 });
 
+            modelBuilder.Entity("STWiki.Data.Entities.MediaFile", b =>
+                {
+                    b.Navigation("PageReferences");
+
+                    b.Navigation("Thumbnails");
+                });
+
             modelBuilder.Entity("STWiki.Data.Entities.Page", b =>
                 {
                     b.Navigation("Children");
 
                     b.Navigation("Revisions");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.User", b =>
+                {
+                    b.Navigation("Activities");
                 });
 #pragma warning restore 612, 618
         }

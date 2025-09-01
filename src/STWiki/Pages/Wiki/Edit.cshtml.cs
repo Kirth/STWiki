@@ -286,7 +286,7 @@ public class EditModel : PageModel
         var now = DateTime.UtcNow;
 
 
-        if (string.IsNullOrEmpty(routeSlug) || routeSlug.Equals("new", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrEmpty(routeSlug) || routeSlug.Equals("new", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(OriginalSlug))
         {
             IsNew = true;
             if (string.IsNullOrWhiteSpace(Slug))
@@ -365,7 +365,7 @@ public class EditModel : PageModel
         {
             // Update existing page - use OriginalSlug to find the existing record
             var existingPage = await _context.Pages
-                .FirstOrDefaultAsync(p => p.Slug.ToLower() == OriginalSlug!.ToLower());
+                .FirstOrDefaultAsync(p => p.Slug.ToLower() == OriginalSlug.ToLower());
 
             if (existingPage == null)
             {

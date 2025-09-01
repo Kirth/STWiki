@@ -11,21 +11,25 @@ namespace STWiki.Pages.User;
 public class ProfileModel : PageModel
 {
     private readonly ActivityService _activityService;
+    private readonly UserService _userService;
     private readonly AppDbContext _context;
 
-    public ProfileModel(ActivityService activityService, AppDbContext context)
+    public ProfileModel(ActivityService activityService, UserService userService, AppDbContext context)
     {
         _activityService = activityService;
+        _userService = userService;
         _context = context;
     }
 
     [BindProperty(SupportsGet = true)]
     public string Username { get; set; } = "";
 
+    public STWiki.Data.Entities.User? UserProfile { get; set; }
     public string UserId { get; set; } = "";
     public string DisplayName { get; set; } = "";
     public string Bio { get; set; } = "";
     public bool IsCurrentUser { get; set; }
+    public bool IsProfileVisible { get; set; } = true;
     public int TotalContributions { get; set; }
     public int PagesCreated { get; set; }
     public DateTimeOffset? LastActive { get; set; }
@@ -44,17 +48,44 @@ public class ProfileModel : PageModel
 
         try
         {
+            // Try to find user by any identifier (username, display name, sub, email)
+            UserProfile = await _userService.GetUserByIdentifierAsync(Username);
+
             // Determine if this is the current user
             var currentUserName = User.Identity?.Name;
             IsCurrentUser = !string.IsNullOrEmpty(currentUserName) && 
-                           currentUserName.Equals(Username, StringComparison.OrdinalIgnoreCase);
+                           (currentUserName.Equals(Username, StringComparison.OrdinalIgnoreCase) ||
+                            (UserProfile != null && currentUserName.Equals(UserProfile.UserId, StringComparison.OrdinalIgnoreCase)));
 
-            // Set basic user info
-            DisplayName = Username; // In a real system, this would come from user profile
-            UserId = Username; // For simplicity, using username as userId
+            // Check if profile is visible
+            if (UserProfile != null)
+            {
+                IsProfileVisible = UserProfile.IsProfilePublic || IsCurrentUser;
+                
+                if (!IsProfileVisible)
+                {
+                    return Page(); // Return page but with limited info
+                }
+
+                // Set user info from profile
+                DisplayName = UserProfile.DisplayName;
+                Bio = UserProfile.Bio;
+                UserId = UserProfile.UserId;
+                MemberSince = UserProfile.CreatedAt;
+            }
+            else
+            {
+                // Fallback for users without profile records
+                DisplayName = Username;
+                UserId = Username;
+                IsProfileVisible = true; // Always show if no profile exists
+            }
             
-            // Load user activities
-            await LoadUserStatistics();
+            // Load user activities if profile is visible
+            if (IsProfileVisible)
+            {
+                await LoadUserStatistics();
+            }
             
             return Page();
         }

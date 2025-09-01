@@ -24,6 +24,7 @@ public class ViewModel : PageModel
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
+    public STWiki.Data.Entities.User? UpdatedByUser { get; set; }
     public string Slug { get; set; } = string.Empty;
     public string RenderedContent { get; set; } = string.Empty;
 
@@ -47,6 +48,13 @@ public class ViewModel : PageModel
 
         if (Page != null)
         {
+            // Look up the user who last updated this page
+            if (!string.IsNullOrEmpty(Page.UpdatedBy))
+            {
+                UpdatedByUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.UserId == Page.UpdatedBy);
+            }
+
             // Render content based on format
             RenderedContent = Page.BodyFormat switch
             {

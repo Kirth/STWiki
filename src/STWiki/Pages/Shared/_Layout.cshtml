@@ -70,6 +70,15 @@
                                         Advanced Search
                                     </a>
                                 </li>
+                                @if (User.Identity?.IsAuthenticated == true && (User.HasClaim("groups", "stwiki-editor") || User.HasClaim("groups", "stwiki-admin")))
+                                {
+                                <li>
+                                    <a class="dropdown-item" href="/media">
+                                        <i class="bi bi-file-earmark-image me-2 text-warning"></i>
+                                        Media Library
+                                    </a>
+                                </li>
+                                }
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <a class="dropdown-item" href="/new">
@@ -91,23 +100,39 @@
                                    role="button" 
                                    data-bs-toggle="dropdown">
                                     <i class="bi bi-person-circle me-2 fs-5"></i>
-                                    <span class="d-none d-md-inline">@(User.Identity.Name ?? "User")</span>
+                                    <span class="d-none d-md-inline">@(User.FindFirst("display_name")?.Value ?? User.FindFirst("name")?.Value ?? "User")</span>
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end shadow">
-                                    <li><h6 class="dropdown-header">@(User.Identity.Name ?? "User")</h6></li>
+                                    <li><h6 class="dropdown-header">@(User.FindFirst("display_name")?.Value ?? User.FindFirst("name")?.Value ?? "User")</h6></li>
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
-                                        <a class="dropdown-item" href="/user/@Uri.EscapeDataString(User.Identity.Name ?? "")">
+                                        <a class="dropdown-item" href="/user/@Uri.EscapeDataString(User.FindFirst("user_slug")?.Value ?? User.Identity.Name ?? "")">
                                             <i class="bi bi-person me-2"></i>
                                             My Profile
                                         </a>
                                     </li>
                                     <li>
-                                        <a class="dropdown-item" href="/user/@Uri.EscapeDataString(User.Identity.Name ?? "")/contributions">
+                                        <a class="dropdown-item" href="/user/@Uri.EscapeDataString(User.FindFirst("user_slug")?.Value ?? User.Identity.Name ?? "")/contributions">
                                             <i class="bi bi-journal-text me-2"></i>
                                             My Contributions
                                         </a>
                                     </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="/user/dashboard">
+                                            <i class="bi bi-gear me-2"></i>
+                                            Control Panel
+                                        </a>
+                                    </li>
+                                    @if (User.HasClaim("groups", "stwiki-admin"))
+                                    {
+                                        <li>
+                                            <a class="dropdown-item" href="/admin/dashboard">
+                                                <i class="bi bi-shield-check me-2 text-warning"></i>
+                                                Admin Panel
+                                            </a>
+                                        </li>
+                                    }
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <a class="dropdown-item" href="/Account/Logout">

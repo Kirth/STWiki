@@ -18,6 +18,10 @@ public class Activity
     [MaxLength(255)]
     public string UserDisplayName { get; set; } = "";
 
+    public long? UserEntityId { get; set; }
+
+    public virtual User? User { get; set; }
+
     public Guid? PageId { get; set; }
 
     public virtual Page? Page { get; set; }
@@ -56,4 +60,7 @@ public static class ActivityTypes
     public const string SearchPerformed = "search_performed";
     public const string RedirectCreated = "redirect_created";
     public const string RedirectDeleted = "redirect_deleted";
+    public const string MediaUploaded = "media_uploaded";
+    public const string MediaDeleted = "media_deleted";
+    public const string MediaUpdated = "media_updated";
 }

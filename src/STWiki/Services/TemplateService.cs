@@ -10,11 +10,13 @@ public class TemplateService
 {
     private readonly AppDbContext _context;
     private readonly ILogger<TemplateService> _logger;
+    private readonly IMediaService _mediaService;
 
-    public TemplateService(AppDbContext context, ILogger<TemplateService> logger)
+    public TemplateService(AppDbContext context, ILogger<TemplateService> logger, IMediaService mediaService)
     {
         _context = context;
         _logger = logger;
+        _mediaService = mediaService;
     }
 
     public async Task<string> ProcessTemplatesAsync(string content, Page? currentPage = null)
@@ -300,13 +302,15 @@ public class TemplateService
     {
         try
         {
-            // Get top contributors from Activities table
+            // Get top contributors from Activities table - join with Users to get current display names
             var topContributors = await _context.Activities
                 .Where(a => a.ActivityType == ActivityTypes.PageUpdated || a.ActivityType == ActivityTypes.PageCreated)
-                .GroupBy(a => a.UserDisplayName)
+                .Include(a => a.User)
+                .Where(a => a.User != null) // Only include activities with valid user references
+                .GroupBy(a => a.User!.Id) // Group by User ID to handle display name changes
                 .Select(g => new
                 {
-                    UserName = g.Key,
+                    User = g.First().User!,
                     EditCount = g.Count(x => x.ActivityType == ActivityTypes.PageUpdated),
                     CreateCount = g.Count(x => x.ActivityType == ActivityTypes.PageCreated),
                     TotalContributions = g.Count(),
@@ -334,7 +338,13 @@ public class TemplateService
             var rank = 1;
             foreach (var contributor in topContributors)
             {
-                var userName = System.Web.HttpUtility.HtmlEncode(contributor.UserName ?? "Anonymous");
+                var user = contributor.User;
+                var userDisplayName = user?.DisplayName ?? "Anonymous";
+                var userSlug = user != null ? GetUserSlugFromUser(user) : "";
+                var userLink = user != null 
+                    ? $"<a href=\"/user/{Uri.EscapeDataString(userSlug)}\" class=\"text-decoration-none fw-medium text-truncate\">{System.Web.HttpUtility.HtmlEncode(userDisplayName)}</a>"
+                    : $"<div class=\"fw-medium text-truncate\">{System.Web.HttpUtility.HtmlEncode(userDisplayName)}</div>";
+                    
                 var rankIcon = rank <= 3 ? "bi-trophy-fill" : "bi-person-fill";
                 var rankColor = rank switch
                 {
@@ -350,7 +360,7 @@ public class TemplateService
         <span class=""me-2"">#{rank}</span>
         <i class=""bi {rankIcon} {rankColor} me-2""></i>
         <div class=""flex-grow-1 min-w-0"">
-          <div class=""fw-medium text-truncate"">{userName}</div>
+          {userLink}
           <small class=""text-muted"">{contributor.CreateCount} pages created, {contributor.EditCount} edits</small>
         </div>
       </div>
@@ -477,15 +487,13 @@ public class TemplateService
     {
         try
         {
-            // Get recently edited pages with user information
+            // Get recently edited pages with user information - join with Users table to get current display names
             var recentlyEdited = await _context.Activities
                 .Where(a => a.ActivityType == ActivityTypes.PageUpdated)
+                .Include(a => a.User)
+                .Include(a => a.Page)
                 .OrderByDescending(a => a.CreatedAt)
                 .Take(limit)
-                .Join(_context.Pages,
-                      activity => activity.PageId,
-                      page => page.Id,
-                      (activity, page) => new { activity, page })
                 .ToListAsync();
 
             if (!recentlyEdited.Any())
@@ -503,18 +511,22 @@ public class TemplateService
 </header>
   <ul class=""list-unstyled mb-0"">");
 
-            foreach (var item in recentlyEdited)
+            foreach (var activity in recentlyEdited)
             {
-                var title = System.Web.HttpUtility.HtmlEncode(item.page.Title ?? "(Untitled)");
-                var userName = System.Web.HttpUtility.HtmlEncode(item.activity.UserDisplayName ?? "Anonymous");
-                var iso = item.activity.CreatedAt.ToString("O");
-                var display = item.activity.CreatedAt.ToString("MMM dd, yyyy · HH:mm");
+                var title = System.Web.HttpUtility.HtmlEncode(activity.Page?.Title ?? "(Untitled)");
+                var user = activity.User;
+                var userDisplayName = user?.DisplayName ?? "Anonymous";
+                var userLink = user != null 
+                    ? $"<a href=\"/user/{Uri.EscapeDataString(GetUserSlugFromUser(user))}\" class=\"text-decoration-none\">{System.Web.HttpUtility.HtmlEncode(userDisplayName)}</a>"
+                    : "<span class=\"text-muted\">Anonymous</span>";
+                var iso = activity.CreatedAt.ToString("O");
+                var display = activity.CreatedAt.ToString("MMM dd, yyyy · HH:mm");
 
                 sb.Append($@"
     <li class=""py-2 px-1 border-top"">
       <div class=""d-flex justify-content-between align-items-start"">
         <div class=""flex-grow-1 min-w-0"">
-          <a class=""text-decoration-none fw-medium d-block text-truncate"" href=""/{item.page.Slug}"" title=""{title}"">
+          <a class=""text-decoration-none fw-medium d-block text-truncate"" href=""/{activity.Page?.Slug}"" title=""{title}"">
             <i class=""bi bi-pencil me-2 text-muted""></i>{title}
           </a>");
 
@@ -522,7 +534,7 @@ public class TemplateService
                 {
                     sb.Append($@"
           <div class=""text-muted small mt-1"">
-            <i class=""bi bi-person-fill me-1""></i>Edited by {userName}
+            <i class=""bi bi-person-fill me-1""></i>Edited by {userLink}
           </div>");
                 }
 
@@ -555,6 +567,13 @@ public class TemplateService
             if (string.IsNullOrWhiteSpace(pageSlug))
             {
                 return "[[]]";
+            }
+
+            // Handle media links: [[media:filename]]
+            if (pageSlug.StartsWith("media:", StringComparison.OrdinalIgnoreCase))
+            {
+                var mediaName = pageSlug.Substring(6).Trim();
+                return await RenderMediaLinkAsync(mediaName);
             }
 
             // Handle custom display text: [[page-slug|Display Text]]
@@ -596,6 +615,118 @@ public class TemplateService
             _logger.LogError(ex, "Failed to render wiki link for page slug: {PageSlug}", pageSlug);
             return $"[[{System.Web.HttpUtility.HtmlEncode(pageSlug)}]]";
         }
+    }
+
+    private async Task<string> RenderMediaLinkAsync(string mediaName)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(mediaName))
+            {
+                return "[[media:]]";
+            }
+
+            var mediaFile = await _mediaService.GetMediaFileByNameAsync(mediaName);
+            
+            if (mediaFile == null)
+            {
+                return $"<span class=\"text-danger\" title=\"Media file '{mediaName}' not found\">[[media:{System.Web.HttpUtility.HtmlEncode(mediaName)}]]</span>";
+            }
+
+            if (IsImage(mediaFile.ContentType))
+            {
+                var thumbnailUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id, 600);
+                var fullUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id);
+                
+                return $@"
+                    <div class=""media-embed image-embed mb-3"">
+                        <a href=""{fullUrl}"" target=""_blank"" class=""text-decoration-none"">
+                            <img src=""{thumbnailUrl}"" 
+                                 alt=""{System.Web.HttpUtility.HtmlEncode(mediaFile.AltText ?? mediaFile.OriginalFileName)}"" 
+                                 class=""img-fluid rounded shadow-sm""
+                                 style=""max-width: 100%; height: auto;"">
+                        </a>
+                        {(!string.IsNullOrEmpty(mediaFile.Description) ? 
+                            $"<small class=\"text-muted d-block mt-1\">{System.Web.HttpUtility.HtmlEncode(mediaFile.Description)}</small>" : 
+                            "")}
+                    </div>";
+            }
+            else
+            {
+                var fileUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id);
+                var fileSize = FormatFileSize(mediaFile.FileSize);
+                var icon = GetFileIcon(mediaFile.ContentType);
+                
+                return $@"
+                    <div class=""media-embed file-embed mb-2"">
+                        <a href=""{fileUrl}"" class=""text-decoration-none d-flex align-items-center p-2 border rounded"" target=""_blank"">
+                            <i class=""bi bi-{icon} fs-4 text-primary me-3""></i>
+                            <div class=""flex-grow-1"">
+                                <div class=""fw-medium"">{System.Web.HttpUtility.HtmlEncode(mediaFile.OriginalFileName)}</div>
+                                <small class=""text-muted"">{fileSize}</small>
+                                {(!string.IsNullOrEmpty(mediaFile.Description) ? 
+                                    $"<div class=\"text-muted small\">{System.Web.HttpUtility.HtmlEncode(mediaFile.Description)}</div>" : 
+                                    "")}
+                            </div>
+                            <i class=""bi bi-download ms-2 text-muted""></i>
+                        </a>
+                    </div>";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to render media link for: {MediaName}", mediaName);
+            return $"<span class=\"text-danger\">[[media:{System.Web.HttpUtility.HtmlEncode(mediaName)}]]</span>";
+        }
+    }
+
+    private static bool IsImage(string contentType) =>
+        contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes == 0) return "0 Bytes";
+        const int k = 1024;
+        string[] sizes = { "Bytes", "KB", "MB", "GB" };
+        int i = (int)Math.Floor(Math.Log(bytes) / Math.Log(k));
+        return $"{Math.Round(bytes / Math.Pow(k, i), 2)} {sizes[i]}";
+    }
+
+    private static string GetFileIcon(string contentType)
+    {
+        if (contentType.StartsWith("image/")) return "file-earmark-image";
+        if (contentType.Contains("pdf")) return "file-earmark-pdf";
+        if (contentType.Contains("word") || contentType.Contains("document")) return "file-earmark-word";
+        if (contentType.Contains("excel") || contentType.Contains("spreadsheet")) return "file-earmark-excel";
+        if (contentType.Contains("powerpoint") || contentType.Contains("presentation")) return "file-earmark-ppt";
+        if (contentType.StartsWith("text/")) return "file-earmark-text";
+        return "file-earmark";
+    }
+
+    private string GetUserSlugFromUser(STWiki.Data.Entities.User user)
+    {
+        if (!string.IsNullOrEmpty(user.PreferredUsername))
+            return user.PreferredUsername;
+        if (!string.IsNullOrEmpty(user.DisplayName))
+            return user.DisplayName;
+        return user.UserId;
+    }
+
+    private bool IsUserFriendlyIdentifier(string? identifier)
+    {
+        if (string.IsNullOrEmpty(identifier))
+            return false;
+            
+        // Check if it's a long base64-like string (sub claim)
+        if (identifier.Length > 40 && !identifier.Contains(" "))
+            return false;
+        
+        // Check if it's an email
+        if (identifier.Contains("@"))
+            return false;
+        
+        // Assume it's user-friendly if it's short and contains spaces or looks like a name
+        return identifier.Length <= 30;
     }
 
 

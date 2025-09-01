@@ -73,7 +73,14 @@ else
         </div>
         
         <footer class="mt-4 pt-3 border-top text-muted small">
-            Last updated @Model.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Model.Page.UpdatedBy
+            @if (Model.UpdatedByUser != null)
+            {
+                <text>Last updated @Model.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Html.UserLink(Model.UpdatedByUser)</text>
+            }
+            else
+            {
+                <text>Last updated @Model.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Html.UserLink(Model.Page.UpdatedBy, Model.Page.UpdatedBy)</text>
+            }
         </footer>
     </div>
 }

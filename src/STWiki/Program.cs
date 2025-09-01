@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Minio;
 using STWiki.Data;
+using STWiki.Models;
 using STWiki.Services;
 using System.Security.Claims;
 
@@ -35,12 +37,35 @@ builder.Services.AddScoped<STWiki.Services.ActivityService>();
 builder.Services.AddScoped<STWiki.Services.BreadcrumbService>();
 builder.Services.AddScoped<STWiki.Services.IPageHierarchyService, STWiki.Services.PageHierarchyService>();
 builder.Services.AddScoped<STWiki.Services.AdvancedSearchService>();
+builder.Services.AddScoped<STWiki.Services.UserService>();
+builder.Services.AddScoped<STWiki.Services.AdminService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
 // Add configuration options
 builder.Services.Configure<STWiki.Models.CollaborationOptions>(
     builder.Configuration.GetSection(STWiki.Models.CollaborationOptions.SectionName));
+builder.Services.Configure<ObjectStorageConfiguration>(
+    builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName));
+builder.Services.Configure<MediaConfiguration>(
+    builder.Configuration.GetSection(MediaConfiguration.SectionName));
+
+// Add media services
+var storageConfig = builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName).Get<ObjectStorageConfiguration>() 
+    ?? new ObjectStorageConfiguration();
+
+builder.Services.AddSingleton<IMinioClient>(provider =>
+{
+    var config = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ObjectStorageConfiguration>>().Value;
+    return new MinioClient()
+        .WithEndpoint(config.Endpoint)
+        .WithCredentials(config.AccessKey, config.SecretKey)
+        .WithSSL(config.UseSSL)
+        .Build();
+});
+
+builder.Services.AddScoped<IObjectStorageService, MinIOStorageService>();
+builder.Services.AddScoped<IMediaService, MediaService>();
 
 // Add SignalR
 builder.Services.AddSignalR();

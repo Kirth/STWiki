@@ -161,11 +161,14 @@ public class EditSession
                     
                     Console.WriteLine($"📋 EditSession Apply Replace:");
                     Console.WriteLine($"  Current: '{CurrentContent}'");
+                    Console.WriteLine($"  Current length: {CurrentContent.Length}");
                     Console.WriteLine($"  Replace range {operation.SelectionStart}-{operation.SelectionEnd} ('{selectedText}') with '{operation.Content}'");
+                    Console.WriteLine($"  operation.Content length: {operation.Content?.Length ?? 0}");
                     
                     CurrentContent = before + (operation.Content ?? "") + after;
                     
                     Console.WriteLine($"  Result: '{CurrentContent}'");
+                    Console.WriteLine($"  Result length: {CurrentContent.Length}");
                 }
                 else
                 {

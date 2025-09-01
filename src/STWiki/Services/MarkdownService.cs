@@ -31,13 +31,16 @@ public class MarkdownService
         if (string.IsNullOrEmpty(markdown))
             return string.Empty;
 
-        // Process templates first if template service is provided
+        // Convert Markdown to HTML first
+        var html = Markdown.ToHtml(markdown, _pipeline);
+
+        // Then process templates in the HTML if template service is provided
         if (templateService != null)
         {
-            markdown = await templateService.ProcessTemplatesAsync(markdown, currentPage);
+            html = await templateService.ProcessTemplatesAsync(html, currentPage);
         }
 
-        return Markdown.ToHtml(markdown, _pipeline);
+        return html;
     }
 
     public string ConvertHtmlToMarkdown(string html)
