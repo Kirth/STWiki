@@ -4,255 +4,486 @@
     ViewData["Title"] = $"History - {Model.Page?.Title ?? Model.Slug}";
 }
 
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h1>Page History</h1>
-        <div>
-            @{
-                var pageSlug = Model.Slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
-                    ? Model.Slug.Substring(0, Model.Slug.Length - "/history".Length)
-                    : Model.Slug;
-            }
-            <a asp-page="/Wiki/View" asp-route-slug="@pageSlug" class="btn btn-outline-primary">View Page</a>
-            @if (User.Identity?.IsAuthenticated == true)
-            {
-                <a asp-page="/Wiki/Edit" asp-route-slug="@pageSlug" class="btn btn-outline-secondary">Edit Page</a>
-            }
+<div class="container-fluid px-4 py-3">
+    <!-- Enhanced Header with Breadcrumbs -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <!-- Breadcrumb Navigation -->
+            <nav aria-label="breadcrumb" class="mb-3">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="/" class="text-decoration-none"><i class="bi bi-house-door"></i> Home</a></li>
+                    <li class="breadcrumb-item">
+                        @{
+                            var pageSlug = Model.Slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+                                ? Model.Slug.Substring(0, Model.Slug.Length - "/history".Length)
+                                : Model.Slug;
+                        }
+                        <a asp-page="/Wiki/View" asp-route-slug="@pageSlug" class="text-decoration-none">@(Model.Page?.Title ?? pageSlug)</a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">History</li>
+                </ol>
+            </nav>
+            
+            <!-- Page Title Section -->
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-clock-history text-primary fs-4"></i>
+                        <h1 class="mb-0 fs-2 fw-bold text-dark">Page History</h1>
+                    </div>
+                    @if (Model.Page != null)
+                    {
+                        <div class="text-muted fs-6">
+                            <span class="badge bg-light text-dark me-2"><i class="bi bi-file-text"></i> @Model.Page.Title</span>
+                            <span class="me-3"><i class="bi bi-calendar3"></i> Created @Model.Page.CreatedAt.ToString("MMM dd, yyyy")</span>
+                            <span><i class="bi bi-pencil"></i> Last updated @Model.Page.UpdatedAt.ToString("MMM dd, yyyy 'at' HH:mm")</span>
+                        </div>
+                    }
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="btn-group" role="group">
+                    <a asp-page="/Wiki/View" asp-route-slug="@pageSlug" class="btn btn-outline-primary">
+                        <i class="bi bi-eye"></i> View Page
+                    </a>
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <a asp-page="/Wiki/Edit" asp-route-slug="@pageSlug" class="btn btn-primary">
+                            <i class="bi bi-pencil"></i> Edit Page
+                        </a>
+                    }
+                </div>
+            </div>
         </div>
     </div>
 
     @if (Model.Page == null)
     {
-        <div class="alert alert-warning">
-            <h4>Page Not Found</h4>
-            <p>The page "@Model.Slug" does not exist.</p>
-            @if (User.Identity?.IsAuthenticated == true)
-            {
-                <a asp-page="/Wiki/Edit" asp-route-slug="@pageSlug" class="btn btn-primary">Create Page</a>
-            }
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-warning border-0 shadow-sm">
+                    <div class="d-flex align-items-center gap-3">
+                        <i class="bi bi-exclamation-triangle fs-2 text-warning"></i>
+                        <div>
+                            <h4 class="alert-heading mb-1">Page Not Found</h4>
+                            <p class="mb-2">The page "<strong>@Model.Slug</strong>" does not exist in the wiki.</p>
+                            @if (User.Identity?.IsAuthenticated == true)
+                            {
+                                <a asp-page="/Wiki/Edit" asp-route-slug="@pageSlug" class="btn btn-primary">
+                                    <i class="bi bi-plus-circle"></i> Create Page
+                                </a>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     }
     else
     {
-        <div class="mb-3">
-            <h3>@Model.Page.Title</h3>
-            <p class="text-muted">Created @Model.Page.CreatedAt.ToString("yyyy-MM-dd HH:mm") • Last updated @Model.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</p>
-        </div>
-
-        @if (Model.Revisions?.Any() == true)
-        {
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Revision History</h5>
-                    <small class="text-muted">
-                        Showing @Model.Revisions.Count of @Model.TotalRevisions revisions 
-                        (Page @Model.CurrentPage of @Model.TotalPages)
-                    </small>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Author</th>
-                                    <th>Note</th>
-                                    <th>Format</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var revision in Model.Revisions)
-                                {
-                                    <tr>
-                                        <td>@revision.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                                        <td>@Html.UserLink(revision.Author, revision.Author)</td>
-                                        <td>@(revision.Note ?? "No notes")</td>
-                                        <td>
-                                            <span class="badge bg-secondary">@revision.Format</span>
-                                        </td>
-                                        <td>
-                                            <div class="btn-group btn-group-sm">
-                                                <a asp-page-handler="ViewRevision" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" 
-                                                   class="btn btn-outline-primary btn-sm">View</a>
-                                                <div class="dropdown">
-                                                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                                                        Diff
-                                                    </button>
-                                                    <ul class="dropdown-menu">
-                                                        @{
-                                                            var previousRevision = Model.Revisions
-                                                                .SkipWhile(r => r.Id != revision.Id)
-                                                                .Skip(1)
-                                                                .FirstOrDefault();
-                                                        }
-                                                        @if (previousRevision != null)
-                                                        {
-                                                            <li>
-                                                                <a class="dropdown-item" 
-                                                                   asp-page-handler="Diff" 
-                                                                   asp-route-slug="@Model.Slug" 
-                                                                   asp-route-fromRevisionId="@previousRevision.Id" 
-                                                                   asp-route-toRevisionId="@revision.Id">
-                                                                    vs Previous
-                                                                </a>
-                                                            </li>
-                                                        }
-                                                        <li>
-                                                            <a class="dropdown-item" 
-                                                               asp-page-handler="Diff" 
-                                                               asp-route-slug="@Model.Slug" 
-                                                               asp-route-fromRevisionId="@revision.Id" 
-                                                               asp-route-toRevisionId="@Model.Revisions.First().Id">
-                                                                vs Current
-                                                            </a>
-                                                        </li>
-                                                    </ul>
-                                                </div>
-                                                @if (User.Identity?.IsAuthenticated == true)
-                                                {
-                                                    <form method="post" asp-page-handler="Restore" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" style="display:inline">
-                                                        <button type="submit" class="btn btn-outline-warning btn-sm" 
-                                                                onclick="return confirm('Are you sure you want to restore this revision? This will create a new revision with the restored content.')">
-                                                            Restore
-                                                        </button>
-                                                    </form>
-                                                }
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                @if (Model.TotalPages > 1)
-                {
-                    <div class="card-footer">
-                        <nav aria-label="Revision history pagination" class="d-flex justify-content-center">
-                            <ul class="pagination mb-0">
-                                <!-- Previous Page -->
-                                <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
-                                    <a class="page-link" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@(Model.CurrentPage - 1)">
-                                        <i class="bi bi-chevron-left"></i> Previous
-                                    </a>
-                                </li>
-                                
-                                <!-- Page Numbers -->
-                                @{
-                                    var startPage = Math.Max(1, Model.CurrentPage - 2);
-                                    var endPage = Math.Min(Model.TotalPages, Model.CurrentPage + 2);
-                                }
-                                
-                                @if (startPage > 1)
-                                {
-                                    <li class="page-item">
-                                        <a class="page-link" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="1">1</a>
-                                    </li>
-                                    @if (startPage > 2)
-                                    {
-                                        <li class="page-item disabled">
-                                            <span class="page-link">...</span>
-                                        </li>
-                                    }
-                                }
-                                
-                                @for (var i = startPage; i <= endPage; i++)
-                                {
-                                    <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
-                                        <a class="page-link" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@i">@i</a>
-                                    </li>
-                                }
-                                
-                                @if (endPage < Model.TotalPages)
-                                {
-                                    @if (endPage < Model.TotalPages - 1)
-                                    {
-                                        <li class="page-item disabled">
-                                            <span class="page-link">...</span>
-                                        </li>
-                                    }
-                                    <li class="page-item">
-                                        <a class="page-link" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@Model.TotalPages">@Model.TotalPages</a>
-                                    </li>
-                                }
-                                
-                                <!-- Next Page -->
-                                <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
-                                    <a class="page-link" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@(Model.CurrentPage + 1)">
-                                        Next <i class="bi bi-chevron-right"></i>
-                                    </a>
-                                </li>
-                            </ul>
-                        </nav>
-                    </div>
-                }
-            </div>
-        }
-        else
-        {
-            <div class="alert alert-info">
-                <p><strong>No revision history available.</strong></p>
-                <p>This page may have been created before revision tracking was enabled, or the revision history may have been cleared.</p>
-            </div>
-        }
-
         @if (Model.CompareFromRevision != null && Model.CompareToRevision != null)
         {
-            <div class="mt-4">
-                <h5>
-                    Diff: Comparing Changes
-                    <small class="text-muted">
-                        from @Model.CompareFromRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm") 
-                        to @Model.CompareToRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm")
-                    </small>
-                </h5>
-                <div class="d-flex gap-2 mb-3">
-                    <div class="badge bg-info">
-                        From: @Html.UserLink(Model.CompareFromRevision.Author, Model.CompareFromRevision.Author) (@Model.CompareFromRevision.CreatedAt.ToString("MMM d, HH:mm"))
-                    </div>
-                    <div class="badge bg-success">
-                        To: @Html.UserLink(Model.CompareToRevision.Author, Model.CompareToRevision.Author) (@Model.CompareToRevision.CreatedAt.ToString("MMM d, HH:mm"))
-                    </div>
-                </div>
-                <div class="card">
-                    <div class="card-header">
-                        <h6 class="mb-0">Content Changes</h6>
-                    </div>
-                    <div class="card-body p-0">
-                        @Html.Raw(Model.DiffHtml)
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-gradient" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="text-white">
+                                    <h5 class="mb-1 fw-bold">
+                                        <i class="bi bi-file-diff"></i> Comparing Changes
+                                    </h5>
+                                    <small class="opacity-75">
+                                        From @Model.CompareFromRevision.CreatedAt.ToString("MMM dd, yyyy HH:mm") 
+                                        to @Model.CompareToRevision.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                                    </small>
+                                </div>
+                                
+                                <!-- Enhanced Diff Controls -->
+                                <div class="diff-controls">
+                                    <div class="btn-group me-2" role="group" aria-label="Diff view options">
+                                        <a class="btn btn-sm @(Model.DiffViewMode == "unified" || string.IsNullOrEmpty(Model.DiffViewMode) ? "btn-light" : "btn-outline-light")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="unified"
+                                           asp-route-granularity="@(Model.DiffGranularity ?? "line")">
+                                            <i class="bi bi-list-ul"></i> Unified
+                                        </a>
+                                        <a class="btn btn-sm @(Model.DiffViewMode == "sidebyside" ? "btn-light" : "btn-outline-light")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="sidebyside"
+                                           asp-route-granularity="@(Model.DiffGranularity ?? "line")">
+                                            <i class="bi bi-columns-gap"></i> Side-by-Side
+                                        </a>
+                                        <a class="btn btn-sm @(Model.DiffViewMode == "inline" ? "btn-light" : "btn-outline-light")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="inline"
+                                           asp-route-granularity="@(Model.DiffGranularity ?? "line")">
+                                            <i class="bi bi-text-paragraph"></i> Inline
+                                        </a>
+                                        <a class="btn btn-sm @(Model.DiffViewMode == "stats" ? "btn-light" : "btn-outline-light")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="stats"
+                                           asp-route-granularity="@(Model.DiffGranularity ?? "line")">
+                                            <i class="bi bi-bar-chart"></i> Stats
+                                        </a>
+                                    </div>
+                                    
+                                    <div class="btn-group" role="group" aria-label="Diff granularity options">
+                                        <a class="btn btn-sm @(Model.DiffGranularity == "line" || string.IsNullOrEmpty(Model.DiffGranularity) ? "btn-warning" : "btn-outline-warning")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="@(Model.DiffViewMode ?? "unified")"
+                                           asp-route-granularity="line">
+                                            Line
+                                        </a>
+                                        <a class="btn btn-sm @(Model.DiffGranularity == "word" ? "btn-warning" : "btn-outline-warning")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="@(Model.DiffViewMode ?? "unified")"
+                                           asp-route-granularity="word">
+                                            Word
+                                        </a>
+                                        <a class="btn btn-sm @(Model.DiffGranularity == "character" ? "btn-warning" : "btn-outline-warning")"
+                                           asp-page-handler="Diff" 
+                                           asp-route-slug="@Model.Slug" 
+                                           asp-route-fromRevisionId="@Model.CompareFromRevision.Id" 
+                                           asp-route-toRevisionId="@Model.CompareToRevision.Id"
+                                           asp-route-viewMode="@(Model.DiffViewMode ?? "unified")"
+                                           asp-route-granularity="character">
+                                            Char
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Revision Comparison Info -->
+                            <div class="d-flex gap-3 mt-3">
+                                <div class="badge bg-light bg-opacity-25 text-white px-3 py-2">
+                                    <i class="bi bi-arrow-left"></i> From: @Html.UserLink(Model.CompareFromRevision.Author, Model.CompareFromRevision.Author) 
+                                    (@Model.CompareFromRevision.CreatedAt.ToString("MMM d, HH:mm"))
+                                </div>
+                                <div class="badge bg-light bg-opacity-25 text-white px-3 py-2">
+                                    <i class="bi bi-arrow-right"></i> To: @Html.UserLink(Model.CompareToRevision.Author, Model.CompareToRevision.Author) 
+                                    (@Model.CompareToRevision.CreatedAt.ToString("MMM d, HH:mm"))
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card-body p-0">
+                            <div class="diff-display-area">
+                                @if (!string.IsNullOrEmpty(Model.DiffViewMode) && Model.DiffViewMode != "stats")
+                                {
+                                    <div class="diff-toolbar bg-light p-2 border-bottom">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle"></i> 
+                                                Viewing @(Model.DiffGranularity ?? "line")-level differences in @(Model.DiffViewMode ?? "unified") mode
+                                            </small>
+                                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllSections()" id="collapseToggle">
+                                                <i class="bi bi-arrows-collapse"></i> Collapse Unchanged
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                                
+                                <div class="diff-content-wrapper">
+                                    @Html.Raw(Model.DiffHtml)
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         }
         else if (Model.SelectedRevision != null)
         {
-            <div class="mt-4">
-                <h5>
-                    Revision from @Model.SelectedRevision.CreatedAt.ToString("yyyy-MM-dd HH:mm")
-                    <small class="text-muted">by @Html.UserLink(Model.SelectedRevision.Author, Model.SelectedRevision.Author)</small>
-                </h5>
-                @if (!string.IsNullOrWhiteSpace(Model.SelectedRevision.Note))
-                {
-                    <p class="text-muted mb-3"><strong>Note:</strong> @Model.SelectedRevision.Note</p>
-                }
-                <div class="card">
-                    <div class="card-body">
-                        <div class="wiki-content">
-                            @Html.Raw(Model.SelectedRevisionContent)
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-1 fw-bold">
+                                <i class="bi bi-eye"></i> Viewing Revision
+                            </h5>
+                            <small class="opacity-75">
+                                Created @Model.SelectedRevision.CreatedAt.ToString("MMM dd, yyyy 'at' HH:mm") 
+                                by @Html.UserLink(Model.SelectedRevision.Author, Model.SelectedRevision.Author)
+                            </small>
+                            @if (!string.IsNullOrWhiteSpace(Model.SelectedRevision.Note))
+                            {
+                                <div class="mt-2">
+                                    <span class="badge bg-light text-dark"><i class="bi bi-chat-left-text"></i> @Model.SelectedRevision.Note</span>
+                                </div>
+                            }
+                        </div>
+                        <div class="card-body">
+                            <div class="wiki-content">
+                                @Html.Raw(Model.SelectedRevisionContent)
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         }
 
-        <div class="mt-4">
-            <h5>Current Version</h5>
-            <div class="card">
-                <div class="card-body">
-                    <div class="wiki-content">
-                        @Html.Raw(Model.RenderedContent)
+        @if (Model.Revisions?.Any() == true)
+        {
+            <!-- Enhanced Revision History Card -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-light border-0 py-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h5 class="mb-1 fw-bold text-dark"><i class="bi bi-journal-text"></i> Revision History</h5>
+                                    <small class="text-muted">
+                                        Showing <strong>@Model.Revisions.Count</strong> of <strong>@Model.TotalRevisions</strong> revisions
+                                        @if (Model.TotalPages > 1)
+                                        {
+                                            <span class="ms-2">• Page <strong>@Model.CurrentPage</strong> of <strong>@Model.TotalPages</strong></span>
+                                        }
+                                    </small>
+                                </div>
+                                @if (Model.TotalRevisions > 0)
+                                {
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-primary">@Model.TotalRevisions total</span>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-secondary" onclick="toggleCompactView()" id="viewToggle">
+                                                <i class="bi bi-list"></i> Compact
+                                            </button>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0" id="revisionsTable">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th class="border-0 fw-semibold text-dark"><i class="bi bi-calendar3"></i> Date & Time</th>
+                                            <th class="border-0 fw-semibold text-dark"><i class="bi bi-person"></i> Author</th>
+                                            <th class="border-0 fw-semibold text-dark"><i class="bi bi-chat-left-text"></i> Changes</th>
+                                            <th class="border-0 fw-semibold text-dark"><i class="bi bi-file-code"></i> Format</th>
+                                            <th class="border-0 fw-semibold text-dark text-center"><i class="bi bi-gear"></i> Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var revision in Model.Revisions)
+                                        {
+                                            var isLatest = revision == Model.Revisions.First();
+                                            var rowClass = isLatest ? "table-primary" : "";
+                                            <tr class="@rowClass revision-row" data-revision-id="@revision.Id">
+                                                <td class="py-3">
+                                                    <div class="d-flex flex-column">
+                                                        <span class="fw-semibold text-dark">@revision.CreatedAt.ToString("MMM dd, yyyy")</span>
+                                                        <small class="text-muted">@revision.CreatedAt.ToString("HH:mm:ss")</small>
+                                                        @if (isLatest)
+                                                        {
+                                                            <span class="badge bg-success mt-1 align-self-start">Latest</span>
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td class="py-3">
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <div class="avatar-circle bg-primary text-white d-flex align-items-center justify-content-center" 
+                                                             style="width: 32px; height: 32px; border-radius: 50%; font-size: 14px; font-weight: 600;">
+                                                            @revision.Author.Substring(0, 1).ToUpper()
+                                                        </div>
+                                                        <div>
+                                                            @Html.UserLink(revision.Author, revision.Author)
+                                                            <br><small class="text-muted">@revision.Author</small>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td class="py-3">
+                                                    <div class="revision-note">
+                                                        @if (!string.IsNullOrWhiteSpace(revision.Note))
+                                                        {
+                                                            <span class="text-dark">@revision.Note</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted fst-italic">No description provided</span>
+                                                        }
+                                                    </div>
+                                                </td>
+                                                <td class="py-3">
+                                                    <span class="badge @(revision.Format == "markdown" ? "bg-info" : "bg-secondary") fs-7">
+                                                        <i class="bi @(revision.Format == "markdown" ? "bi-markdown" : "bi-file-text")"></i> @revision.Format
+                                                    </span>
+                                                </td>
+                                                <td class="py-3 text-center">
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <a asp-page-handler="ViewRevision" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" 
+                                                           class="btn btn-outline-primary" title="View this revision">
+                                                            <i class="bi bi-eye"></i>
+                                                        </a>
+                                                        <div class="dropdown">
+                                                            <button class="btn btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" 
+                                                                    title="Compare with other versions">
+                                                                <i class="bi bi-file-diff"></i>
+                                                            </button>
+                                                            <ul class="dropdown-menu shadow">
+                                                                @{
+                                                                    var previousRevision = Model.Revisions
+                                                                        .SkipWhile(r => r.Id != revision.Id)
+                                                                        .Skip(1)
+                                                                        .FirstOrDefault();
+                                                                }
+                                                                @if (previousRevision != null)
+                                                                {
+                                                                    <li>
+                                                                        <a class="dropdown-item d-flex align-items-center gap-2" 
+                                                                           asp-page-handler="Diff" 
+                                                                           asp-route-slug="@Model.Slug" 
+                                                                           asp-route-fromRevisionId="@previousRevision.Id" 
+                                                                           asp-route-toRevisionId="@revision.Id">
+                                                                            <i class="bi bi-arrow-left-right text-muted"></i> Compare with Previous
+                                                                        </a>
+                                                                    </li>
+                                                                }
+                                                                @if (!isLatest)
+                                                                {
+                                                                    <li>
+                                                                        <a class="dropdown-item d-flex align-items-center gap-2" 
+                                                                           asp-page-handler="Diff" 
+                                                                           asp-route-slug="@Model.Slug" 
+                                                                           asp-route-fromRevisionId="@revision.Id" 
+                                                                           asp-route-toRevisionId="@Model.Revisions.First().Id">
+                                                                            <i class="bi bi-arrow-up-right text-success"></i> Compare with Current
+                                                                        </a>
+                                                                    </li>
+                                                                }
+                                                            </ul>
+                                                        </div>
+                                                        @if (User.Identity?.IsAuthenticated == true && !isLatest)
+                                                        {
+                                                            <form method="post" asp-page-handler="Restore" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" style="display:inline">
+                                                                <button type="submit" class="btn btn-outline-warning btn-sm" 
+                                                                        title="Restore this revision as the current version"
+                                                                        onclick="return confirm('⚠️ Restore Revision\\n\\nThis will create a new revision with the content from @revision.CreatedAt.ToString("MMM dd, yyyy HH:mm").\\n\\nAre you sure you want to continue?')">
+                                                                    <i class="bi bi-arrow-clockwise"></i>
+                                                                </button>
+                                                            </form>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        @if (Model.TotalPages > 1)
+                        {
+                            <div class="card-footer bg-light border-0">
+                                <nav aria-label="Revision history pagination" class="d-flex justify-content-center">
+                                    <ul class="pagination mb-0">
+                                        <!-- Previous Page -->
+                                        <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+                                            <a class="page-link border-0" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@(Model.CurrentPage - 1)">
+                                                <i class="bi bi-chevron-left"></i> Previous
+                                            </a>
+                                        </li>
+                                        
+                                        <!-- Page Numbers -->
+                                        @{
+                                            var startPage = Math.Max(1, Model.CurrentPage - 2);
+                                            var endPage = Math.Min(Model.TotalPages, Model.CurrentPage + 2);
+                                        }
+                                        
+                                        @if (startPage > 1)
+                                        {
+                                            <li class="page-item">
+                                                <a class="page-link border-0" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="1">1</a>
+                                            </li>
+                                            @if (startPage > 2)
+                                            {
+                                                <li class="page-item disabled">
+                                                    <span class="page-link border-0">...</span>
+                                                </li>
+                                            }
+                                        }
+                                        
+                                        @for (var i = startPage; i <= endPage; i++)
+                                        {
+                                            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                                <a class="page-link border-0" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@i">@i</a>
+                                            </li>
+                                        }
+                                        
+                                        @if (endPage < Model.TotalPages)
+                                        {
+                                            @if (endPage < Model.TotalPages - 1)
+                                            {
+                                                <li class="page-item disabled">
+                                                    <span class="page-link border-0">...</span>
+                                                </li>
+                                            }
+                                            <li class="page-item">
+                                                <a class="page-link border-0" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@Model.TotalPages">@Model.TotalPages</a>
+                                            </li>
+                                        }
+                                        
+                                        <!-- Next Page -->
+                                        <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+                                            <a class="page-link border-0" asp-page="/Wiki/History" asp-route-slug="@Model.Slug" asp-route-page="@(Model.CurrentPage + 1)">
+                                                Next <i class="bi bi-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                <div class="col-12">
+                    <div class="alert alert-info border-0 shadow-sm">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="bi bi-info-circle fs-2 text-info"></i>
+                            <div>
+                                <h4 class="alert-heading mb-1">No Revision History</h4>
+                                <p class="mb-0">This page doesn't have any revision history yet. Revision tracking may have been enabled after this page was created, or the history may have been cleared.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card shadow-sm border-0">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-file-text"></i> Current Version</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="wiki-content">
+                            @Html.Raw(Model.RenderedContent)
+                        </div>
                     </div>
                 </div>
             </div>
@@ -260,3 +491,114 @@
     }
 </div>
 
+<style>
+.avatar-circle {
+    transition: all 0.2s ease;
+}
+
+.avatar-circle:hover {
+    transform: scale(1.1);
+}
+
+.revision-row {
+    transition: background-color 0.2s ease;
+}
+
+.revision-row:hover {
+    background-color: rgba(0,123,255,0.05) !important;
+}
+
+.diff-content-wrapper {
+    max-height: 800px;
+    overflow-y: auto;
+}
+
+.btn-group .btn {
+    transition: all 0.2s ease;
+}
+
+.card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.card-header {
+    border-radius: 12px 12px 0 0;
+}
+
+.badge {
+    border-radius: 8px;
+}
+
+.pagination .page-link {
+    border-radius: 8px;
+    margin: 0 2px;
+}
+</style>
+
+<script>
+let isCompactView = false;
+
+function toggleCompactView() {
+    const table = document.getElementById('revisionsTable');
+    const button = document.getElementById('viewToggle');
+    const icon = button.querySelector('i');
+    
+    if (!isCompactView) {
+        // Switch to compact view
+        table.classList.add('table-sm');
+        document.querySelectorAll('.revision-note, .avatar-circle + div small').forEach(el => {
+            el.style.display = 'none';
+        });
+        button.innerHTML = '<i class="bi bi-card-text"></i> Detailed';
+        isCompactView = true;
+    } else {
+        // Switch to detailed view
+        table.classList.remove('table-sm');
+        document.querySelectorAll('.revision-note, .avatar-circle + div small').forEach(el => {
+            el.style.display = '';
+        });
+        button.innerHTML = '<i class="bi bi-list"></i> Compact';
+        isCompactView = false;
+    }
+}
+
+function toggleAllSections() {
+    const unchangedLines = document.querySelectorAll('.diff-line-unchanged');
+    const button = document.getElementById('collapseToggle');
+    const icon = button.querySelector('i');
+    
+    let isCollapsed = button.dataset.collapsed === 'true';
+    
+    unchangedLines.forEach(line => {
+        if (isCollapsed) {
+            line.style.display = '';
+        } else {
+            line.style.display = 'none';
+        }
+    });
+    
+    if (isCollapsed) {
+        button.dataset.collapsed = 'false';
+        icon.className = 'bi bi-arrows-collapse';
+        button.innerHTML = '<i class="bi bi-arrows-collapse"></i> Collapse Unchanged';
+    } else {
+        button.dataset.collapsed = 'true';
+        icon.className = 'bi bi-arrows-expand';
+        button.innerHTML = '<i class="bi bi-arrows-expand"></i> Show Unchanged';
+    }
+}
+
+// Add loading states for diff comparisons
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('a[asp-page-handler="Diff"]').forEach(link => {
+        link.addEventListener('click', function() {
+            const loader = document.createElement('div');
+            loader.className = 'spinner-border spinner-border-sm me-2';
+            loader.setAttribute('role', 'status');
+            this.insertBefore(loader, this.firstChild);
+            this.classList.add('disabled');
+        });
+    });
+});
+</script>

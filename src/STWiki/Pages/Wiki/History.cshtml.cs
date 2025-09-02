@@ -40,6 +40,8 @@ public class HistoryModel : PageModel
     public Revision? CompareFromRevision { get; set; }
     public Revision? CompareToRevision { get; set; }
     public string DiffHtml { get; set; } = string.Empty;
+    public string? DiffViewMode { get; set; }
+    public string? DiffGranularity { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string slug, int page = 1)
     {
@@ -204,7 +206,8 @@ public class HistoryModel : PageModel
         return RedirectToPage("/Wiki/View", new { slug = pageSlug });
     }
 
-    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId, int page = 1)
+    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId, int page = 1, 
+        string viewMode = "unified", string granularity = "line", bool ignoreWhitespace = false, int contextLines = 3)
     {
         Slug = slug;
         CurrentPage = Math.Max(1, page);
@@ -248,10 +251,65 @@ public class HistoryModel : PageModel
 
         if (CompareFromRevision != null && CompareToRevision != null)
         {
-            // Generate diff HTML
-            DiffHtml = _diffService.GenerateHtmlDiff(
-                CompareFromRevision.Snapshot, 
-                CompareToRevision.Snapshot);
+            DiffViewMode = viewMode;
+            DiffGranularity = granularity;
+
+            // Create diff options
+            var options = new DiffOptions
+            {
+                Granularity = granularity switch
+                {
+                    "word" => STWiki.Services.DiffGranularity.Word,
+                    "character" => STWiki.Services.DiffGranularity.Character,
+                    _ => STWiki.Services.DiffGranularity.Line
+                },
+                ViewMode = viewMode switch
+                {
+                    "sidebyside" => STWiki.Services.DiffViewMode.SideBySide,
+                    "inline" => STWiki.Services.DiffViewMode.Inline,
+                    "stats" => STWiki.Services.DiffViewMode.Stats,
+                    _ => STWiki.Services.DiffViewMode.Unified
+                },
+                IgnoreWhitespace = ignoreWhitespace,
+                ContextLines = contextLines,
+                ShowStats = true
+            };
+
+            try
+            {
+                // Try to get from cache first if available
+                var cachedDiff = await (_diffService as IAdvancedDiffService)?.GetCachedDiffAsync(fromRevisionId, toRevisionId, options);
+                
+                STWiki.Services.DiffService.DiffResult? diffResult = null;
+                if (cachedDiff != null && cachedDiff.Lines.Any())
+                {
+                    diffResult = cachedDiff;
+                }
+                else
+                {
+                    // Generate new diff
+                    diffResult = await (_diffService as IAdvancedDiffService)?.GenerateAdvancedDiffAsync(
+                        CompareFromRevision.Snapshot, 
+                        CompareToRevision.Snapshot, 
+                        options) ?? _diffService.GenerateLineDiff(CompareFromRevision.Snapshot, CompareToRevision.Snapshot);
+                    
+                    // Cache the result - handled internally by the service
+                }
+
+                // Render HTML based on view mode
+                if (diffResult != null)
+                {
+                    DiffHtml = await (_diffService as IAdvancedDiffService)?.RenderDiffHtmlAsync(diffResult, options.ViewMode) 
+                        ?? _diffService.GenerateHtmlDiff(CompareFromRevision.Snapshot, CompareToRevision.Snapshot);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fallback to basic diff if advanced diff fails
+                DiffHtml = _diffService.GenerateHtmlDiff(
+                    CompareFromRevision.Snapshot, 
+                    CompareToRevision.Snapshot);
+            }
         }
 
         // Render current content for reference
