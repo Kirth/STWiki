@@ -90,7 +90,7 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
         setupDragAndDrop(instance);
         
         // Initial preview update
-        updatePreview(instance);
+        updatePreview(instance).catch(console.error);
         updateStats(instance);
 
         console.log('✅ Enhanced editor initialized successfully with drag-and-drop support');
@@ -106,13 +106,16 @@ function setupEventListeners(instance) {
     const { textarea } = instance;
 
     // Live preview updates with debouncing
-    textarea.addEventListener('input', function() {
+    textarea.addEventListener('input', function(e) {
+        // Check for auto-completion triggers
+        handleAutoCompletion(instance, e);
+        
         // Immediate sync with instance-specific form field on every input
         syncWithFormTextarea(instance, textarea.value);
         
         clearTimeout(instance.updateTimeout);
-        instance.updateTimeout = setTimeout(() => {
-            updatePreview(instance);
+        instance.updateTimeout = setTimeout(async () => {
+            await updatePreview(instance).catch(console.error);
             updateStats(instance);
         }, 300);
     });
@@ -127,7 +130,7 @@ function setupEventListeners(instance) {
             textarea.value = textarea.value.substring(0, start) + '    ' + textarea.value.substring(end);
             textarea.selectionStart = textarea.selectionEnd = start + 4;
             
-            updatePreview(instance);
+            updatePreview(instance).catch(console.error);
             updateStats(instance);
         }
     });
@@ -150,24 +153,97 @@ function setupEventListeners(instance) {
                 const before = textarea.value.substring(0, start);
                 const after = textarea.value.substring(end);
                 
-                // Special handling for brackets to avoid interfering with wiki templates like [[...]]
+                // Enhanced handling for brackets with wiki syntax awareness
                 if (e.key === '[') {
-                    // Don't auto-pair if we're already inside [[ ]] template syntax
-                    const precedingText = before.slice(-10); // Check last 10 chars
-                    const followingText = after.slice(0, 10); // Check next 10 chars
+                    // Check if we just typed '[' and the previous char was also '['
+                    const justTypedDoubleBracket = before.endsWith('[');
                     
-                    // Skip auto-pairing if this looks like wiki template syntax
-                    if (precedingText.includes('[[') || followingText.includes(']]')) {
-                        console.log('🔧 Skipping bracket auto-pair inside wiki template');
+                    if (justTypedDoubleBracket) {
+                        // User is typing '[[' - complete it with ']]' and position cursor inside
+                        e.preventDefault();
+                        textarea.value = before + '[]]' + after;
+                        textarea.selectionStart = textarea.selectionEnd = start + 1;
+                        console.log('🔧 Auto-completed [[ with ]]');
+                        updatePreview(instance).catch(console.error);
+                        updateStats(instance);
+                        return;
+                    }
+                    
+                    // Don't auto-pair single bracket if we're already inside wiki template syntax
+                    const precedingText = before.slice(-10);
+                    const followingText = after.slice(0, 10);
+                    
+                    if (precedingText.includes('[[') && !precedingText.includes(']]')) {
+                        console.log('🔧 Skipping single bracket auto-pair inside wiki template');
                         return; // Let the keypress happen normally
                     }
                 }
                 
                 if (e.key === ']') {
-                    // Don't auto-pair closing bracket if there's already a ] following
+                    // Smart closing bracket handling
                     if (after.startsWith(']')) {
-                        console.log('🔧 Skipping bracket auto-pair - closing bracket already present');
-                        return; // Let the keypress happen normally  
+                        // Skip over existing closing bracket instead of adding another
+                        e.preventDefault();
+                        textarea.selectionStart = textarea.selectionEnd = start + 1;
+                        console.log('🔧 Jumped over existing closing bracket');
+                        return;
+                    }
+                    
+                    // Check if this would complete a wiki template
+                    const openBrackets = (before.match(/\[/g) || []).length;
+                    const closeBrackets = (before.match(/\]/g) || []).length;
+                    
+                    if (openBrackets - closeBrackets === 2) {
+                        // This would complete a [[ ]] pair, so add the second ]
+                        e.preventDefault();
+                        textarea.value = before + ']]' + after;
+                        textarea.selectionStart = textarea.selectionEnd = start + 2;
+                        console.log('🔧 Auto-completed ]] for wiki template');
+                        updatePreview(instance).catch(console.error);
+                        updateStats(instance);
+                        return;
+                    }
+                }
+                
+                // Enhanced curly brace handling for templates
+                if (e.key === '{') {
+                    const justTypedDoubleBrace = before.endsWith('{');
+                    
+                    if (justTypedDoubleBrace) {
+                        // User is typing '{{' - complete it with '}}' and position cursor inside
+                        e.preventDefault();
+                        textarea.value = before + '{}}' + after;
+                        textarea.selectionStart = textarea.selectionEnd = start + 1;
+                        console.log('🔧 Auto-completed {{ with }}');
+                        updatePreview(instance).catch(console.error);
+                        updateStats(instance);
+                        return;
+                    }
+                }
+                
+                if (e.key === '}') {
+                    // Smart closing brace handling
+                    if (after.startsWith('}')) {
+                        // Skip over existing closing brace instead of adding another
+                        e.preventDefault();
+                        textarea.selectionStart = textarea.selectionEnd = start + 1;
+                        console.log('🔧 Jumped over existing closing brace');
+                        return;
+                    }
+                    
+                    // Check if this would complete a template
+                    const openBraces = (before.match(/\{/g) || []).length;
+                    const closeBraces = (before.match(/\}/g) || []).length;
+                    
+                    if (openBraces - closeBraces === 2) {
+                        // This would complete a {{ }} pair, so add the second }
+                        e.preventDefault();
+                        textarea.value = before + '}}' + after;
+                        textarea.selectionStart = textarea.selectionEnd = start + 2;
+                        console.log('🔧 Auto-completed }} for template');
+                        updatePreview(instance).catch(console.error);
+                        updateStats(instance);
+                        return;
                     }
                 }
                 
@@ -175,11 +251,296 @@ function setupEventListeners(instance) {
                 textarea.value = before + e.key + pairs[e.key] + after;
                 textarea.selectionStart = textarea.selectionEnd = start + 1;
                 
-                updatePreview(instance);
+                updatePreview(instance).catch(console.error);
                 updateStats(instance);
             }
         }
     });
+    
+    // Handle auto-completion dropdown keyboard navigation
+    textarea.addEventListener('keydown', function(e) {
+        const dropdown = instance.autoCompleteDropdown;
+        if (!dropdown || dropdown.classList.contains('d-none')) return;
+        
+        const items = dropdown.querySelectorAll('.autocomplete-item');
+        const selectedIndex = instance.selectedAutoCompleteIndex || 0;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                instance.selectedAutoCompleteIndex = Math.min(selectedIndex + 1, items.length - 1);
+                updateAutoCompleteSelection(instance);
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                instance.selectedAutoCompleteIndex = Math.max(selectedIndex - 1, 0);
+                updateAutoCompleteSelection(instance);
+                break;
+            case 'Enter':
+            case 'Tab':
+                e.preventDefault();
+                if (items[instance.selectedAutoCompleteIndex]) {
+                    selectAutoCompleteItem(instance, items[instance.selectedAutoCompleteIndex]);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                hideAutoComplete(instance);
+                break;
+        }
+    });
+    
+    // Hide auto-complete when clicking outside
+    document.addEventListener('click', function(e) {
+        if (instance.autoCompleteDropdown && !instance.container.contains(e.target)) {
+            hideAutoComplete(instance);
+        }
+    });
+}
+
+// Handle auto-completion logic
+function handleAutoCompletion(instance, e) {
+    const { textarea } = instance;
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = textarea.value.substring(0, cursorPos);
+    
+    // Check if we just typed '[['
+    if (textBeforeCursor.endsWith('[[')) {
+        showPageAutoComplete(instance, cursorPos);
+    }
+    // Check if we just typed 'media:' after '[['
+    else if (textBeforeCursor.match(/\[\[media:$/i)) {
+        showMediaAutoComplete(instance, cursorPos);
+    }
+    // If we're typing and have an open dropdown, filter results
+    else if (instance.autoCompleteDropdown && !instance.autoCompleteDropdown.classList.contains('d-none')) {
+        const macroStart = findMacroStart(textBeforeCursor);
+        if (macroStart !== -1) {
+            const macroContent = textBeforeCursor.substring(macroStart + 2); // Skip '[['
+            filterAutoCompleteResults(instance, macroContent);
+        } else {
+            hideAutoComplete(instance);
+        }
+    }
+    // Hide dropdown if we moved outside macro context
+    else if (instance.autoCompleteDropdown && !instance.autoCompleteDropdown.classList.contains('d-none')) {
+        const macroStart = findMacroStart(textBeforeCursor);
+        if (macroStart === -1) {
+            hideAutoComplete(instance);
+        }
+    }
+}
+
+// Find the start position of the current macro
+function findMacroStart(text) {
+    let pos = text.length - 1;
+    let bracketCount = 0;
+    
+    while (pos >= 0) {
+        if (text.substring(pos, pos + 2) === ']]') {
+            return -1; // Already closed macro
+        }
+        if (text.substring(pos, pos + 2) === '[[') {
+            return pos;
+        }
+        pos--;
+    }
+    return -1;
+}
+
+// Show page auto-completion dropdown
+async function showPageAutoComplete(instance, cursorPos) {
+    try {
+        // Fetch page suggestions from the API
+        const response = await fetch('/api/pages/suggestions');
+        if (!response.ok) return;
+        
+        const pages = await response.json();
+        showAutoCompleteDropdown(instance, cursorPos, pages, 'page');
+    } catch (error) {
+        console.error('Failed to fetch page suggestions:', error);
+    }
+}
+
+// Show media auto-completion dropdown
+async function showMediaAutoComplete(instance, cursorPos) {
+    try {
+        // Fetch media suggestions from the API
+        const response = await fetch('/api/media/suggestions');
+        if (!response.ok) return;
+        
+        const mediaFiles = await response.json();
+        showAutoCompleteDropdown(instance, cursorPos, mediaFiles, 'media');
+    } catch (error) {
+        console.error('Failed to fetch media suggestions:', error);
+    }
+}
+
+// Show the auto-completion dropdown
+function showAutoCompleteDropdown(instance, cursorPos, items, type) {
+    const { textarea, container } = instance;
+    
+    // Create dropdown if it doesn't exist
+    if (!instance.autoCompleteDropdown) {
+        instance.autoCompleteDropdown = createAutoCompleteDropdown(instance);
+        container.appendChild(instance.autoCompleteDropdown);
+    }
+    
+    // Populate dropdown with items
+    const dropdown = instance.autoCompleteDropdown;
+    const itemsList = dropdown.querySelector('.autocomplete-items');
+    itemsList.innerHTML = '';
+    
+    items.forEach((item, index) => {
+        const itemElement = document.createElement('div');
+        itemElement.className = 'autocomplete-item';
+        itemElement.setAttribute('data-index', index);
+        
+        if (type === 'page') {
+            itemElement.innerHTML = `
+                <div class="autocomplete-title">${escapeHtml(item.title || item.name)}</div>
+                <div class="autocomplete-subtitle text-muted">${escapeHtml(item.path || item.url || '')}</div>
+            `;
+            itemElement.setAttribute('data-value', item.name || item.title);
+        } else if (type === 'media') {
+            itemElement.innerHTML = `
+                <div class="autocomplete-title">${escapeHtml(item.filename)}</div>
+                <div class="autocomplete-subtitle text-muted">${item.size ? formatFileSize(item.size) : ''}</div>
+            `;
+            itemElement.setAttribute('data-value', item.filename);
+        }
+        
+        itemElement.addEventListener('click', function() {
+            selectAutoCompleteItem(instance, itemElement);
+        });
+        
+        itemsList.appendChild(itemElement);
+    });
+    
+    // Position dropdown
+    positionAutoCompleteDropdown(instance, cursorPos);
+    
+    // Show dropdown
+    dropdown.classList.remove('d-none');
+    instance.selectedAutoCompleteIndex = 0;
+    updateAutoCompleteSelection(instance);
+    instance.autoCompleteType = type;
+    instance.autoCompleteItems = items;
+}
+
+// Create auto-completion dropdown element
+function createAutoCompleteDropdown(instance) {
+    const dropdown = document.createElement('div');
+    dropdown.className = 'autocomplete-dropdown d-none';
+    dropdown.innerHTML = `
+        <div class="autocomplete-items"></div>
+        <div class="autocomplete-footer text-muted">
+            <small>Use ↑↓ to navigate, Enter to select, Esc to cancel</small>
+        </div>
+    `;
+    return dropdown;
+}
+
+// Position the auto-completion dropdown
+function positionAutoCompleteDropdown(instance, cursorPos) {
+    const { textarea, autoCompleteDropdown } = instance;
+    
+    // Calculate cursor position
+    const position = getTextPosition(textarea, cursorPos);
+    if (!position) return;
+    
+    // Position dropdown below cursor
+    autoCompleteDropdown.style.position = 'absolute';
+    autoCompleteDropdown.style.left = position.left + 'px';
+    autoCompleteDropdown.style.top = (position.top + position.height + 5) + 'px';
+    autoCompleteDropdown.style.zIndex = '1000';
+}
+
+// Update visual selection in auto-completion dropdown
+function updateAutoCompleteSelection(instance) {
+    const dropdown = instance.autoCompleteDropdown;
+    if (!dropdown) return;
+    
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    items.forEach((item, index) => {
+        if (index === instance.selectedAutoCompleteIndex) {
+            item.classList.add('selected');
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+}
+
+// Select an auto-completion item
+function selectAutoCompleteItem(instance, itemElement) {
+    const { textarea } = instance;
+    const value = itemElement.getAttribute('data-value');
+    const type = instance.autoCompleteType;
+    
+    const cursorPos = textarea.selectionStart;
+    const textBeforeCursor = textarea.value.substring(0, cursorPos);
+    const macroStart = findMacroStart(textBeforeCursor);
+    
+    if (macroStart === -1) return;
+    
+    // Build the replacement text
+    let replacement = '';
+    if (type === 'page') {
+        replacement = `[[${value}]]`;
+    } else if (type === 'media') {
+        replacement = `[[media:${value}]]`;
+    }
+    
+    // Replace the macro in progress with the completed macro
+    const beforeMacro = textarea.value.substring(0, macroStart);
+    const afterCursor = textarea.value.substring(cursorPos);
+    const newValue = beforeMacro + replacement + afterCursor;
+    
+    textarea.value = newValue;
+    textarea.selectionStart = textarea.selectionEnd = macroStart + replacement.length;
+    
+    // Update preview and hide dropdown
+    updatePreview(instance).catch(console.error);
+    updateStats(instance);
+    syncWithFormTextarea(instance, newValue);
+    hideAutoComplete(instance);
+    
+    // Focus back on textarea
+    textarea.focus();
+}
+
+// Filter auto-completion results based on user input
+function filterAutoCompleteResults(instance, searchTerm) {
+    const dropdown = instance.autoCompleteDropdown;
+    if (!dropdown || !instance.autoCompleteItems) return;
+    
+    const items = instance.autoCompleteItems;
+    const filteredItems = items.filter(item => {
+        const searchableText = (item.title || item.name || item.filename || '').toLowerCase();
+        return searchableText.includes(searchTerm.toLowerCase());
+    });
+    
+    // Re-populate dropdown with filtered results
+    showAutoCompleteDropdown(instance, instance.textarea.selectionStart, filteredItems, instance.autoCompleteType);
+}
+
+// Hide auto-completion dropdown
+function hideAutoComplete(instance) {
+    if (instance.autoCompleteDropdown) {
+        instance.autoCompleteDropdown.classList.add('d-none');
+        instance.selectedAutoCompleteIndex = 0;
+        instance.autoCompleteType = null;
+        instance.autoCompleteItems = null;
+    }
+}
+
+// Helper function to format file sizes
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 // Setup keyboard shortcuts
@@ -192,19 +553,19 @@ function setupKeyboardShorts(instance) {
                 case 'b':
                     e.preventDefault();
                     wrapSelection(textarea, '**', '**');
-                    updatePreview(instance);
+                    updatePreview(instance).catch(console.error);
                     updateStats(instance);
                     break;
                 case 'i':
                     e.preventDefault();
                     wrapSelection(textarea, '*', '*');
-                    updatePreview(instance);
+                    updatePreview(instance).catch(console.error);
                     updateStats(instance);
                     break;
                 case 'k':
                     e.preventDefault();
                     insertLink(textarea);
-                    updatePreview(instance);
+                    updatePreview(instance).catch(console.error);
                     updateStats(instance);
                     break;
             }
@@ -212,8 +573,8 @@ function setupKeyboardShorts(instance) {
     });
 }
 
-// Update the preview (markdown or HTML)
-function updatePreview(instance) {
+// Update the preview (markdown or HTML) - async version for proper media URL resolution
+async function updatePreview(instance) {
     const { textarea, previewElement, format } = instance;
     if (!previewElement) return;
 
@@ -236,8 +597,8 @@ function updatePreview(instance) {
             // For HTML content, just display it directly (with basic sanitization)
             html = content;
         } else {
-            // For markdown content, convert to HTML
-            html = markdownToHtml(content);
+            // For markdown content, convert to HTML using async version for proper media URLs
+            html = await markdownToHtmlAsync(content);
         }
         
         previewElement.innerHTML = html;
@@ -321,8 +682,271 @@ function updateStats(instance) {
     }
 }
 
-// Basic markdown to HTML conversion
-function markdownToHtml(markdown) {
+// Process wiki macros (page links, media, templates) - async version
+async function processWikiMacrosAsync(text, macroBlocks, macroPlaceholder) {
+    // Store all async operations
+    const mediaPromises = [];
+    const mediaReplacements = [];
+    
+    // First pass: identify and extract media macros for async processing
+    text = text.replace(/\[\[([^\]]+)\]\]/g, function(match, content) {
+        // Split on | for parameters (e.g., [[PageName|Display Text]])
+        const parts = content.split('|');
+        const pageName = parts[0].trim();
+        const displayText = parts[1] ? parts[1].trim() : pageName;
+        
+        // Check if this is a media macro
+        if (pageName.toLowerCase().startsWith('media:')) {
+            // Queue for async processing
+            const placeholder = macroPlaceholder + macroBlocks.length;
+            macroBlocks.push(''); // Reserve slot
+            const mediaIndex = macroBlocks.length - 1;
+            
+            // Store the promise and replacement info
+            mediaPromises.push(processMediaMacroAsync(match, content));
+            mediaReplacements.push(mediaIndex);
+            
+            return placeholder;
+        }
+        
+        // Regular page link
+        const pageHtml = `<a href="/${encodeURIComponent(pageName)}" class="wiki-link" title="Go to page: ${escapeHtml(pageName)}">${escapeHtml(displayText)}</a>`;
+        macroBlocks.push(pageHtml);
+        return macroPlaceholder + (macroBlocks.length - 1);
+    });
+    
+    // Process {{template-name}} templates (basic placeholder for now)
+    text = text.replace(/\{\{([^}]+)\}\}/g, function(match, templateName) {
+        const templateHtml = `<span class="wiki-template text-muted fst-italic" title="Template: ${escapeHtml(templateName)}">{{${escapeHtml(templateName)}}}</span>`;
+        macroBlocks.push(templateHtml);
+        return macroPlaceholder + (macroBlocks.length - 1);
+    });
+    
+    // Wait for all media macros to resolve
+    if (mediaPromises.length > 0) {
+        try {
+            const resolvedMedia = await Promise.all(mediaPromises);
+            // Update the macro blocks with resolved media HTML
+            for (let i = 0; i < resolvedMedia.length; i++) {
+                const mediaIndex = mediaReplacements[i];
+                macroBlocks[mediaIndex] = resolvedMedia[i];
+            }
+        } catch (error) {
+            console.error('Failed to resolve some media macros:', error);
+            // Fallback to synchronous processing for failed items
+            for (let i = 0; i < mediaReplacements.length; i++) {
+                if (!macroBlocks[mediaReplacements[i]]) {
+                    macroBlocks[mediaReplacements[i]] = '<span class="text-danger">Failed to load media</span>';
+                }
+            }
+        }
+    }
+    
+    return text;
+}
+
+// Process wiki macros (page links, media, templates) - synchronous fallback
+function processWikiMacros(text, macroBlocks, macroPlaceholder) {
+    // Process [[page-name]] page links
+    text = text.replace(/\[\[([^\]]+)\]\]/g, function(match, content) {
+        // Split on | for parameters (e.g., [[PageName|Display Text]])
+        const parts = content.split('|');
+        const pageName = parts[0].trim();
+        const displayText = parts[1] ? parts[1].trim() : pageName;
+        
+        // Check if this is a media macro
+        if (pageName.toLowerCase().startsWith('media:')) {
+            const mediaHtml = processMediaMacro(match, content);
+            macroBlocks.push(mediaHtml);
+            return macroPlaceholder + (macroBlocks.length - 1);
+        }
+        
+        // Regular page link
+        const pageHtml = `<a href="/${encodeURIComponent(pageName)}" class="wiki-link" title="Go to page: ${escapeHtml(pageName)}">${escapeHtml(displayText)}</a>`;
+        macroBlocks.push(pageHtml);
+        return macroPlaceholder + (macroBlocks.length - 1);
+    });
+    
+    // Process {{template-name}} templates (basic placeholder for now)
+    text = text.replace(/\{\{([^}]+)\}\}/g, function(match, templateName) {
+        const templateHtml = `<span class="wiki-template text-muted fst-italic" title="Template: ${escapeHtml(templateName)}">{{${escapeHtml(templateName)}}}</span>`;
+        macroBlocks.push(templateHtml);
+        return macroPlaceholder + (macroBlocks.length - 1);
+    });
+    
+    return text;
+}
+
+// Process media macro with parameters (async version for API calls)
+async function processMediaMacroAsync(match, content) {
+    // Split on | for parameters
+    const parts = content.split('|');
+    const mediaPath = parts[0].trim().substring(6); // Remove 'media:' prefix
+    
+    // Parse parameters
+    const params = {};
+    for (let i = 1; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (part.includes('=')) {
+            const [key, value] = part.split('=', 2);
+            params[key.trim()] = value.trim();
+        } else {
+            // Parameter without value (e.g., just "thumb")
+            params[part] = true;
+        }
+    }
+    
+    // Build media HTML based on parameters
+    let mediaHtml = '';
+    const fileName = escapeHtml(mediaPath);
+    
+    // Try to get the proper media URL from the API
+    let mediaUrl = `/media/${encodeURIComponent(mediaPath)}`; // Fallback URL
+    
+    try {
+        // Search for the media file by filename to get its ID
+        const searchResponse = await fetch(`/api/media?search=${encodeURIComponent(mediaPath)}&pageSize=1`);
+        if (searchResponse.ok) {
+            const searchData = await searchResponse.json();
+            if (searchData.items && searchData.items.length > 0) {
+                const mediaFile = searchData.items.find(item => 
+                    item.fileName.toLowerCase() === mediaPath.toLowerCase()
+                );
+                if (mediaFile) {
+                    // Determine if we need a specific size
+                    let sizeParam = '';
+                    if (params.display === 'thumb' || params.thumb === true) {
+                        sizeParam = '?size=150';
+                    } else if (params.size && !isNaN(params.size)) {
+                        sizeParam = `?size=${params.size}`;
+                    }
+                    
+                    // Use the API endpoint that redirects to presigned URLs
+                    mediaUrl = `/api/media/${mediaFile.id}${sizeParam}`;
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('Failed to resolve media URL for', mediaPath, '- using fallback URL');
+    }
+    
+    // Determine display size
+    let width = '';
+    let cssClass = 'wiki-media';
+    
+    if (params.display === 'thumb' || params.thumb === true) {
+        width = '150px';
+        cssClass += ' wiki-media-thumb';
+    } else if (params.display === 'full' || params.full === true) {
+        cssClass += ' wiki-media-full';
+    } else if (params.size) {
+        width = params.size + 'px';
+        cssClass += ' wiki-media-sized';
+    } else {
+        width = '600px'; // Default size
+        cssClass += ' wiki-media-default';
+    }
+    
+    // Determine alignment
+    if (params.align) {
+        cssClass += ` text-${params.align}`;
+    }
+    
+    // Build the HTML structure
+    const altText = params.alt || params.caption || fileName;
+    const title = params.caption || fileName;
+    const style = width ? `max-width: ${width}; height: auto;` : '';
+    
+    if (params.caption) {
+        // Media with caption (figure)
+        mediaHtml = `<figure class="${cssClass}">
+            <img src="${mediaUrl}" alt="${escapeHtml(altText)}" title="${escapeHtml(title)}" style="${style}" class="img-fluid">
+            <figcaption class="wiki-media-caption text-muted small">${escapeHtml(params.caption)}</figcaption>
+        </figure>`;
+    } else {
+        // Simple image
+        mediaHtml = `<img src="${mediaUrl}" alt="${escapeHtml(altText)}" title="${escapeHtml(title)}" style="${style}" class="img-fluid ${cssClass}">`;
+    }
+    
+    return mediaHtml;
+}
+
+// Synchronous fallback version for processMediaMacro (backwards compatibility)
+function processMediaMacro(match, content) {
+    // Split on | for parameters
+    const parts = content.split('|');
+    const mediaPath = parts[0].trim().substring(6); // Remove 'media:' prefix
+    
+    // Parse parameters
+    const params = {};
+    for (let i = 1; i < parts.length; i++) {
+        const part = parts[i].trim();
+        if (part.includes('=')) {
+            const [key, value] = part.split('=', 2);
+            params[key.trim()] = value.trim();
+        } else {
+            // Parameter without value (e.g., just "thumb")
+            params[part] = true;
+        }
+    }
+    
+    // Build media HTML based on parameters
+    let mediaHtml = '';
+    const fileName = escapeHtml(mediaPath);
+    
+    // For preview, use a placeholder that will be resolved by the async version
+    const mediaUrl = `/media/${encodeURIComponent(mediaPath)}`;
+    
+    // Determine display size
+    let width = '';
+    let cssClass = 'wiki-media';
+    
+    if (params.display === 'thumb' || params.thumb === true) {
+        width = '150px';
+        cssClass += ' wiki-media-thumb';
+    } else if (params.display === 'full' || params.full === true) {
+        cssClass += ' wiki-media-full';
+    } else if (params.size) {
+        width = params.size + 'px';
+        cssClass += ' wiki-media-sized';
+    } else {
+        width = '600px'; // Default size
+        cssClass += ' wiki-media-default';
+    }
+    
+    // Determine alignment
+    if (params.align) {
+        cssClass += ` text-${params.align}`;
+    }
+    
+    // Build the HTML structure
+    const altText = params.alt || params.caption || fileName;
+    const title = params.caption || fileName;
+    const style = width ? `max-width: ${width}; height: auto;` : '';
+    
+    if (params.caption) {
+        // Media with caption (figure)
+        mediaHtml = `<figure class="${cssClass}">
+            <img src="${mediaUrl}" alt="${escapeHtml(altText)}" title="${escapeHtml(title)}" style="${style}" class="img-fluid">
+            <figcaption class="wiki-media-caption text-muted small">${escapeHtml(params.caption)}</figcaption>
+        </figure>`;
+    } else {
+        // Simple image
+        mediaHtml = `<img src="${mediaUrl}" alt="${escapeHtml(altText)}" title="${escapeHtml(title)}" style="${style}" class="img-fluid ${cssClass}">`;
+    }
+    
+    return mediaHtml;
+}
+
+// Helper function to escape HTML entities
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Basic markdown to HTML conversion (async version for proper media URL resolution)
+async function markdownToHtmlAsync(markdown) {
     let html = markdown;
     
     // Store code blocks temporarily to protect them from processing
@@ -359,6 +983,11 @@ function markdownToHtml(markdown) {
         inlineCodeBlocks.push(inlineCodeHtml);
         return inlineCodePlaceholder + (inlineCodeBlocks.length - 1);
     });
+
+    // Process wiki macros before escaping HTML (using async version for proper media URLs)
+    const wikiMacroBlocks = [];
+    const wikiMacroPlaceholder = '___WIKI_MACRO_PLACEHOLDER___';
+    html = await processWikiMacrosAsync(html, wikiMacroBlocks, wikiMacroPlaceholder);
 
     // Now process the rest of the markdown (escaping HTML for non-code content)
     html = html.replace(/&/g, '&amp;')
@@ -398,7 +1027,112 @@ function markdownToHtml(markdown) {
         html = '<p>' + html + '</p>';
     }
     
-    // Restore inline code blocks first
+    // Restore wiki macro blocks first (before other content that might contain similar patterns)
+    for (let i = 0; i < wikiMacroBlocks.length; i++) {
+        html = html.replace(wikiMacroPlaceholder + i, wikiMacroBlocks[i]);
+    }
+    
+    // Restore inline code blocks
+    for (let i = 0; i < inlineCodeBlocks.length; i++) {
+        html = html.replace(inlineCodePlaceholder + i, inlineCodeBlocks[i]);
+    }
+
+    // Restore code blocks last
+    for (let i = 0; i < codeBlocks.length; i++) {
+        html = html.replace(codeBlockPlaceholder + i, codeBlocks[i]);
+    }
+
+    return html;
+}
+
+// Basic markdown to HTML conversion (synchronous fallback)
+function markdownToHtml(markdown) {
+    let html = markdown;
+    
+    // Store code blocks temporarily to protect them from processing
+    const codeBlocks = [];
+    const codeBlockPlaceholder = '___CODE_BLOCK_PLACEHOLDER___';
+    
+    // Extract and protect code blocks first
+    html = html.replace(/```(\w+)?\n?([\s\S]*?)```/g, function(match, lang, code) {
+        const language = lang ? lang.toLowerCase() : '';
+        const languageClass = language ? ` class="language-${language}"` : '';
+        
+        // Preserve the code exactly as written, only escaping HTML entities
+        const escapedCode = code
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        const codeBlockHtml = `<pre><code${languageClass}>${escapedCode}</code></pre>`;
+        codeBlocks.push(codeBlockHtml);
+        return codeBlockPlaceholder + (codeBlocks.length - 1);
+    });
+    
+    // Extract and protect inline code
+    const inlineCodeBlocks = [];
+    const inlineCodePlaceholder = '___INLINE_CODE_PLACEHOLDER___';
+    
+    html = html.replace(/`([^`]*)`/g, function(match, code) {
+        const escapedCode = code
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        
+        const inlineCodeHtml = `<code class="language-none">${escapedCode}</code>`;
+        inlineCodeBlocks.push(inlineCodeHtml);
+        return inlineCodePlaceholder + (inlineCodeBlocks.length - 1);
+    });
+
+    // Process wiki macros before escaping HTML (using synchronous version as fallback)
+    const wikiMacroBlocks = [];
+    const wikiMacroPlaceholder = '___WIKI_MACRO_PLACEHOLDER___';
+    html = processWikiMacros(html, wikiMacroBlocks, wikiMacroPlaceholder);
+
+    // Now process the rest of the markdown (escaping HTML for non-code content)
+    html = html.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;');
+
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Bold and italic
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Links
+    html = html.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<a href="$2">$1</a>');
+
+    // Blockquotes
+    html = html.replace(/^> (.*$)/gim, '<blockquote class="blockquote">$1</blockquote>');
+
+    // Lists
+    html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^\- (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^\d+\. (.*$)/gim, '<li>$1</li>');
+
+    // Wrap consecutive list items in ul/ol
+    html = html.replace(/(<li>.*<\/li>)\n(<li>.*<\/li>)/g, '<ul>$1$2</ul>');
+    html = html.replace(/<\/ul>\n<ul>/g, '');
+
+    // Line breaks (but not inside code blocks)
+    html = html.replace(/\n\n/g, '</p><p>');
+    html = html.replace(/\n/g, '<br>');
+
+    // Wrap in paragraphs if needed
+    if (html && !html.startsWith('<')) {
+        html = '<p>' + html + '</p>';
+    }
+    
+    // Restore wiki macro blocks first (before other content that might contain similar patterns)
+    for (let i = 0; i < wikiMacroBlocks.length; i++) {
+        html = html.replace(wikiMacroPlaceholder + i, wikiMacroBlocks[i]);
+    }
+    
+    // Restore inline code blocks
     for (let i = 0; i < inlineCodeBlocks.length; i++) {
         html = html.replace(inlineCodePlaceholder + i, inlineCodeBlocks[i]);
     }
@@ -469,7 +1203,7 @@ window.insertMarkdownFor = function(editorId, before, after) {
     }
 
     wrapSelection(instance.textarea, before, after);
-    updatePreview(instance);
+    updatePreview(instance).catch(console.error);
     updateStats(instance);
 };
 
@@ -500,7 +1234,7 @@ window.insertMarkdown = function(before, after) {
 
     console.warn(`Using legacy insertMarkdown - prefer insertMarkdownFor('${activeId}', ...) for multi-editor setups`);
     wrapSelection(activeInstance.textarea, before, after);
-    updatePreview(activeInstance);
+    updatePreview(activeInstance).catch(console.error);
     updateStats(activeInstance);
 };
 
@@ -561,7 +1295,7 @@ window.updateEditorFormat = function(editorId, newFormat) {
     
     instance.format = newFormat.toLowerCase();
     // Trigger a preview update to reflect the new format
-    updatePreview(instance);
+    updatePreview(instance).catch(console.error);
     console.log(`Updated editor ${editorId} to format:`, newFormat);
 };
 
@@ -570,7 +1304,7 @@ window.updateAllEditorsFormat = function(newFormat) {
     for (const instance of editorInstances.values()) {
         instance.format = newFormat.toLowerCase();
         // Trigger a preview update to reflect the new format
-        updatePreview(instance);
+        updatePreview(instance).catch(console.error);
     }
     console.log('Updated all editor instances to format:', newFormat);
 };
@@ -617,7 +1351,7 @@ window.setEnhancedEditorContent = function(editorId, content) {
     
     isApplyingRemoteOperation = true;
     instance.textarea.value = content;
-    updatePreview(instance);
+    updatePreview(instance).catch(console.error);
     updateStats(instance);
     isApplyingRemoteOperation = false;
     
@@ -639,7 +1373,7 @@ window.applyInsertOperation = function(editorId, position, text) {
     const newValue = currentValue.slice(0, position) + text + currentValue.slice(position);
     
     textarea.value = newValue;
-    updatePreview(instance);
+    updatePreview(instance).catch(console.error);
     updateStats(instance);
     
     isApplyingRemoteOperation = false;
@@ -662,7 +1396,7 @@ window.applyDeleteOperation = function(editorId, position, length) {
     const newValue = currentValue.slice(0, position) + currentValue.slice(position + length);
     
     textarea.value = newValue;
-    updatePreview(instance);
+    updatePreview(instance).catch(console.error);
     updateStats(instance);
     
     isApplyingRemoteOperation = false;
@@ -692,7 +1426,7 @@ window.applyReplaceOperation = function(editorId, selectionStart, selectionEnd, 
     console.log(`  Result: "${newValue}"`);
     
     textarea.value = newValue;
-    updatePreview(instance);
+    updatePreview(instance).catch(console.error);
     updateStats(instance);
     
     isApplyingRemoteOperation = false;
@@ -1555,7 +2289,7 @@ async function uploadImageFile(file, instance, metadata) {
         instance.textarea.selectionStart = instance.textarea.selectionEnd = cursorPos + mediaTemplate.length;
         
         // Update preview and sync
-        updatePreview(instance);
+        updatePreview(instance).catch(console.error);
         updateStats(instance);
         syncWithFormTextarea(instance, newContent);
         

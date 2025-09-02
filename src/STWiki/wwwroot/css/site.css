@@ -254,6 +254,116 @@ h3 { font-size: 1.75rem; }
     background-color: #fff;
 }
 
+/* Wiki macro styles for preview */
+.wiki-link {
+    color: var(--bs-primary);
+    text-decoration: none;
+    background-color: rgba(13, 110, 253, 0.1);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    border: 1px solid rgba(13, 110, 253, 0.2);
+    transition: all 0.15s ease-in-out;
+}
+
+.wiki-link:hover {
+    background-color: rgba(13, 110, 253, 0.15);
+    border-color: rgba(13, 110, 253, 0.3);
+    text-decoration: none;
+}
+
+.wiki-template {
+    background-color: rgba(255, 193, 7, 0.1);
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+    font-family: 'Courier New', monospace;
+}
+
+.wiki-media {
+    display: block;
+    margin: 0.5rem auto;
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.15s ease-in-out;
+}
+
+.wiki-media:hover {
+    transform: scale(1.02);
+}
+
+.wiki-media-thumb {
+    max-width: 150px;
+    float: left;
+    margin: 0 1rem 1rem 0;
+}
+
+.wiki-media-caption {
+    font-style: italic;
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+figure.wiki-media {
+    display: inline-block;
+    margin: 1rem auto;
+    text-align: center;
+}
+
+/* Auto-completion dropdown styles */
+.autocomplete-dropdown {
+    position: absolute;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    min-width: 250px;
+}
+
+.autocomplete-items {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.autocomplete-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f3f4;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item.selected {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.autocomplete-item.selected {
+    background-color: rgba(13, 110, 253, 0.2);
+}
+
+.autocomplete-title {
+    font-weight: 500;
+    color: var(--bs-dark);
+}
+
+.autocomplete-subtitle {
+    font-size: 0.85rem;
+    margin-top: 0.125rem;
+}
+
+.autocomplete-footer {
+    padding: 0.25rem 0.75rem;
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    font-size: 0.75rem;
+}
+
 .editor-toolbar {
     border-bottom: 1px solid #dee2e6;
     padding-bottom: 0.5rem;
