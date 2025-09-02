@@ -157,7 +157,9 @@ public class EditModel : PageModel
         Console.WriteLine($"🔍 DEBUG - Original slug from DB: '{OriginalSlug}'");
         
         Summary = existingPage.Summary;
+        Console.WriteLine($"🔍 EDIT LOAD - Raw body from DB length: {existingPage.Body?.Length ?? -1}");
         Body = CleanStringForBlazor(existingPage.Body);
+        Console.WriteLine($"🔍 EDIT LOAD - Cleaned body length: {Body?.Length ?? -1}");
         BodyFormat = existingPage.BodyFormat;
         CreatedAt = existingPage.CreatedAt;
         UpdatedAt = existingPage.UpdatedAt;
@@ -543,6 +545,15 @@ public class EditModel : PageModel
     private static string? CleanStringForBlazor(string? input)
     {
         Console.WriteLine($"🧹 CleanStringForBlazor called with input length: {input?.Length ?? -1}");
+        
+        if (input?.Length > 100)
+        {
+            Console.WriteLine($"🧹 CleanStringForBlazor input preview: '{input.Substring(0, Math.Min(100, input.Length))}...'");
+        }
+        else if (!string.IsNullOrEmpty(input))
+        {
+            Console.WriteLine($"🧹 CleanStringForBlazor input full: '{input}'");
+        }
 
         if (string.IsNullOrEmpty(input))
         {
@@ -564,17 +575,11 @@ public class EditModel : PageModel
             Console.WriteLine($"🧹 CleanStringForBlazor: first chars: [{string.Join(", ", firstChars)}]");
         }
 
+        // Be more conservative - only remove the most problematic characters
         var cleaned = input
             .Replace("\uFEFF", "") // Remove BOM (Byte Order Mark)
-            .Replace("\0", "")     // Remove null characters
-            .Replace("\u0001", "") // Remove other problematic control chars
-            .Replace("\u0002", "")
-            .Replace("\u0003", "")
-            .Replace("\u0004", "")
-            .Replace("\u0005", "")
-            .Replace("\u0006", "")
-            .Replace("\u0007", "")
-            .Replace("\u0008", ""); // Remove backspace, but keep \t, \n, \r
+            .Replace("\0", "");    // Remove null characters
+            // Keep other characters as they might be legitimate content
 
         // Check for BOM after cleaning
         var hasBomAfter = cleaned.StartsWith("\uFEFF");
@@ -586,6 +591,22 @@ public class EditModel : PageModel
         else if (hasBomBefore)
         {
             Console.WriteLine($"🧹 ✅ CleanStringForBlazor: Successfully removed BOM");
+        }
+        
+        Console.WriteLine($"🧹 CleanStringForBlazor output length: {cleaned?.Length ?? -1}");
+        
+        if (cleaned?.Length != input?.Length)
+        {
+            Console.WriteLine($"🧹 ⚠️ CONTENT LENGTH CHANGED: {input?.Length ?? -1} → {cleaned?.Length ?? -1}");
+        }
+        
+        if (cleaned?.Length > 100)
+        {
+            Console.WriteLine($"🧹 CleanStringForBlazor output preview: '{cleaned.Substring(0, Math.Min(100, cleaned.Length))}...'");
+        }
+        else if (!string.IsNullOrEmpty(cleaned))
+        {
+            Console.WriteLine($"🧹 CleanStringForBlazor output full: '{cleaned}'");
         }
 
         return cleaned;

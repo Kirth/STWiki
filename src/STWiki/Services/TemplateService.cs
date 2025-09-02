@@ -569,11 +569,11 @@ public class TemplateService
                 return "[[]]";
             }
 
-            // Handle media links: [[media:filename]]
+            // Handle media links: [[media:filename|param=value|...]]
             if (pageSlug.StartsWith("media:", StringComparison.OrdinalIgnoreCase))
             {
-                var mediaName = pageSlug.Substring(6).Trim();
-                return await RenderMediaLinkAsync(mediaName);
+                var mediaTemplate = pageSlug.Substring(6).Trim();
+                return await RenderMediaLinkAsync(mediaTemplate);
             }
 
             // Handle custom display text: [[page-slug|Display Text]]
@@ -617,67 +617,133 @@ public class TemplateService
         }
     }
 
-    private async Task<string> RenderMediaLinkAsync(string mediaName)
+    private async Task<string> RenderMediaLinkAsync(string mediaTemplate)
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(mediaName))
+            if (string.IsNullOrWhiteSpace(mediaTemplate))
             {
                 return "[[media:]]";
             }
 
-            var mediaFile = await _mediaService.GetMediaFileByNameAsync(mediaName);
+            // Parse display options from template
+            var options = MediaDisplayOptions.Parse(mediaTemplate);
+            
+            if (string.IsNullOrWhiteSpace(options.FileName))
+            {
+                return "[[media:]]";
+            }
+
+            var mediaFile = await _mediaService.GetMediaFileByNameAsync(options.FileName);
             
             if (mediaFile == null)
             {
-                return $"<span class=\"text-danger\" title=\"Media file '{mediaName}' not found\">[[media:{System.Web.HttpUtility.HtmlEncode(mediaName)}]]</span>";
+                return $"<span class=\"text-danger\" title=\"Media file '{options.FileName}' not found\">[[media:{System.Web.HttpUtility.HtmlEncode(mediaTemplate)}]]</span>";
             }
 
             if (IsImage(mediaFile.ContentType))
             {
-                var thumbnailUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id, 600);
-                var fullUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id);
-                
-                return $@"
-                    <div class=""media-embed image-embed mb-3"">
-                        <a href=""{fullUrl}"" target=""_blank"" class=""text-decoration-none"">
-                            <img src=""{thumbnailUrl}"" 
-                                 alt=""{System.Web.HttpUtility.HtmlEncode(mediaFile.AltText ?? mediaFile.OriginalFileName)}"" 
-                                 class=""img-fluid rounded shadow-sm""
-                                 style=""max-width: 100%; height: auto;"">
-                        </a>
-                        {(!string.IsNullOrEmpty(mediaFile.Description) ? 
-                            $"<small class=\"text-muted d-block mt-1\">{System.Web.HttpUtility.HtmlEncode(mediaFile.Description)}</small>" : 
-                            "")}
-                    </div>";
+                return await RenderImageAsync(mediaFile, options);
             }
             else
             {
-                var fileUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id);
-                var fileSize = FormatFileSize(mediaFile.FileSize);
-                var icon = GetFileIcon(mediaFile.ContentType);
-                
-                return $@"
-                    <div class=""media-embed file-embed mb-2"">
-                        <a href=""{fileUrl}"" class=""text-decoration-none d-flex align-items-center p-2 border rounded"" target=""_blank"">
-                            <i class=""bi bi-{icon} fs-4 text-primary me-3""></i>
-                            <div class=""flex-grow-1"">
-                                <div class=""fw-medium"">{System.Web.HttpUtility.HtmlEncode(mediaFile.OriginalFileName)}</div>
-                                <small class=""text-muted"">{fileSize}</small>
-                                {(!string.IsNullOrEmpty(mediaFile.Description) ? 
-                                    $"<div class=\"text-muted small\">{System.Web.HttpUtility.HtmlEncode(mediaFile.Description)}</div>" : 
-                                    "")}
-                            </div>
-                            <i class=""bi bi-download ms-2 text-muted""></i>
-                        </a>
-                    </div>";
+                return await RenderFileAsync(mediaFile, options);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to render media link for: {MediaName}", mediaName);
-            return $"<span class=\"text-danger\">[[media:{System.Web.HttpUtility.HtmlEncode(mediaName)}]]</span>";
+            _logger.LogError(ex, "Failed to render media link for: {MediaTemplate}", mediaTemplate);
+            return $"<span class=\"text-danger\">[[media:{System.Web.HttpUtility.HtmlEncode(mediaTemplate)}]]</span>";
         }
+    }
+
+    private async Task<string> RenderImageAsync(MediaFile mediaFile, MediaDisplayOptions options)
+    {
+        var effectiveSize = options.GetEffectiveSize();
+        var thumbnailUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id, effectiveSize);
+        var fullUrl = options.Display == "full" ? 
+            await _mediaService.GetMediaUrlAsync(mediaFile.Id) : 
+            thumbnailUrl;
+        
+        // Determine alt text
+        var altText = !string.IsNullOrEmpty(options.Alt) ? options.Alt :
+                     (!string.IsNullOrEmpty(mediaFile.AltText) ? mediaFile.AltText : mediaFile.OriginalFileName);
+        
+        // Determine caption
+        var caption = !string.IsNullOrEmpty(options.Caption) ? options.Caption :
+                     (!string.IsNullOrEmpty(mediaFile.Description) ? mediaFile.Description : "");
+        
+        var sizeStyles = options.GetSizeStyles();
+        var displayClasses = options.GetDisplayClasses();
+        var alignmentClass = options.GetAlignmentClass();
+        
+        // Build image HTML
+        var imageHtml = $@"<img src=""{thumbnailUrl}"" 
+                                alt=""{System.Web.HttpUtility.HtmlEncode(altText)}"" 
+                                class=""{displayClasses}""
+                                {(!string.IsNullOrEmpty(sizeStyles) ? $"style=\"{sizeStyles}\"" : "")}>";
+        
+        // For inline display, return just the image
+        if (options.Display == "inline")
+        {
+            return imageHtml;
+        }
+        
+        // For block display, wrap in container
+        var containerClass = $"media-embed image-embed mb-3 {alignmentClass}".Trim();
+        
+        var result = $@"<div class=""{containerClass}"">";
+        
+        // Add link wrapper if not full display or if it's a thumbnail
+        if (options.Display != "full" || effectiveSize < MediaDisplayOptions.DefaultThumbnailSize)
+        {
+            result += $@"<a href=""{fullUrl}"" target=""_blank"" class=""text-decoration-none"">";
+            result += imageHtml;
+            result += "</a>";
+        }
+        else
+        {
+            result += imageHtml;
+        }
+        
+        // Add caption if present
+        if (!string.IsNullOrEmpty(caption))
+        {
+            result += $@"<small class=""text-muted d-block mt-1"">{System.Web.HttpUtility.HtmlEncode(caption)}</small>";
+        }
+        
+        result += "</div>";
+        
+        return result;
+    }
+
+    private async Task<string> RenderFileAsync(MediaFile mediaFile, MediaDisplayOptions options)
+    {
+        var fileUrl = await _mediaService.GetMediaUrlAsync(mediaFile.Id);
+        var fileSize = FormatFileSize(mediaFile.FileSize);
+        var icon = GetFileIcon(mediaFile.ContentType);
+        
+        // Determine caption/description
+        var description = !string.IsNullOrEmpty(options.Caption) ? options.Caption :
+                         (!string.IsNullOrEmpty(mediaFile.Description) ? mediaFile.Description : "");
+        
+        var alignmentClass = options.GetAlignmentClass();
+        var containerClass = $"media-embed file-embed mb-2 {alignmentClass}".Trim();
+        
+        return $@"
+            <div class=""{containerClass}"">
+                <a href=""{fileUrl}"" class=""text-decoration-none d-flex align-items-center p-2 border rounded"" target=""_blank"">
+                    <i class=""bi bi-{icon} fs-4 text-primary me-3""></i>
+                    <div class=""flex-grow-1"">
+                        <div class=""fw-medium"">{System.Web.HttpUtility.HtmlEncode(mediaFile.OriginalFileName)}</div>
+                        <small class=""text-muted"">{fileSize}</small>
+                        {(!string.IsNullOrEmpty(description) ? 
+                            $"<div class=\"text-muted small\">{System.Web.HttpUtility.HtmlEncode(description)}</div>" : 
+                            "")}
+                    </div>
+                    <i class=""bi bi-download ms-2 text-muted""></i>
+                </a>
+            </div>";
     }
 
     private static bool IsImage(string contentType) =>
@@ -728,6 +794,144 @@ public class TemplateService
         // Assume it's user-friendly if it's short and contains spaces or looks like a name
         return identifier.Length <= 30;
     }
+}
 
-
+public class MediaDisplayOptions
+{
+    public string FileName { get; set; } = "";
+    public int? Size { get; set; }
+    public int? Width { get; set; }
+    public int? Height { get; set; }
+    public string Align { get; set; } = ""; // left, center, right
+    public string Display { get; set; } = "block"; // inline, block, thumb, full
+    public string Alt { get; set; } = "";
+    public string Caption { get; set; } = "";
+    public string Class { get; set; } = "";
+    
+    // Default values
+    public const int DefaultThumbnailSize = 600;
+    public const int ThumbSize = 150;
+    
+    public static MediaDisplayOptions Parse(string mediaTemplate)
+    {
+        var options = new MediaDisplayOptions();
+        
+        if (string.IsNullOrWhiteSpace(mediaTemplate))
+            return options;
+        
+        // Split by pipe delimiter
+        var parts = mediaTemplate.Split('|');
+        
+        // First part is always the filename
+        options.FileName = parts[0].Trim();
+        
+        // Parse additional parameters
+        for (int i = 1; i < parts.Length; i++)
+        {
+            var param = parts[i].Trim();
+            if (string.IsNullOrEmpty(param)) continue;
+            
+            var equalIndex = param.IndexOf('=');
+            if (equalIndex == -1) continue;
+            
+            var key = param.Substring(0, equalIndex).Trim().ToLowerInvariant();
+            var value = param.Substring(equalIndex + 1).Trim();
+            
+            switch (key)
+            {
+                case "size":
+                    if (int.TryParse(value, out var size) && size > 0 && size <= 2000)
+                        options.Size = size;
+                    break;
+                    
+                case "width":
+                    if (int.TryParse(value, out var width) && width > 0 && width <= 2000)
+                        options.Width = width;
+                    break;
+                    
+                case "height":
+                    if (int.TryParse(value, out var height) && height > 0 && height <= 2000)
+                        options.Height = height;
+                    break;
+                    
+                case "align":
+                    if (new[] { "left", "center", "right" }.Contains(value.ToLowerInvariant()))
+                        options.Align = value.ToLowerInvariant();
+                    break;
+                    
+                case "display":
+                    if (new[] { "inline", "block", "thumb", "full" }.Contains(value.ToLowerInvariant()))
+                        options.Display = value.ToLowerInvariant();
+                    break;
+                    
+                case "alt":
+                    options.Alt = value;
+                    break;
+                    
+                case "caption":
+                    options.Caption = value;
+                    break;
+                    
+                case "class":
+                    options.Class = value;
+                    break;
+            }
+        }
+        
+        return options;
+    }
+    
+    public int GetEffectiveSize()
+    {
+        if (Display == "thumb")
+            return ThumbSize;
+        if (Size.HasValue)
+            return Size.Value;
+        if (Width.HasValue)
+            return Width.Value;
+        return DefaultThumbnailSize;
+    }
+    
+    public string GetSizeStyles()
+    {
+        var styles = new List<string>();
+        
+        if (Width.HasValue)
+            styles.Add($"width: {Width}px");
+        else if (Size.HasValue)
+            styles.Add($"max-width: {Size}px");
+        else if (Display == "thumb")
+            styles.Add($"max-width: {ThumbSize}px");
+        
+        if (Height.HasValue)
+            styles.Add($"height: {Height}px");
+        else
+            styles.Add("height: auto");
+        
+        return styles.Count > 0 ? string.Join("; ", styles) : "";
+    }
+    
+    public string GetAlignmentClass()
+    {
+        return Align switch
+        {
+            "left" => "text-start",
+            "center" => "text-center", 
+            "right" => "text-end",
+            _ => ""
+        };
+    }
+    
+    public string GetDisplayClasses()
+    {
+        var classes = new List<string> { "img-fluid", "rounded", "shadow-sm" };
+        
+        if (Display == "inline")
+            classes.Add("d-inline");
+        
+        if (!string.IsNullOrEmpty(Class))
+            classes.Add(Class);
+        
+        return string.Join(" ", classes);
+    }
 }

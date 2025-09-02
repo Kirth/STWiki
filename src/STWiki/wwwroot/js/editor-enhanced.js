@@ -20,7 +20,7 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
         }
 
         // Find the editor container and store the component reference
-        const editorContainer = textarea.closest('.editor-container');
+        const editorContainer = textarea.closest('.editor-container') || textarea.parentElement;
         if (editorContainer && componentRef) {
             editorContainer._blazorComponentRef = componentRef;
             console.log('Stored component reference on editor container');
@@ -48,8 +48,37 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
 
         editorInstances.set(editorId, instance);
 
-        // Set initial content
-        textarea.value = initialContent || '';
+        // Set initial content - but first check what's already there
+        const existingContent = textarea.value || '';
+        const parameterContent = initialContent || '';
+        
+        console.log(`🔍 Editor initialization content comparison for ${editorId}:`);
+        console.log(`📝 Existing textarea content length: ${existingContent.length}`);
+        console.log(`📋 Parameter content length: ${parameterContent.length}`);
+        
+        if (existingContent.length > 100) {
+            console.log(`📝 Existing content preview: "${existingContent.substring(0, 100)}..."`);
+        } else if (existingContent.length > 0) {
+            console.log(`📝 Existing content full: "${existingContent}"`);
+        }
+        
+        if (parameterContent.length > 100) {
+            console.log(`📋 Parameter content preview: "${parameterContent.substring(0, 100)}..."`);
+        } else if (parameterContent.length > 0) {
+            console.log(`📋 Parameter content full: "${parameterContent}"`);
+        }
+        
+        // Use the longer/more complete content, but prefer parameter if they're equal
+        let finalContent = parameterContent;
+        if (existingContent.length > parameterContent.length) {
+            console.log(`⚠️ Existing content is longer than parameter - using existing content`);
+            finalContent = existingContent;
+        } else if (existingContent.length === parameterContent.length && existingContent !== parameterContent) {
+            console.log(`⚠️ Contents have same length but differ - using parameter content`);
+        }
+        
+        textarea.value = finalContent;
+        console.log(`✅ Final content set to ${finalContent.length} characters`);
 
         // Setup event listeners
         setupEventListeners(instance);
@@ -65,8 +94,6 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
         updateStats(instance);
 
         console.log('✅ Enhanced editor initialized successfully with drag-and-drop support');
-        console.log('🎯 Editor container:', container);
-        console.log('📁 Drag overlay found:', !!overlay);
         return true;
     } catch (error) {
         console.error('Failed to initialize enhanced editor:', error);
@@ -247,13 +274,28 @@ function syncWithFormTextarea(instance, content) {
     try {
         const hiddenField = instance.hiddenField;
         if (hiddenField) {
+            const previousValue = hiddenField.value || '';
             hiddenField.value = content || '';
+            
             // Also trigger change event to ensure form validation updates
             hiddenField.dispatchEvent(new Event('input', { bubbles: true }));
             hiddenField.dispatchEvent(new Event('change', { bubbles: true }));
-            console.log(`🔄 [${instance.id}] Synced content to form field:`, content?.length || 0, 'characters');
+            
+            console.log(`🔄 [${instance.id}] Synced content to form field: ${content?.length || 0} characters`);
+            
+            if (previousValue.length !== (content?.length || 0)) {
+                console.log(`📏 [${instance.id}] Form field content length changed: ${previousValue.length} → ${content?.length || 0}`);
+            }
+            
+            if (content && content.length > 100) {
+                console.log(`📝 [${instance.id}] Synced content preview: "${content.substring(0, 100)}..."`);
+            } else if (content && content.length > 0) {
+                console.log(`📝 [${instance.id}] Synced content full: "${content}"`);
+            }
         } else {
             console.warn(`⚠️ [${instance.id}] Hidden form field not found for syncing`);
+            console.log(`🔍 [${instance.id}] Available selectors in container:`, instance.container ? 
+                Array.from(instance.container.querySelectorAll('*')).map(el => `${el.tagName}${el.id ? '#' + el.id : ''}${el.className ? '.' + el.className.split(' ').join('.') : ''}`).slice(0, 10) : 'no container');
         }
     } catch (error) {
         console.error(`❌ [${instance.id}] Error syncing with form field:`, error);
@@ -1148,6 +1190,12 @@ window.checkBlazorConnection = function() {
 // Setup drag and drop functionality
 function setupDragAndDrop(instance) {
     const { textarea, container, id } = instance;
+    
+    if (!container) {
+        console.warn(`Container not found for editor ${id}, skipping drag-drop setup`);
+        return;
+    }
+    
     const overlay = document.getElementById(`drag-drop-overlay-${id}`);
     
     if (!overlay) {
@@ -1158,20 +1206,62 @@ function setupDragAndDrop(instance) {
     console.log(`🎯 Setting up drag-and-drop for editor ${id}`);
 
     let dragCounter = 0;
+    
+    // Use a shared global state for file dragging detection
+    if (!window.globalFileDragState) {
+        window.globalFileDragState = {
+            isDragging: false,
+            instances: new Set()
+        };
+        
+        // Add global document listeners only once
+        document.addEventListener('dragenter', function(e) {
+            if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+                window.globalFileDragState.isDragging = true;
+            }
+        }, false);
+        
+        document.addEventListener('dragleave', function(e) {
+            // Only reset if leaving the document entirely
+            if (!e.relatedTarget || e.relatedTarget.nodeName === 'HTML') {
+                window.globalFileDragState.isDragging = false;
+                // Hide all overlays
+                window.globalFileDragState.instances.forEach(instanceData => {
+                    if (instanceData.overlay && instanceData.overlay.classList) {
+                        instanceData.overlay.classList.add('d-none');
+                        instanceData.overlay.classList.remove('drag-over');
+                    }
+                    instanceData.dragCounter = 0;
+                });
+            }
+        }, false);
+        
+        document.addEventListener('drop', function(e) {
+            window.globalFileDragState.isDragging = false;
+        }, false);
+        
+        // Prevent default behaviors
+        document.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+        
+        document.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }, false);
+    }
+    
+    // Register this instance
+    const instanceData = { overlay, dragCounter: 0 };
+    window.globalFileDragState.instances.add(instanceData);
 
-    // Prevent default drag behaviors on the document level
-    document.addEventListener('dragenter', preventDefaults, false);
-    document.addEventListener('dragover', preventDefaults, false);
-    document.addEventListener('dragleave', preventDefaults, false);
-    document.addEventListener('drop', preventDefaults, false);
-
-    // Prevent default drag behaviors on the textarea
+    // Handle events on the editor elements
     textarea.addEventListener('dragenter', handleDragEnter, false);
     textarea.addEventListener('dragover', handleDragOver, false);
     textarea.addEventListener('dragleave', handleDragLeave, false);
     textarea.addEventListener('drop', handleDrop, false);
 
-    // Also handle events on the container for better coverage
     container.addEventListener('dragenter', handleDragEnter, false);
     container.addEventListener('dragover', handleDragOver, false);
     container.addEventListener('dragleave', handleDragLeave, false);
@@ -1183,14 +1273,13 @@ function setupDragAndDrop(instance) {
     }
 
     function handleDragEnter(e) {
-        console.log('🔽 Drag enter detected', e.target);
         e.preventDefault();
         e.stopPropagation();
-        dragCounter++;
+        instanceData.dragCounter++;
         
-        // Only show overlay for files
-        if (e.dataTransfer.types.includes('Files')) {
-            console.log('📁 Files detected, showing overlay');
+        // Only show overlay if we're dragging files and we're over the editor area
+        if (window.globalFileDragState.isDragging && e.dataTransfer.types.includes('Files')) {
+            console.log('📁 Files detected over editor, showing overlay');
             overlay.classList.remove('d-none');
             overlay.classList.add('drag-over');
         }
@@ -1200,7 +1289,7 @@ function setupDragAndDrop(instance) {
         e.preventDefault();
         e.stopPropagation();
         
-        if (e.dataTransfer.types.includes('Files')) {
+        if (window.globalFileDragState.isDragging && e.dataTransfer.types.includes('Files')) {
             e.dataTransfer.dropEffect = 'copy';
         }
     }
@@ -1208,11 +1297,11 @@ function setupDragAndDrop(instance) {
     function handleDragLeave(e) {
         e.preventDefault();
         e.stopPropagation();
-        dragCounter--;
+        instanceData.dragCounter--;
         
-        if (dragCounter <= 0) {
-            console.log('🔼 Drag leave, hiding overlay');
-            dragCounter = 0;
+        if (instanceData.dragCounter <= 0) {
+            console.log('🔼 Drag leave editor area, hiding overlay');
+            instanceData.dragCounter = 0;
             overlay.classList.add('d-none');
             overlay.classList.remove('drag-over');
         }
@@ -1222,7 +1311,8 @@ function setupDragAndDrop(instance) {
         console.log('🎯 Drop detected!', e);
         e.preventDefault();
         e.stopPropagation();
-        dragCounter = 0;
+        instanceData.dragCounter = 0;
+        window.globalFileDragState.isDragging = false;
         
         overlay.classList.add('d-none');
         overlay.classList.remove('drag-over');
@@ -1248,13 +1338,94 @@ function setupDragAndDrop(instance) {
 // Show upload modal with file details
 function showUploadModal(file, instance) {
     const modalId = `image-upload-modal-${instance.id}`;
-    const modal = new bootstrap.Modal(document.getElementById(modalId));
     
+    // Remove existing modal if it exists
+    const existingModal = document.getElementById(modalId);
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Create modal HTML outside any form
+    const modalHtml = `
+        <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Upload Image</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="upload-preview-${instance.id}" class="text-center mb-3 d-none">
+                            <img id="preview-image-${instance.id}" src="" alt="Preview" class="img-fluid rounded" style="max-height: 200px;">
+                        </div>
+                        
+                        <!-- Separate form for upload modal to isolate validation -->
+                        <form id="upload-form-${instance.id}">
+                            <div class="mb-3">
+                                <label for="upload-filename-${instance.id}" class="form-label">File Name <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="upload-filename-${instance.id}" placeholder="Enter filename (without extension)" required>
+                                <div class="form-text">The file extension will be added automatically</div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="upload-size-${instance.id}" class="form-label">Display Size</label>
+                                    <select class="form-select" id="upload-size-${instance.id}">
+                                        <option value="">Default (600px)</option>
+                                        <option value="thumb">Thumbnail (150px)</option>
+                                        <option value="300">Small (300px)</option>
+                                        <option value="500">Medium (500px)</option>
+                                        <option value="full">Full Size</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="upload-align-${instance.id}" class="form-label">Alignment</label>
+                                    <select class="form-select" id="upload-align-${instance.id}">
+                                        <option value="">Default</option>
+                                        <option value="left">Left</option>
+                                        <option value="center">Center</option>
+                                        <option value="right">Right</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="upload-description-${instance.id}" class="form-label">Description/Caption</label>
+                                <textarea class="form-control" id="upload-description-${instance.id}" rows="2" placeholder="Brief description or caption for the image"></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="upload-alttext-${instance.id}" class="form-label">Alt Text</label>
+                                <input type="text" class="form-control" id="upload-alttext-${instance.id}" placeholder="Alternative text for accessibility">
+                                <div class="form-text">Describes the image for screen readers and when the image fails to load</div>
+                            </div>
+                        </form>
+                        
+                        <div class="progress d-none" id="upload-progress-${instance.id}">
+                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="upload-confirm-${instance.id}">Upload & Insert</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add modal to body (outside any form)
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Get references to the new elements
+    const modal = new bootstrap.Modal(document.getElementById(modalId));
     const previewContainer = document.getElementById(`upload-preview-${instance.id}`);
     const previewImage = document.getElementById(`preview-image-${instance.id}`);
     const filenameInput = document.getElementById(`upload-filename-${instance.id}`);
     const descriptionInput = document.getElementById(`upload-description-${instance.id}`);
     const altTextInput = document.getElementById(`upload-alttext-${instance.id}`);
+    const sizeSelect = document.getElementById(`upload-size-${instance.id}`);
+    const alignSelect = document.getElementById(`upload-align-${instance.id}`);
     const confirmButton = document.getElementById(`upload-confirm-${instance.id}`);
     
     // Show preview
@@ -1272,16 +1443,31 @@ function showUploadModal(file, instance) {
     // Clear other fields
     descriptionInput.value = '';
     altTextInput.value = '';
+    sizeSelect.value = '';
+    alignSelect.value = '';
     
-    // Handle upload confirmation
+    // Handle upload confirmation with form validation
     confirmButton.onclick = function() {
-        uploadImageFile(file, instance, {
-            filename: filenameInput.value.trim(),
-            description: descriptionInput.value.trim(),
-            altText: altTextInput.value.trim()
-        });
-        modal.hide();
+        const uploadForm = document.getElementById(`upload-form-${instance.id}`);
+        if (uploadForm.checkValidity()) {
+            uploadImageFile(file, instance, {
+                filename: filenameInput.value.trim(),
+                description: descriptionInput.value.trim(),
+                altText: altTextInput.value.trim(),
+                size: sizeSelect.value,
+                align: alignSelect.value
+            });
+            modal.hide();
+        } else {
+            // Show validation messages
+            uploadForm.reportValidity();
+        }
     };
+    
+    // Clean up modal when hidden
+    document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
     
     modal.show();
 }
@@ -1326,10 +1512,40 @@ async function uploadImageFile(file, instance, metadata) {
         const result = await response.json();
         progressBar.style.width = '100%';
         
-        // Insert media template at cursor position
+        // Insert media template at cursor position with parameters
         const cursorPos = instance.textarea.selectionStart;
         const currentContent = instance.textarea.value;
-        const mediaTemplate = `[[media:${result.fileName}]]`;
+        
+        // Build media template with parameters
+        let mediaTemplate = `[[media:${result.fileName}`;
+        
+        // Add size parameter if specified
+        if (metadata.size) {
+            if (metadata.size === 'thumb') {
+                mediaTemplate += `|display=thumb`;
+            } else if (metadata.size === 'full') {
+                mediaTemplate += `|display=full`;
+            } else {
+                mediaTemplate += `|size=${metadata.size}`;
+            }
+        }
+        
+        // Add alignment parameter if specified
+        if (metadata.align) {
+            mediaTemplate += `|align=${metadata.align}`;
+        }
+        
+        // Add caption if description is provided
+        if (metadata.description) {
+            mediaTemplate += `|caption=${metadata.description}`;
+        }
+        
+        // Add alt text if provided
+        if (metadata.altText) {
+            mediaTemplate += `|alt=${metadata.altText}`;
+        }
+        
+        mediaTemplate += `]]`;
         
         const newContent = currentContent.substring(0, cursorPos) + 
                           mediaTemplate + 
