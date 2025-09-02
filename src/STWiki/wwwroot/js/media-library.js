@@ -36,9 +36,12 @@ class MediaLibrary {
             this.handleFiles(e.target.files);
         });
 
-        // Click to select files
-        dropzone.addEventListener('click', () => {
-            fileInput.click();
+        // Click to select files (but avoid conflict with button)
+        dropzone.addEventListener('click', (e) => {
+            // Only trigger if clicking the dropzone itself, not the button inside it
+            if (e.target === dropzone || dropzone.contains(e.target) && !e.target.closest('button')) {
+                fileInput.click();
+            }
         });
 
         // Search functionality
