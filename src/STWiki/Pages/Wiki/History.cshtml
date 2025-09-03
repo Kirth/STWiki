@@ -221,7 +221,7 @@
                             </h5>
                             <small class="opacity-75">
                                 Created @Model.SelectedRevision.CreatedAt.ToString("MMM dd, yyyy 'at' HH:mm") 
-                                by @Html.UserLink(Model.SelectedRevision.Author, Model.SelectedRevision.Author)
+                                by @Html.UserLink(Model.SelectedRevision.Author, Model.AuthorDisplayNames.GetValueOrDefault(Model.SelectedRevision.Author, Model.SelectedRevision.Author))
                             </small>
                             @if (!string.IsNullOrWhiteSpace(Model.SelectedRevision.Note))
                             {
@@ -303,11 +303,10 @@
                                                     <div class="d-flex align-items-center gap-2">
                                                         <div class="avatar-circle bg-primary text-white d-flex align-items-center justify-content-center" 
                                                              style="width: 32px; height: 32px; border-radius: 50%; font-size: 14px; font-weight: 600;">
-                                                            @revision.Author.Substring(0, 1).ToUpper()
+                                                            @Model.AuthorDisplayNames.GetValueOrDefault(revision.Author, revision.Author).Substring(0, 1).ToUpper()
                                                         </div>
                                                         <div>
-                                                            @Html.UserLink(revision.Author, revision.Author)
-                                                            <br><small class="text-muted">@revision.Author</small>
+                                                            @Html.UserLink(revision.Author, Model.AuthorDisplayNames.GetValueOrDefault(revision.Author, revision.Author))
                                                         </div>
                                                     </div>
                                                 </td>
@@ -329,56 +328,53 @@
                                                     </span>
                                                 </td>
                                                 <td class="py-3 text-center">
-                                                    <div class="btn-group btn-group-sm" role="group">
+                                                    <div class="d-flex justify-content-center gap-1 flex-wrap">
+                                                        <!-- View Button -->
                                                         <a asp-page-handler="ViewRevision" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" 
-                                                           class="btn btn-outline-primary" title="View this revision">
-                                                            <i class="bi bi-eye"></i>
+                                                           class="btn btn-outline-primary btn-sm" title="View this revision">
+                                                            <i class="bi bi-eye"></i><span class="d-none d-lg-inline ms-1">View</span>
                                                         </a>
-                                                        <div class="dropdown">
-                                                            <button class="btn btn-outline-success dropdown-toggle" type="button" data-bs-toggle="dropdown" 
-                                                                    title="Compare with other versions">
-                                                                <i class="bi bi-file-diff"></i>
-                                                            </button>
-                                                            <ul class="dropdown-menu shadow">
-                                                                @{
-                                                                    var previousRevision = Model.Revisions
-                                                                        .SkipWhile(r => r.Id != revision.Id)
-                                                                        .Skip(1)
-                                                                        .FirstOrDefault();
-                                                                }
-                                                                @if (previousRevision != null)
-                                                                {
-                                                                    <li>
-                                                                        <a class="dropdown-item d-flex align-items-center gap-2" 
-                                                                           asp-page-handler="Diff" 
-                                                                           asp-route-slug="@Model.Slug" 
-                                                                           asp-route-fromRevisionId="@previousRevision.Id" 
-                                                                           asp-route-toRevisionId="@revision.Id">
-                                                                            <i class="bi bi-arrow-left-right text-muted"></i> Compare with Previous
-                                                                        </a>
-                                                                    </li>
-                                                                }
-                                                                @if (!isLatest)
-                                                                {
-                                                                    <li>
-                                                                        <a class="dropdown-item d-flex align-items-center gap-2" 
-                                                                           asp-page-handler="Diff" 
-                                                                           asp-route-slug="@Model.Slug" 
-                                                                           asp-route-fromRevisionId="@revision.Id" 
-                                                                           asp-route-toRevisionId="@Model.Revisions.First().Id">
-                                                                            <i class="bi bi-arrow-up-right text-success"></i> Compare with Current
-                                                                        </a>
-                                                                    </li>
-                                                                }
-                                                            </ul>
-                                                        </div>
+                                                        
+                                                        <!-- Compare with Previous Button -->
+                                                        @{
+                                                            var previousRevision = Model.Revisions
+                                                                .SkipWhile(r => r.Id != revision.Id)
+                                                                .Skip(1)
+                                                                .FirstOrDefault();
+                                                        }
+                                                        @if (previousRevision != null)
+                                                        {
+                                                            <a class="btn btn-outline-info btn-sm" 
+                                                               asp-page-handler="Diff" 
+                                                               asp-route-slug="@Model.Slug" 
+                                                               asp-route-fromRevisionId="@previousRevision.Id" 
+                                                               asp-route-toRevisionId="@revision.Id"
+                                                               title="Compare with previous revision">
+                                                                <i class="bi bi-arrow-left-right"></i><span class="d-none d-xl-inline ms-1">vs Prev</span>
+                                                            </a>
+                                                        }
+                                                        
+                                                        <!-- Compare with Current Button -->
+                                                        @if (!isLatest)
+                                                        {
+                                                            <a class="btn btn-outline-success btn-sm" 
+                                                               asp-page-handler="Diff" 
+                                                               asp-route-slug="@Model.Slug" 
+                                                               asp-route-fromRevisionId="@revision.Id" 
+                                                               asp-route-toRevisionId="@Model.Revisions.First().Id"
+                                                               title="Compare with current version">
+                                                                <i class="bi bi-arrow-up-right"></i><span class="d-none d-xl-inline ms-1">vs Current</span>
+                                                            </a>
+                                                        }
+                                                        
+                                                        <!-- Restore Button -->
                                                         @if (User.Identity?.IsAuthenticated == true && !isLatest)
                                                         {
                                                             <form method="post" asp-page-handler="Restore" asp-route-slug="@Model.Slug" asp-route-revisionId="@revision.Id" style="display:inline">
                                                                 <button type="submit" class="btn btn-outline-warning btn-sm" 
                                                                         title="Restore this revision as the current version"
                                                                         onclick="return confirm('⚠️ Restore Revision\\n\\nThis will create a new revision with the content from @revision.CreatedAt.ToString("MMM dd, yyyy HH:mm").\\n\\nAre you sure you want to continue?')">
-                                                                    <i class="bi bi-arrow-clockwise"></i>
+                                                                    <i class="bi bi-arrow-clockwise"></i><span class="d-none d-lg-inline ms-1">Restore</span>
                                                                 </button>
                                                             </form>
                                                         }

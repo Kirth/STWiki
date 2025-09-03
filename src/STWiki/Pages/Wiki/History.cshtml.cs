@@ -13,17 +13,20 @@ public class HistoryModel : PageModel
     private readonly AppDbContext _context;
     private readonly MarkdownService _markdownService;
     private readonly DiffService _diffService;
+    private readonly UserService _userService;
 
-    public HistoryModel(AppDbContext context, MarkdownService markdownService, DiffService diffService)
+    public HistoryModel(AppDbContext context, MarkdownService markdownService, DiffService diffService, UserService userService)
     {
         _context = context;
         _markdownService = markdownService;
         _diffService = diffService;
+        _userService = userService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
     public string Slug { get; set; } = string.Empty;
     public List<Revision> Revisions { get; set; } = new();
+    public Dictionary<string, string> AuthorDisplayNames { get; set; } = new();
     public string RenderedContent { get; set; } = string.Empty;
     
     // Pagination properties
@@ -84,9 +87,26 @@ public class HistoryModel : PageModel
                 "html" => Page.Body,
                 _ => $"<pre>{Page.Body}</pre>"
             };
+
+            // Load author display names
+            await LoadAuthorDisplayNamesAsync();
         }
 
         return Page();
+    }
+
+    private async Task LoadAuthorDisplayNamesAsync()
+    {
+        if (!Revisions.Any()) return;
+
+        var authorIds = Revisions.Select(r => r.Author).Distinct().ToList();
+        AuthorDisplayNames.Clear();
+
+        foreach (var authorId in authorIds)
+        {
+            var user = await _userService.GetUserByUserIdAsync(authorId);
+            AuthorDisplayNames[authorId] = user?.DisplayName ?? authorId;
+        }
     }
 
     public async Task<IActionResult> OnGetViewRevisionAsync(string slug, long revisionId, int page = 1)
@@ -146,6 +166,9 @@ public class HistoryModel : PageModel
             "html" => Page.Body,
             _ => $"<pre>{Page.Body}</pre>"
         };
+
+        // Load author display names
+        await LoadAuthorDisplayNamesAsync();
 
         return Page();
     }
@@ -319,6 +342,9 @@ public class HistoryModel : PageModel
             "html" => Page.Body,
             _ => $"<pre>{Page.Body}</pre>"
         };
+
+        // Load author display names
+        await LoadAuthorDisplayNamesAsync();
 
         return Page();
     }
