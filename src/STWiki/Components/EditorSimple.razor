@@ -205,6 +205,7 @@
     private readonly Dictionary<string, string> _operationContentBackup = new();
     private int _localOperationCounter = 0;
     private int _serverOperationCounter = 0;
+    private bool _isProcessingOperation = false;
     
     // Unique component instance ID for debugging
     private readonly string ComponentId = Guid.NewGuid().ToString("N")[..8];
@@ -793,6 +794,8 @@
     {
         try
         {
+            _isProcessingOperation = true; // Prevent cursor broadcasting during operation processing
+            
             Console.WriteLine($"🚨🚨🚨 CRITICAL: OnReceiveOperation C# METHOD CALLED! 🚨🚨🚨");
             Console.WriteLine($"📥 Page {PageId}: C# OnReceiveOperation handler invoked");
             
@@ -840,6 +843,10 @@
         {
             Console.WriteLine($"❌ Failed to apply remote operation: {ex.Message}");
             Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+        }
+        finally
+        {
+            _isProcessingOperation = false; // Re-enable cursor broadcasting
         }
     }
     
@@ -1343,6 +1350,13 @@
         if (!IsCollaborationEnabled || _editHubConnection?.State != HubConnectionState.Connected)
             return;
 
+        // Skip cursor broadcasting if we're currently processing operations
+        if (_isProcessingOperation)
+        {
+            Console.WriteLine($"⏭️ Skipping cursor broadcast - processing operation");
+            return;
+        }
+
         try
         {
             var httpContext = HttpContextAccessor.HttpContext;
@@ -1358,8 +1372,8 @@
                 var currentStart = cursorInfo[0];
                 var currentEnd = cursorInfo[1];
                 
-                // Only broadcast if cursor position has changed
-                if (currentStart != _lastCursorStart || currentEnd != _lastCursorEnd)
+                // Only broadcast if cursor position has changed and we have pending operations count < 3 (to reduce noise)
+                if ((currentStart != _lastCursorStart || currentEnd != _lastCursorEnd) && _pendingOperations.Count < 3)
                 {
                     var cursor = new CursorPosition
                     {
@@ -1373,6 +1387,8 @@
                     // Update last known position
                     _lastCursorStart = currentStart;
                     _lastCursorEnd = currentEnd;
+                    
+                    Console.WriteLine($"📍 Broadcasted cursor position: {currentStart}-{currentEnd}");
                 }
             }
         }

@@ -43,7 +43,8 @@ window.initEnhancedEditor = function(editorId, initialContent, componentRef) {
             lastContent: '',
             updateTimeout: null,
             componentRef: componentRef,
-            format: currentFormat
+            format: currentFormat,
+            isApplyingRemoteOperation: false  // Per-instance collaboration state
         };
 
         editorInstances.set(editorId, instance);
@@ -1339,7 +1340,6 @@ window.addEventListener('beforeunload', function() {
 
 // Collaboration features
 let remoteCursors = new Map();
-let isApplyingRemoteOperation = false;
 
 // Set editor content programmatically (for collaboration sync)
 window.setEnhancedEditorContent = function(editorId, content) {
@@ -1349,13 +1349,14 @@ window.setEnhancedEditorContent = function(editorId, content) {
         return;
     }
     
-    isApplyingRemoteOperation = true;
+    console.log(`🔄 [${editorId}] Setting content programmatically (length: ${content?.length})`);
+    instance.isApplyingRemoteOperation = true;
     instance.textarea.value = content;
     updatePreview(instance).catch(console.error);
     updateStats(instance);
-    isApplyingRemoteOperation = false;
+    instance.isApplyingRemoteOperation = false;
     
-    console.log('✅ Set editor content for collaboration sync');
+    console.log(`✅ [${editorId}] Content set successfully`);
 };
 
 // Apply insert operation from remote user
@@ -1366,7 +1367,8 @@ window.applyInsertOperation = function(editorId, position, text) {
         return;
     }
     
-    isApplyingRemoteOperation = true;
+    console.log(`📥 [${editorId}] Applying remote insert: "${text}" at position ${position}`);
+    instance.isApplyingRemoteOperation = true;
     
     const textarea = instance.textarea;
     const currentValue = textarea.value;
@@ -1376,9 +1378,9 @@ window.applyInsertOperation = function(editorId, position, text) {
     updatePreview(instance).catch(console.error);
     updateStats(instance);
     
-    isApplyingRemoteOperation = false;
+    instance.isApplyingRemoteOperation = false;
     
-    console.log(`✅ Applied remote insert: "${text}" at position ${position}`);
+    console.log(`✅ [${editorId}] Applied remote insert successfully`);
 };
 
 // Apply delete operation from remote user
@@ -1389,7 +1391,7 @@ window.applyDeleteOperation = function(editorId, position, length) {
         return;
     }
     
-    isApplyingRemoteOperation = true;
+    instance.isApplyingRemoteOperation = true;
     
     const textarea = instance.textarea;
     const currentValue = textarea.value;
@@ -1399,7 +1401,7 @@ window.applyDeleteOperation = function(editorId, position, length) {
     updatePreview(instance).catch(console.error);
     updateStats(instance);
     
-    isApplyingRemoteOperation = false;
+    instance.isApplyingRemoteOperation = false;
     
     console.log(`✅ Applied remote delete: ${length} characters at position ${position}`);
 };
@@ -1412,7 +1414,7 @@ window.applyReplaceOperation = function(editorId, selectionStart, selectionEnd, 
         return;
     }
     
-    isApplyingRemoteOperation = true;
+    instance.isApplyingRemoteOperation = true;
     
     const textarea = instance.textarea;
     const currentValue = textarea.value;
@@ -1429,7 +1431,7 @@ window.applyReplaceOperation = function(editorId, selectionStart, selectionEnd, 
     updatePreview(instance).catch(console.error);
     updateStats(instance);
     
-    isApplyingRemoteOperation = false;
+    instance.isApplyingRemoteOperation = false;
     
     console.log(`✅ Applied remote replace: ${selectionStart}-${selectionEnd} -> "${newText}"`);
 };
@@ -2352,7 +2354,8 @@ function setupCollaborativeEventListeners(instance) {
     
     // Detect text changes for operational transform
     textarea.addEventListener('input', function(e) {
-        if (isApplyingRemoteOperation) {
+        if (instance.isApplyingRemoteOperation) {
+            console.log(`⏭️ [${instance.id}] Skipping input event - applying remote operation`);
             return; // Don't send operations for remote changes
         }
         
@@ -2367,13 +2370,18 @@ function setupCollaborativeEventListeners(instance) {
         if (operation && componentRef) {
             try {
                 console.log(`📝 [${instance.id}] Detected ${operation.type} operation:`, operation);
+                console.log(`   Content before: "${lastContent}" (length: ${lastContent.length})`);
+                console.log(`   Content after:  "${currentContent}" (length: ${currentContent.length})`);
+                console.log(`   Selection was: ${lastSelectionStart}-${lastSelectionEnd}, now: ${currentSelectionStart}-${currentSelectionEnd}`);
                 
                 if (operation.type === 'replace') {
+                    console.log(`🔄 [${instance.id}] Calling OnTextReplace(${operation.selectionStart}, ${operation.selectionEnd}, "${operation.newText}")`);
                     componentRef.invokeMethodAsync('OnTextReplace', 
                         operation.selectionStart, 
                         operation.selectionEnd, 
                         operation.newText);
                 } else {
+                    console.log(`🔄 [${instance.id}] Calling OnTextChange("${currentContent}", ${operation.position}, "${operation.type}", "${operation.text}")`);
                     componentRef.invokeMethodAsync('OnTextChange', 
                         currentContent, 
                         operation.position, 
@@ -2392,7 +2400,10 @@ function setupCollaborativeEventListeners(instance) {
     
     // Track cursor position changes
     textarea.addEventListener('selectionchange', function() {
-        if (isApplyingRemoteOperation) return;
+        if (instance.isApplyingRemoteOperation) {
+            console.log(`⏭️ [${instance.id}] Skipping cursor tracking - applying remote operation`);
+            return;
+        }
         
         // Cursor position changes are handled by the timer in the Blazor component
     });
