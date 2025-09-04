@@ -303,6 +303,11 @@
     <script src="~/lib/prism/prism-sql.min.js"></script>
     <script src="~/lib/prism/prism-bash.min.js"></script>
     
+    <!-- New modular editor system -->
+    <script type="module" src="~/js/wiki-editor.js"></script>
+    <script type="module" src="~/js/wiki-editor-blazor-bridge.js"></script>
+    <script src="~/js/media-library.js"></script>
+    
     <script>
             // Blazor connection diagnostics and state monitoring
             (function() {
@@ -651,9 +656,6 @@
                 }
             });
         </script>
-    
-    
-    <script src="~/js/editor-enhanced.js"></script>
     
     <!-- Fallback drag and drop for when Blazor component isn't working -->
     <script>
@@ -1267,10 +1269,6 @@
                 console.log('✅ DOM operation traps installed');
             })();
         </script>
-    
-    <!-- NEW MODULAR EDITOR SCRIPTS -->
-    <script type="module" src="~/js/wiki-editor.js"></script>
-    <script type="module" src="~/js/wiki-editor-blazor-bridge.js"></script>
         
     <style>
             /* Prism.js Code Block Enhancements */
@@ -1423,3 +1421,45 @@
             }
         </style>
 }
+
+<!-- Upload Modal for Drag & Drop Integration -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">Upload Media Files</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Drag and Drop Zone -->
+                <div id="dropzone" class="border-2 border-dashed border-secondary rounded p-5 text-center mb-3">
+                    <i class="bi bi-cloud-upload display-4 text-muted mb-3 d-block"></i>
+                    <h5>Drag and drop files here</h5>
+                    <p class="text-muted">or click to browse files</p>
+                    <input type="file" id="fileInput" multiple class="form-control" style="display: none;" accept="image/*,.pdf,.txt,.md,.docx,.pptx">
+                    <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                </div>
+
+                <!-- Upload Progress -->
+                <div id="uploadProgress" style="display: none;">
+                    <div class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="uploadStatus" class="text-center"></div>
+                </div>
+
+                <!-- File List -->
+                <div id="fileList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="uploadBtn" onclick="mediaLibrary.uploadFiles()" disabled>
+                    Upload Files
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+

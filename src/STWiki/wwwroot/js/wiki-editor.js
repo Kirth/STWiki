@@ -334,27 +334,104 @@ export class DragDropPlugin {
     const ov = document.createElement('div');
     ov.className = 'drag-overlay d-none';
     ov.textContent = 'Drop image to upload';
-    ov.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3);color:#fff;';
+    ov.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.3);color:#fff;font-weight:bold;font-size:18px;border:3px dashed #fff;border-radius:8px;z-index:1000;';
     this.editor.container.style.position = this.editor.container.style.position || 'relative';
     this.editor.container.appendChild(ov);
     this.overlay = ov;
 
     const sig = { signal: this.ac.signal };
-    const over = (e)=>{ e.preventDefault(); ov.classList.remove('d-none'); };
-    const leave= (e)=>{ e.preventDefault(); ov.classList.add('d-none'); };
-    const drop = async (e)=>{
-      e.preventDefault(); ov.classList.add('d-none');
-      const f = [...e.dataTransfer.files].find(f=>f.type.startsWith('image/'));
-      if (!f) return;
-      const r = await this.upload(f); // { fileName }
-      const ta = this.editor.textarea;
-      const ins = `[[media:${r.fileName}|display=thumb]]`;
-      ta.setRangeText(ins, ta.selectionStart, ta.selectionEnd, 'end');
-      this.editor.onInput(new Event('input'));
+    let dragCounter = 0; // Track enter/leave pairs to prevent flicker
+    
+    const over = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('🎯 [DragDrop] Drag over detected');
     };
+    
+    const enter = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter++;
+      if (dragCounter === 1) {
+        console.log('📁 [DragDrop] Showing drag overlay');
+        ov.classList.remove('d-none');
+      }
+    };
+    
+    const leave = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter--;
+      if (dragCounter === 0) {
+        console.log('🚫 [DragDrop] Hiding drag overlay');
+        ov.classList.add('d-none');
+      }
+    };
+    
+    const drop = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter = 0;
+      ov.classList.add('d-none');
+      
+      console.log('📤 [DragDrop] Drop detected, files:', e.dataTransfer.files.length);
+      
+      const imageFiles = [...e.dataTransfer.files].filter(f=>f.type.startsWith('image/'));
+      if (imageFiles.length === 0) {
+        console.warn('⚠️ [DragDrop] No image files found in drop');
+        return;
+      }
+      
+      console.log('🖼️ [DragDrop] Opening upload modal with', imageFiles.length, 'image files');
+      
+      // Check if modal integration is available
+      if (typeof window.openUploadModalWithFiles !== 'function') {
+        console.error('❌ [DragDrop] Upload modal integration not available, falling back to direct upload');
+        // Fallback to direct upload for single file
+        if (imageFiles.length === 1) {
+          try {
+            const r = await this.upload(imageFiles[0]);
+            const ta = this.editor.textarea;
+            const ins = `[[media:${r.fileName}|display=thumb]]`;
+            ta.setRangeText(ins, ta.selectionStart, ta.selectionEnd, 'end');
+            this.editor.onInput(new Event('input'));
+            console.log('✅ [DragDrop] Image uploaded and inserted:', r.fileName);
+          } catch (error) {
+            console.error('❌ [DragDrop] Upload failed:', error);
+          }
+        }
+        return;
+      }
+      
+      // Open modal with callback to insert media links
+      window.openUploadModalWithFiles(imageFiles, (uploadedFiles) => {
+        console.log('📝 [DragDrop] Upload completed, inserting', uploadedFiles.length, 'media links');
+        const ta = this.editor.textarea;
+        const cursorPos = ta.selectionStart;
+        
+        let insertText = '';
+        uploadedFiles.forEach((file, index) => {
+          const altText = file.altText || '';
+          const mediaLink = altText 
+            ? `[[media:${file.fileName}|${altText}]]`
+            : `[[media:${file.fileName}|display=thumb]]`;
+          
+          insertText += (index > 0 ? '\n' : '') + mediaLink;
+        });
+        
+        ta.setRangeText(insertText, cursorPos, cursorPos, 'end');
+        this.editor.onInput(new Event('input'));
+        
+        console.log('✅ [DragDrop] Inserted media links into editor');
+      });
+    };
+    
     this.editor.container.addEventListener('dragover', over, sig);
+    this.editor.container.addEventListener('dragenter', enter, sig);
     this.editor.container.addEventListener('dragleave', leave, sig);
     this.editor.container.addEventListener('drop', drop, sig);
+    
+    console.log('🎯 [DragDrop] Plugin initialized for container:', this.editor.container.id);
   }
   destroy(){ this.ac.abort(); this.overlay?.remove(); }
 }

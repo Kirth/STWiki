@@ -5,15 +5,26 @@ class MediaLibrary {
         this.hasMore = true;
         this.isLoading = false;
         this.currentMediaId = null;
+        this.uploadCompleteCallback = null;
         
         this.initializeEventListeners();
-        this.loadMedia();
+        
+        // Only load media if we're on the media library page (has media grid)
+        const mediaGrid = document.getElementById('mediaGrid');
+        if (mediaGrid) {
+            this.loadMedia();
+        }
     }
 
     initializeEventListeners() {
         const dropzone = document.getElementById('dropzone');
         const fileInput = document.getElementById('fileInput');
         const searchInput = document.getElementById('searchInput');
+        
+        if (!dropzone || !fileInput) {
+            console.warn('⚠️ [MediaLibrary] Required elements missing, skipping event listeners');
+            return;
+        }
 
         // Drag and drop events
         dropzone.addEventListener('dragover', (e) => {
@@ -44,10 +55,12 @@ class MediaLibrary {
             }
         });
 
-        // Search functionality
-        searchInput.addEventListener('input', this.debounce(() => {
-            this.searchMedia();
-        }, 300));
+        // Search functionality (only if search input exists)
+        if (searchInput) {
+            searchInput.addEventListener('input', this.debounce(() => {
+                this.searchMedia();
+            }, 300));
+        }
     }
 
     handleFiles(files) {
@@ -109,6 +122,7 @@ class MediaLibrary {
         let completed = 0;
         let failed = 0;
         const total = this.selectedFiles.length;
+        const uploadedFiles = []; // Collect successful uploads for callback
 
         for (const [index, file] of this.selectedFiles.entries()) {
             try {
@@ -137,6 +151,16 @@ class MediaLibrary {
                     throw new Error(error.error || 'Upload failed');
                 }
 
+                const uploadResult = await response.json();
+                uploadedFiles.push({
+                    originalFile: file,
+                    fileName: uploadResult.fileName,
+                    url: uploadResult.url,
+                    id: uploadResult.id,
+                    description: descriptionInput?.value || '',
+                    altText: altTextInput?.value || ''
+                });
+
                 completed++;
             } catch (error) {
                 console.error(`Failed to upload ${file.name}:`, error);
@@ -160,6 +184,14 @@ class MediaLibrary {
                 const modal = bootstrap.Modal.getInstance(modalElement);
                 modal.hide();
                 this.resetUploadForm();
+                
+                // Call callback if provided (for editor integration)
+                if (this.uploadCompleteCallback) {
+                    console.log('📤 [MediaLibrary] Invoking upload complete callback with', uploadedFiles.length, 'files');
+                    this.uploadCompleteCallback(uploadedFiles);
+                    this.uploadCompleteCallback = null;
+                }
+                
                 this.refreshMedia();
             }, 2000);
         } else {
@@ -507,5 +539,54 @@ function deleteMediaFile() {
 // Initialize when page loads
 let mediaLibrary;
 document.addEventListener('DOMContentLoaded', () => {
-    mediaLibrary = new MediaLibrary();
+    // Check if we have the required elements (they exist on both media library page and edit pages)
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    
+    if (dropzone && fileInput) {
+        mediaLibrary = new MediaLibrary();
+        console.log('✅ [MediaLibrary] Initialized successfully');
+    } else {
+        console.log('⚠️ [MediaLibrary] Required elements not found, skipping initialization');
+    }
 });
+
+// Global function to open upload modal with pre-selected files (for editor integration)
+window.openUploadModalWithFiles = function(files, callback) {
+    // Ensure media library is initialized
+    if (!mediaLibrary) {
+        console.log('📁 [MediaLibrary] Not initialized yet, initializing now...');
+        
+        // Check if we have the required elements
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        
+        if (dropzone && fileInput) {
+            mediaLibrary = new MediaLibrary();
+            console.log('✅ [MediaLibrary] Initialized on-demand');
+        } else {
+            console.error('❌ [MediaLibrary] Cannot initialize - required elements not found');
+            return;
+        }
+    }
+    
+    console.log('📁 [MediaLibrary] Opening upload modal with', files.length, 'pre-selected files');
+    
+    // Set the callback for when upload completes
+    mediaLibrary.uploadCompleteCallback = callback;
+    
+    // Set the selected files
+    mediaLibrary.selectedFiles = Array.from(files);
+    
+    // Display the files in the form
+    mediaLibrary.displaySelectedFiles();
+    
+    // Enable the upload button
+    document.getElementById('uploadBtn').disabled = false;
+    
+    // Open the modal
+    const uploadModal = new bootstrap.Modal(document.getElementById('uploadModal'));
+    uploadModal.show();
+    
+    console.log('✅ [MediaLibrary] Upload modal opened with pre-selected files');
+};

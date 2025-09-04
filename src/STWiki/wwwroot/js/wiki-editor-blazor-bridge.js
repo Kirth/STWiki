@@ -81,10 +81,11 @@ window.initWikiEditor = function(containerId, initialContent, format, dotNetRef)
             }
         }
 
-        // Enhanced DragDropPlugin with STWiki upload endpoint
+        // Enhanced DragDropPlugin - now uses modal integration instead of direct upload
         class STWikiDragDropPlugin extends DragDropPlugin {
             constructor(editor) {
                 super(editor, {
+                    // Fallback upload function (only used if modal integration fails)
                     upload: async (file) => {
                         const formData = new FormData();
                         formData.append('file', file);
