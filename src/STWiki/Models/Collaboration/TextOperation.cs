@@ -17,6 +17,24 @@ public class TextOperation
     // Server-assigned sequence number for strict ordering (prevents race conditions)
     public long ServerSequenceNumber { get; set; } = 0;
     
+    // Phase 1: Enhanced State Reconciliation - Additional tracking properties
+    
+    /// <summary>
+    /// Expected server sequence number when operation was created
+    /// Used for stale state detection
+    /// </summary>
+    public long ExpectedSequenceNumber { get; set; }
+    
+    /// <summary>
+    /// When this operation was processed by the server
+    /// </summary>
+    public DateTime? ProcessedAt { get; set; }
+    
+    /// <summary>
+    /// Number of retry attempts for this operation
+    /// </summary>
+    public int RetryCount { get; set; }
+    
     public static TextOperation Insert(int position, string content, string userId)
     {
         return new TextOperation

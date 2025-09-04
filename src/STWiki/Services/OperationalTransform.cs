@@ -41,7 +41,19 @@ public class OperationalTransform
                 transformedOp.Position = replacePos;
                 transformedOp.SelectionStart = replaceStart;
                 transformedOp.SelectionEnd = replaceEnd;
-                Console.WriteLine($"🔄 Transformed replace op: {op1.SelectionStart}-{op1.SelectionEnd} -> {replaceStart}-{replaceEnd} (content: '{op1.Content}')");
+                
+                // Check if transformation converted Replace to Insert (empty selection)
+                if (replaceStart == replaceEnd && !string.IsNullOrEmpty(transformedOp.Content))
+                {
+                    transformedOp.OpType = TextOperation.OperationType.Insert;
+                    transformedOp.Position = replaceStart;
+                    transformedOp.Length = transformedOp.Content.Length;
+                    Console.WriteLine($"🔄 Transformed replace op to insert: pos {replaceStart}, content: '{transformedOp.Content}'");
+                }
+                else
+                {
+                    Console.WriteLine($"🔄 Transformed replace op: {op1.SelectionStart}-{op1.SelectionEnd} -> {replaceStart}-{replaceEnd} (content: '{op1.Content}')");
+                }
                 break;
         }
         
@@ -210,34 +222,91 @@ public class OperationalTransform
                 else
                 {
                     // Overlapping replace operations - this is a conflict
-                    // For now, prioritize by timestamp (earlier operation wins)
+                    Console.WriteLine($"🚨 Replace operation conflict detected:");
+                    Console.WriteLine($"   This op: {replaceOp.SelectionStart}-{replaceOp.SelectionEnd} -> '{replaceOp.Content}' (ts: {replaceOp.Timestamp})");
+                    Console.WriteLine($"   Other op: {otherOp.SelectionStart}-{otherOp.SelectionEnd} -> '{otherOp.Content}' (ts: {otherOp.Timestamp})");
+                    
+                    // Priority resolution: earlier timestamp wins
                     if (otherOp.Timestamp < replaceOp.Timestamp)
                     {
-                        // Other operation wins, adjust our operation to work after it
+                        // Other operation wins - transform our operation to work after it
                         var lengthDiff = (otherOp.Content?.Length ?? 0) - (otherOp.SelectionEnd - otherOp.SelectionStart);
-                        newPosition = otherOp.Position + (otherOp.Content?.Length ?? 0);
+                        
+                        // Position our operation after the other operation's new content
+                        newPosition = otherOp.SelectionStart + (otherOp.Content?.Length ?? 0);
                         newSelectionStart = newPosition;
-                        newSelectionEnd = newPosition;
-                        // Convert to insert operation since selection is now empty
+                        newSelectionEnd = newPosition; // Empty selection = insert operation
+                        
+                        Console.WriteLine($"   Resolution: Converting to insert at position {newPosition} with content '{replaceOp.Content}'");
+                    }
+                    else
+                    {
+                        // Our operation wins - other operation will be transformed against ours
+                        // Keep our operation as-is but log the conflict
+                        Console.WriteLine($"   Resolution: Keeping our operation as-is (higher priority)");
                     }
                 }
                 break;
         }
+        
+        // Ensure selection bounds are valid
+        newSelectionStart = Math.Max(0, newSelectionStart);
+        newSelectionEnd = Math.Max(newSelectionStart, newSelectionEnd);
+        newPosition = Math.Max(0, newPosition);
         
         return (newPosition, newSelectionStart, newSelectionEnd);
     }
     
     private static bool IsValidOperation(TextOperation operation)
     {
+        // Basic position validation
+        if (operation.Position < 0)
+        {
+            Console.WriteLine($"❌ Invalid operation: negative position {operation.Position}");
+            return false;
+        }
+        
         return operation.OpType switch
         {
-            TextOperation.OperationType.Insert => !string.IsNullOrEmpty(operation.Content),
-            TextOperation.OperationType.Delete => operation.Length > 0,
-            TextOperation.OperationType.Retain => operation.Length > 0,
-            TextOperation.OperationType.Replace => !string.IsNullOrEmpty(operation.Content) && 
-                                                   operation.SelectionStart >= 0 && 
-                                                   operation.SelectionEnd >= operation.SelectionStart,
+            TextOperation.OperationType.Insert => 
+                !string.IsNullOrEmpty(operation.Content) && operation.Length == operation.Content.Length,
+                
+            TextOperation.OperationType.Delete => 
+                operation.Length > 0,
+                
+            TextOperation.OperationType.Retain => 
+                operation.Length > 0,
+                
+            TextOperation.OperationType.Replace => 
+                ValidateReplaceOperation(operation),
+                
             _ => false
         };
+    }
+    
+    private static bool ValidateReplaceOperation(TextOperation operation)
+    {
+        // Basic bounds checking
+        if (operation.SelectionStart < 0 || operation.SelectionEnd < operation.SelectionStart)
+        {
+            Console.WriteLine($"❌ Invalid replace operation: bad selection bounds {operation.SelectionStart}-{operation.SelectionEnd}");
+            return false;
+        }
+        
+        // Check for empty selection with empty content (this would be a no-op)
+        if (operation.SelectionStart == operation.SelectionEnd && string.IsNullOrEmpty(operation.Content))
+        {
+            Console.WriteLine($"❌ Invalid replace operation: empty selection and empty content (no-op)");
+            return false;
+        }
+        
+        // Content validation
+        if (operation.Content != null && operation.Length != operation.Content.Length)
+        {
+            Console.WriteLine($"❌ Invalid replace operation: content length mismatch. Length: {operation.Length}, Content: '{operation.Content}' (actual: {operation.Content.Length})");
+            return false;
+        }
+        
+        return true;
     }
 }

@@ -4,6 +4,8 @@
 @using Microsoft.AspNetCore.SignalR.Client
 @using STWiki.Models.Collaboration
 @using System.Security.Claims
+@using System.Security.Cryptography
+@using STWiki.Services
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject HttpClient HttpClient
@@ -186,6 +188,7 @@
     // Collaboration properties
     private HubConnection? _editHubConnection;
     private Timer? _cursorBroadcastTimer;
+    private Timer? _stateSyncTimer;
     private List<UserState> ConnectedUsers = new();
     private string CollaborationStatus = "Offline";
     private string CollaborationStatusClass = "bg-secondary";
@@ -233,10 +236,12 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        Console.WriteLine($"🚀 OnAfterRenderAsync called - firstRender: {firstRender}, PageId: {PageId}");
         if (firstRender)
         {
             try
             {
+                Console.WriteLine($"🔧 Starting first render initialization for page {PageId}");
                 // Wait a bit to ensure Blazor is fully loaded
                 await Task.Delay(100);
                 
@@ -260,15 +265,23 @@
                 // Create .NET object reference and initialize editor
                 var objRef = DotNetObjectReference.Create(this);
                 var success = await JS.InvokeAsync<bool>("initEnhancedEditor", _editorId, _safeContent, objRef);
+                Console.WriteLine($"📝 Editor initialization success: {success} for page {PageId}");
                 
                 if (success)
                 {
+                    Console.WriteLine($"✅ Editor ready, checking collaboration setup for page {PageId}");
                     IsReady = true;
                     
                     // Initialize collaboration if enabled
+                    Console.WriteLine($"🔍 Collaboration check: EnableCollaboration={EnableCollaboration}, IsNewPage={IsNewPage}, PageId={PageId}");
                     if (EnableCollaboration && !IsNewPage)
                     {
+                        Console.WriteLine($"✅ Starting collaboration initialization for page {PageId}");
                         await InitializeCollaboration();
+                    }
+                    else
+                    {
+                        Console.WriteLine($"❌ Collaboration NOT initialized. EnableCollaboration={EnableCollaboration}, IsNewPage={IsNewPage}, PageId={PageId}");
                     }
                     
                     // Start autosave timer for existing pages
@@ -283,7 +296,8 @@
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"❌ EditorSimple initialization failed: {ex.Message}");
+                Console.WriteLine($"❌ EditorSimple initialization failed for page {PageId}: {ex.Message}");
+                Console.WriteLine($"❌ Exception details: {ex}");
                 IsReady = false;
                 IsBlazorConnected = false;
                 StateHasChanged();
@@ -477,6 +491,7 @@
     {
         AutosaveTimer?.Dispose();
         _cursorBroadcastTimer?.Dispose();
+        _stateSyncTimer?.Dispose();
         
         try
         {
@@ -658,19 +673,32 @@
                 .WithAutomaticReconnect()
                 .Build();
 
-            // Set up event handlers
+            // Set up event handlers with detailed logging
+            Console.WriteLine($"🔗 Registering SignalR event handlers for page {PageId}...");
             _editHubConnection.On<string, int>("DocumentState", OnDocumentState);
+            Console.WriteLine($"✅ Registered DocumentState handler");
+            
             _editHubConnection.On<TextOperation>("ReceiveOperation", OnReceiveOperation);
+            Console.WriteLine($"✅ Registered ReceiveOperation handler - THIS IS THE CRITICAL ONE");
+            
             _editHubConnection.On<CursorPosition>("ReceiveCursor", OnReceiveCursor);
+            Console.WriteLine($"✅ Registered ReceiveCursor handler");
+            
             _editHubConnection.On<UserState>("UserJoined", OnUserJoined);
             _editHubConnection.On<string>("UserLeft", OnUserLeft);
             _editHubConnection.On<List<UserState>>("UserList", OnUserList);
             _editHubConnection.On<string, long>("OperationConfirmed", OnOperationConfirmed);
             _editHubConnection.On<string, string>("OperationRejected", OnOperationRejected);
             _editHubConnection.On<string>("Error", OnCollaborationError);
+            
+            // Phase 1: State synchronization event handlers
+            _editHubConnection.On<long>("StateVerified", OnStateVerified);
+            _editHubConnection.On<string, long, string>("RequiredResync", OnRequiredResync);
+            Console.WriteLine($"✅ All event handlers registered for page {PageId}");
 
             _editHubConnection.Reconnecting += (exception) =>
             {
+                Console.WriteLine($"🔄 SignalR Reconnecting for page {PageId}. Exception: {exception?.Message}");
                 CollaborationStatus = "Reconnecting...";
                 CollaborationStatusClass = "bg-warning";
                 InvokeAsync(StateHasChanged);
@@ -679,6 +707,7 @@
 
             _editHubConnection.Reconnected += (connectionId) =>
             {
+                Console.WriteLine($"✅ SignalR Reconnected for page {PageId}. Connection ID: {connectionId}");
                 CollaborationStatus = "Online";
                 CollaborationStatusClass = "bg-success";
                 InvokeAsync(StateHasChanged);
@@ -687,6 +716,7 @@
 
             _editHubConnection.Closed += (exception) =>
             {
+                Console.WriteLine($"❌ SignalR Connection Closed for page {PageId}. Exception: {exception?.Message}");
                 CollaborationStatus = "Disconnected";
                 CollaborationStatusClass = "bg-danger";
                 ConnectedUsers.Clear();
@@ -695,25 +725,44 @@
             };
 
             // Connect and join room
+            Console.WriteLine($"🚀 Starting SignalR connection for page {PageId}...");
             CollaborationStatus = "Connecting...";
             CollaborationStatusClass = "bg-warning";
             StateHasChanged();
 
             await _editHubConnection.StartAsync();
+            Console.WriteLine($"✅ SignalR connection started. State: {_editHubConnection.State}, Connection ID: {_editHubConnection.ConnectionId}");
 
             var userId = httpContext.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? 
                         httpContext.User.FindFirst("sub")?.Value ?? 
                         Guid.NewGuid().ToString();
+            Console.WriteLine($"👤 Using userId: {userId}");
 
+            Console.WriteLine($"🏠 Joining edit room for page {PageId}...");
             await _editHubConnection.InvokeAsync("JoinEditRoom", PageId.ToString(), userId);
+            Console.WriteLine($"✅ Successfully joined edit room for page {PageId}");
 
             IsCollaborationEnabled = true;
             CollaborationStatus = "Online";
             CollaborationStatusClass = "bg-success";
+            Console.WriteLine($"🎉 Collaboration fully enabled for page {PageId}");
 
             // Start cursor broadcasting timer
             _cursorBroadcastTimer = new Timer(async _ => await BroadcastCursor(), null, 
                 TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+
+            // Phase 1: Start periodic state sync timer (every 30 seconds, with initial delay of 10 seconds)
+            _stateSyncTimer = new Timer(async _ => await PerformStateSync(), null, 
+                TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30));
+            Console.WriteLine($"✅ State sync timer started for page {PageId} - first sync in 10 seconds");
+            
+            // Immediate test sync after a short delay
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(2000); // Wait 2 seconds for initialization to complete
+                Console.WriteLine($"🧪 Running initial test sync for page {PageId}");
+                await PerformStateSync();
+            });
 
             StateHasChanged();
         }
@@ -744,15 +793,165 @@
     {
         try
         {
+            Console.WriteLine($"🚨🚨🚨 CRITICAL: OnReceiveOperation C# METHOD CALLED! 🚨🚨🚨");
+            Console.WriteLine($"📥 Page {PageId}: C# OnReceiveOperation handler invoked");
+            
+            // Get current editor content for debugging
+            var currentContent = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+            Console.WriteLine($"🔄 RECEIVING remote operation from user {operation.UserId}:");
+            Console.WriteLine($"   Type: {operation.OpType}, Position: {operation.Position}, Length: {operation.Length}");
+            Console.WriteLine($"   Content: '{operation.Content}', Server Seq: {operation.ServerSequenceNumber}");
+            Console.WriteLine($"   Current editor length: {currentContent?.Length}, Pending ops: {_pendingOperations.Count}");
+            
+            // Check if we have pending operations that might conflict
+            if (_pendingOperations.Count > 0)
+            {
+                Console.WriteLine($"⚠️  WARNING: Applying remote op while {_pendingOperations.Count} local ops are pending!");
+                var pendingOps = _pendingOperations.ToArray();
+                for (int i = 0; i < pendingOps.Length; i++)
+                {
+                    var pending = pendingOps[i];
+                    Console.WriteLine($"     Pending {i}: {pending.OpType} at {pending.Position} ('{pending.Content}')");
+                }
+                
+                // CRITICAL FIX: Transform remote operation against pending local operations
+                var transformedOperation = TransformRemoteOperationAgainstPendingOps(operation, pendingOps);
+                if (transformedOperation != null)
+                {
+                    Console.WriteLine($"🔄 Transformed remote op: {transformedOperation.OpType} at {transformedOperation.Position}");
+                    operation = transformedOperation;
+                }
+                else
+                {
+                    Console.WriteLine($"❌ Remote operation cancelled due to conflicts");
+                    return; // Skip this operation
+                }
+            }
+
             // Apply operation to editor
             await ApplyOperationToEditor(operation);
             _serverOperationCounter++;
-            Console.WriteLine($"✅ Applied remote operation: {operation.OpType} at {operation.Position}");
+            
+            // Get content after applying operation
+            var newContent = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+            Console.WriteLine($"✅ Applied remote operation successfully. New editor length: {newContent?.Length}");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Failed to apply remote operation: {ex.Message}");
+            Console.WriteLine($"   Stack trace: {ex.StackTrace}");
         }
+    }
+    
+    /// <summary>
+    /// Transform a remote operation against pending local operations to prevent conflicts
+    /// </summary>
+    private TextOperation? TransformRemoteOperationAgainstPendingOps(TextOperation remoteOp, TextOperation[] pendingOps)
+    {
+        var transformedOp = new TextOperation
+        {
+            OpType = remoteOp.OpType,
+            Position = remoteOp.Position,
+            Content = remoteOp.Content,
+            Length = remoteOp.Length,
+            UserId = remoteOp.UserId,
+            Timestamp = remoteOp.Timestamp,
+            OperationId = remoteOp.OperationId,
+            ServerSequenceNumber = remoteOp.ServerSequenceNumber,
+            SelectionStart = remoteOp.SelectionStart,
+            SelectionEnd = remoteOp.SelectionEnd
+        };
+        
+        foreach (var pendingOp in pendingOps)
+        {
+            // Transform against each pending operation  
+            var previousOp = transformedOp;
+            transformedOp = OperationalTransform.Transform(transformedOp, pendingOp);
+            
+            Console.WriteLine($"🔄 Transforming remote op {previousOp.OpType}@{previousOp.Position} against pending {pendingOp.OpType}@{pendingOp.Position} -> {transformedOp.OpType}@{transformedOp.Position}");
+            
+            // Check if operation is still valid after transformation
+            if (!IsOperationValid(transformedOp))
+            {
+                Console.WriteLine($"❌ Remote operation became invalid after transformation against {pendingOp.OpType}");
+                return null;
+            }
+        }
+        
+        return transformedOp;
+    }
+    
+    /// <summary>
+    /// Check if an operation is valid and attempt recovery if possible
+    /// </summary>
+    private bool IsOperationValid(TextOperation operation)
+    {
+        if (operation.Position < 0) 
+        {
+            Console.WriteLine($"❌ Invalid operation: negative position {operation.Position}");
+            return false;
+        }
+        
+        switch (operation.OpType)
+        {
+            case TextOperation.OperationType.Insert:
+                var isValidInsert = !string.IsNullOrEmpty(operation.Content) && operation.Length == operation.Content.Length;
+                if (!isValidInsert)
+                {
+                    Console.WriteLine($"❌ Invalid insert operation: Content='{operation.Content}', Length={operation.Length}");
+                }
+                return isValidInsert;
+                
+            case TextOperation.OperationType.Delete:
+                var isValidDelete = operation.Length > 0;
+                if (!isValidDelete)
+                {
+                    Console.WriteLine($"❌ Invalid delete operation: Length={operation.Length}");
+                }
+                return isValidDelete;
+                
+            case TextOperation.OperationType.Replace:
+                return ValidateAndRecoverReplaceOperation(operation);
+                
+            default:
+                return true;
+        }
+    }
+    
+    /// <summary>
+    /// Validate Replace operation and attempt to recover from common issues
+    /// </summary>
+    private bool ValidateAndRecoverReplaceOperation(TextOperation operation)
+    {
+        // Check selection bounds
+        if (operation.SelectionStart < 0 || operation.SelectionEnd < operation.SelectionStart)
+        {
+            Console.WriteLine($"❌ Invalid replace operation: bad selection bounds {operation.SelectionStart}-{operation.SelectionEnd}");
+            return false;
+        }
+        
+        // Check for malformed operation (empty selection with empty content - no-op)
+        if (operation.SelectionStart == operation.SelectionEnd && string.IsNullOrEmpty(operation.Content))
+        {
+            Console.WriteLine($"⚠️ Replace operation is effectively a no-op: empty selection and empty content");
+            return false; // Skip this operation
+        }
+        
+        // Content length validation and recovery
+        if (operation.Content != null && operation.Length != operation.Content.Length)
+        {
+            Console.WriteLine($"⚠️ Replace operation content length mismatch. Fixing: Length: {operation.Length} -> {operation.Content.Length}");
+            operation.Length = operation.Content.Length; // Auto-fix this common issue
+        }
+        
+        // Validate Position matches SelectionStart for Replace operations  
+        if (operation.Position != operation.SelectionStart)
+        {
+            Console.WriteLine($"⚠️ Replace operation position mismatch. Fixing: Position: {operation.Position} -> {operation.SelectionStart}");
+            operation.Position = operation.SelectionStart; // Auto-fix this common issue
+        }
+        
+        return true;
     }
 
     private Task OnReceiveCursor(CursorPosition cursor)
@@ -833,6 +1032,10 @@
 
     private async Task OnOperationConfirmed(string operationId, long serverSequenceNumber)
     {
+        // Get operation details before removing
+        var confirmedOp = _pendingOperationMap.GetValueOrDefault(operationId);
+        var pendingCount = _pendingOperations.Count;
+        
         // Remove confirmed operation from pending structures
         _pendingOperations = new Queue<TextOperation>(_pendingOperations.Where(op => op.OperationId != operationId));
         _pendingOperationMap.Remove(operationId);
@@ -848,15 +1051,128 @@
         }
         
         Console.WriteLine($"✅ Operation confirmed: {operationId} (seq: {serverSequenceNumber})");
+        Console.WriteLine($"   Confirmed op: {confirmedOp?.OpType} at {confirmedOp?.Position}");
+        Console.WriteLine($"   Pending ops reduced from {pendingCount} to {_pendingOperations.Count}");
     }
 
     private async Task OnOperationRejected(string operationId, string reason)
     {
         Console.WriteLine($"❌ Operation rejected: {operationId} - {reason}");
         
-        // Rollback the rejected operation
-        if (_pendingOperationMap.TryGetValue(operationId, out var rejectedOperation) &&
-            _operationContentBackup.TryGetValue(operationId, out var backupContent))
+        // Get the rejected operation for potential retry
+        if (!_pendingOperationMap.TryGetValue(operationId, out var rejectedOperation))
+        {
+            Console.WriteLine($"⚠️ Cannot find rejected operation {operationId} for retry analysis");
+            return;
+        }
+        
+        // Analyze rejection reason and determine if retry is appropriate
+        var shouldRetry = ShouldRetryOperation(rejectedOperation, reason);
+        
+        if (shouldRetry && rejectedOperation.RetryCount < 3) // Max 3 retries
+        {
+            Console.WriteLine($"🔄 Attempting retry #{rejectedOperation.RetryCount + 1} for operation {operationId}");
+            
+            try
+            {
+                // Get current content to re-validate operation
+                var currentContent = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+                
+                // Check if operation is still applicable after server changes
+                if (IsOperationApplicable(rejectedOperation, currentContent))
+                {
+                    // Create retry operation with new ID and timestamp
+                    var retryOperation = new TextOperation
+                    {
+                        OpType = rejectedOperation.OpType,
+                        Position = rejectedOperation.Position,
+                        Content = rejectedOperation.Content,
+                        Length = rejectedOperation.Length,
+                        UserId = rejectedOperation.UserId,
+                        Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                        SelectionStart = rejectedOperation.SelectionStart,
+                        SelectionEnd = rejectedOperation.SelectionEnd,
+                        OperationId = Guid.NewGuid().ToString(),
+                        RetryCount = rejectedOperation.RetryCount + 1
+                    };
+                    
+                    // Store backup and tracking for retry
+                    _operationContentBackup[retryOperation.OperationId] = currentContent;
+                    _pendingOperationMap[retryOperation.OperationId] = retryOperation;
+                    _pendingOperations.Enqueue(retryOperation);
+                    
+                    // Send retry to server
+                    await _editHubConnection.InvokeAsync("SendTextOperation", PageId.ToString(), retryOperation);
+                    Console.WriteLine($"✅ Retry operation sent: {retryOperation.OperationId}");
+                }
+                else
+                {
+                    Console.WriteLine($"⚠️ Operation no longer applicable for retry, rolling back");
+                    await RollbackOperation(operationId, rejectedOperation);
+                }
+            }
+            catch (Exception retryEx)
+            {
+                Console.WriteLine($"❌ Failed to retry operation {operationId}: {retryEx.Message}");
+                await RollbackOperation(operationId, rejectedOperation);
+            }
+        }
+        else
+        {
+            if (!shouldRetry)
+            {
+                Console.WriteLine($"⚠️ Operation {operationId} not suitable for retry: {reason}");
+            }
+            else
+            {
+                Console.WriteLine($"⚠️ Max retry attempts exceeded for operation {operationId}");
+            }
+            
+            await RollbackOperation(operationId, rejectedOperation);
+        }
+        
+        // Clean up original operation
+        _pendingOperations = new Queue<TextOperation>(_pendingOperations.Where(op => op.OperationId != operationId));
+        _pendingOperationMap.Remove(operationId);
+        _operationContentBackup.Remove(operationId);
+    }
+    
+    /// <summary>
+    /// Determine if an operation should be retried based on rejection reason
+    /// </summary>
+    private bool ShouldRetryOperation(TextOperation operation, string reason)
+    {
+        var reasonLower = reason.ToLower();
+        
+        // Retry for temporary/recoverable errors
+        if (reasonLower.Contains("sequence") || 
+            reasonLower.Contains("stale") || 
+            reasonLower.Contains("conflict") ||
+            reasonLower.Contains("race") ||
+            reasonLower.Contains("timeout"))
+        {
+            return true;
+        }
+        
+        // Don't retry for validation errors or permanent failures
+        if (reasonLower.Contains("invalid") ||
+            reasonLower.Contains("malformed") ||
+            reasonLower.Contains("permission") ||
+            reasonLower.Contains("unauthorized"))
+        {
+            return false;
+        }
+        
+        // Default to retry for Replace operations (they're more prone to conflicts)
+        return operation.OpType == TextOperation.OperationType.Replace;
+    }
+    
+    /// <summary>
+    /// Roll back a rejected operation to its previous state
+    /// </summary>
+    private async Task RollbackOperation(string operationId, TextOperation rejectedOperation)
+    {
+        if (_operationContentBackup.TryGetValue(operationId, out var backupContent))
         {
             try
             {
@@ -870,15 +1186,15 @@
                 // Request document sync as fallback
                 if (_editHubConnection?.State == HubConnectionState.Connected)
                 {
+                    Console.WriteLine($"🔄 Requesting document sync as rollback fallback");
                     await _editHubConnection.InvokeAsync("RequestDocumentSync", PageId.ToString());
                 }
             }
         }
-        
-        // Clean up pending operation
-        _pendingOperations = new Queue<TextOperation>(_pendingOperations.Where(op => op.OperationId != operationId));
-        _pendingOperationMap.Remove(operationId);
-        _operationContentBackup.Remove(operationId);
+        else
+        {
+            Console.WriteLine($"⚠️ No backup content found for rollback of operation {operationId}");
+        }
     }
 
     private Task OnCollaborationError(string error)
@@ -892,18 +1208,134 @@
 
     private async Task ApplyOperationToEditor(TextOperation operation)
     {
-        switch (operation.OpType)
+        try
         {
-            case TextOperation.OperationType.Insert:
-                await JS.InvokeVoidAsync("applyInsertOperation", _editorId, operation.Position, operation.Content);
-                break;
-            case TextOperation.OperationType.Delete:
-                await JS.InvokeVoidAsync("applyDeleteOperation", _editorId, operation.Position, operation.Length);
-                break;
-            case TextOperation.OperationType.Replace:
-                await JS.InvokeVoidAsync("applyReplaceOperation", _editorId, operation.SelectionStart, operation.SelectionEnd, operation.Content ?? "");
-                break;
+            // Get current content to validate bounds before applying operation
+            var currentContent = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+            if (currentContent == null)
+            {
+                Console.WriteLine($"❌ Cannot apply operation: current content is null");
+                return;
+            }
+            
+            Console.WriteLine($"📝 Applying {operation.OpType} operation to content (length: {currentContent.Length})");
+            
+            switch (operation.OpType)
+            {
+                case TextOperation.OperationType.Insert:
+                    if (ValidateInsertOperation(operation, currentContent))
+                    {
+                        await JS.InvokeVoidAsync("applyInsertOperation", _editorId, operation.Position, operation.Content);
+                        Console.WriteLine($"✅ Applied insert at position {operation.Position}: '{operation.Content}'");
+                    }
+                    break;
+                    
+                case TextOperation.OperationType.Delete:
+                    if (ValidateDeleteOperation(operation, currentContent))
+                    {
+                        await JS.InvokeVoidAsync("applyDeleteOperation", _editorId, operation.Position, operation.Length);
+                        Console.WriteLine($"✅ Applied delete at position {operation.Position}, length {operation.Length}");
+                    }
+                    break;
+                    
+                case TextOperation.OperationType.Replace:
+                    if (ValidateReplaceOperationForApplication(operation, currentContent))
+                    {
+                        await JS.InvokeVoidAsync("applyReplaceOperation", _editorId, operation.SelectionStart, operation.SelectionEnd, operation.Content ?? "");
+                        Console.WriteLine($"✅ Applied replace at {operation.SelectionStart}-{operation.SelectionEnd}: '{operation.Content}'");
+                    }
+                    break;
+            }
         }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Failed to apply {operation.OpType} operation: {ex.Message}");
+            Console.WriteLine($"   Operation details: Pos={operation.Position}, Len={operation.Length}, Content='{operation.Content}'");
+            throw; // Re-throw so the calling code can handle the failure
+        }
+    }
+    
+    /// <summary>
+    /// Validate insert operation bounds before application
+    /// </summary>
+    private bool ValidateInsertOperation(TextOperation operation, string currentContent)
+    {
+        if (operation.Position < 0 || operation.Position > currentContent.Length)
+        {
+            Console.WriteLine($"❌ Insert operation position {operation.Position} is out of bounds (content length: {currentContent.Length})");
+            return false;
+        }
+        
+        if (string.IsNullOrEmpty(operation.Content))
+        {
+            Console.WriteLine($"❌ Insert operation has no content");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Validate delete operation bounds before application
+    /// </summary>
+    private bool ValidateDeleteOperation(TextOperation operation, string currentContent)
+    {
+        if (operation.Position < 0 || operation.Position >= currentContent.Length)
+        {
+            Console.WriteLine($"❌ Delete operation position {operation.Position} is out of bounds (content length: {currentContent.Length})");
+            return false;
+        }
+        
+        if (operation.Length <= 0)
+        {
+            Console.WriteLine($"❌ Delete operation has invalid length: {operation.Length}");
+            return false;
+        }
+        
+        if (operation.Position + operation.Length > currentContent.Length)
+        {
+            Console.WriteLine($"❌ Delete operation extends beyond content bounds: pos={operation.Position}, len={operation.Length}, content length={currentContent.Length}");
+            // Adjust length to fit within bounds
+            var adjustedLength = currentContent.Length - operation.Position;
+            if (adjustedLength > 0)
+            {
+                Console.WriteLine($"⚠️ Adjusting delete length from {operation.Length} to {adjustedLength}");
+                operation.Length = adjustedLength;
+                return true;
+            }
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// Validate replace operation bounds before application
+    /// </summary>
+    private bool ValidateReplaceOperationForApplication(TextOperation operation, string currentContent)
+    {
+        if (operation.SelectionStart < 0 || operation.SelectionStart > currentContent.Length)
+        {
+            Console.WriteLine($"❌ Replace operation start {operation.SelectionStart} is out of bounds (content length: {currentContent.Length})");
+            return false;
+        }
+        
+        if (operation.SelectionEnd < operation.SelectionStart || operation.SelectionEnd > currentContent.Length)
+        {
+            Console.WriteLine($"❌ Replace operation end {operation.SelectionEnd} is invalid (start: {operation.SelectionStart}, content length: {currentContent.Length})");
+            
+            // Attempt to adjust selection end to be valid
+            var adjustedEnd = Math.Min(Math.Max(operation.SelectionStart, operation.SelectionEnd), currentContent.Length);
+            if (adjustedEnd != operation.SelectionEnd)
+            {
+                Console.WriteLine($"⚠️ Adjusting selection end from {operation.SelectionEnd} to {adjustedEnd}");
+                operation.SelectionEnd = adjustedEnd;
+            }
+            
+            return adjustedEnd > operation.SelectionStart || !string.IsNullOrEmpty(operation.Content);
+        }
+        
+        return true;
     }
 
     private async Task BroadcastCursor()
@@ -984,6 +1416,11 @@
                 _pendingOperations.Enqueue(operation);
                 _localOperationCounter++;
                 
+                Console.WriteLine($"📤 SENDING local operation:");
+                Console.WriteLine($"   Type: {operation.OpType}, Position: {operation.Position}, Content: '{operation.Content}'");
+                Console.WriteLine($"   OpId: {operation.OperationId}, User: {userId}");
+                Console.WriteLine($"   Content before: length {contentBeforeOperation?.Length}, Pending count: {_pendingOperations.Count}");
+                
                 await _editHubConnection.InvokeAsync("SendTextOperation", PageId.ToString(), operation);
             }
         }
@@ -997,7 +1434,10 @@
     public async Task OnTextReplace(int selectionStart, int selectionEnd, string newText)
     {
         if (!IsCollaborationEnabled || _editHubConnection?.State != HubConnectionState.Connected)
+        {
+            Console.WriteLine($"⏭️ Replace operation skipped - collaboration not enabled or not connected");
             return;
+        }
 
         try
         {
@@ -1006,24 +1446,255 @@
                         httpContext?.User?.FindFirst("sub")?.Value ?? 
                         Guid.NewGuid().ToString();
 
+            // Enhanced logging for Replace operations
+            Console.WriteLine($"📝 Creating Replace operation:");
+            Console.WriteLine($"   Selection: {selectionStart}-{selectionEnd} (length: {selectionEnd - selectionStart})");
+            Console.WriteLine($"   New text: '{newText}' (length: {newText?.Length ?? 0})");
+            Console.WriteLine($"   User: {userId}");
+
             var operation = TextOperation.Replace(selectionStart, selectionEnd, newText, userId);
+            
+            // Validate the created operation
+            if (!IsOperationValid(operation))
+            {
+                Console.WriteLine($"❌ Created Replace operation is invalid, aborting send");
+                return;
+            }
             
             // Store content backup before sending operation for potential rollback
             var contentBeforeOperation = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+            Console.WriteLine($"💾 Backing up content (length: {contentBeforeOperation?.Length}) for operation {operation.OperationId}");
+            
             _operationContentBackup[operation.OperationId] = contentBeforeOperation;
             _pendingOperationMap[operation.OperationId] = operation;
             
             _pendingOperations.Enqueue(operation);
             _localOperationCounter++;
             
+            Console.WriteLine($"📤 Sending Replace operation {operation.OperationId} to server (pending count: {_pendingOperations.Count})");
             await _editHubConnection.InvokeAsync("SendTextOperation", PageId.ToString(), operation);
             
-            Console.WriteLine($"✅ Sent replace operation: {selectionStart}-{selectionEnd} -> '{newText}'");
+            Console.WriteLine($"✅ Replace operation sent successfully: {selectionStart}-{selectionEnd} -> '{newText}'");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"❌ Failed to send text replace operation: {ex.Message}");
+            Console.WriteLine($"   Stack trace: {ex.StackTrace}");
         }
+    }
+
+    // Phase 1: Enhanced State Reconciliation Methods
+    
+    /// <summary>
+    /// Phase 1: Perform periodic state synchronization with server
+    /// Compares client content hash and sequence number with server
+    /// </summary>
+    private async Task PerformStateSync()
+    {
+        if (!IsCollaborationEnabled)
+        {
+            Console.WriteLine($"⏭️ State sync skipped - collaboration not enabled");
+            return;
+        }
+        
+        if (_editHubConnection?.State != HubConnectionState.Connected)
+        {
+            Console.WriteLine($"⏭️ State sync skipped - not connected (state: {_editHubConnection?.State})");
+            return;
+        }
+
+        try
+        {
+            var currentContent = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+            var contentHash = ComputeContentHash(currentContent);
+            
+            Console.WriteLine($"🔍 Requesting state sync - seq: {_lastKnownSequenceNumber}, content length: {currentContent?.Length}, hash: {contentHash[..8]}...");
+            
+            await _editHubConnection.InvokeAsync("RequestStateSync", 
+                PageId.ToString(), 
+                _lastKnownSequenceNumber, 
+                contentHash);
+                
+            Console.WriteLine($"✅ State sync request sent successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ State sync failed: {ex.Message}");
+            Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+        }
+    }
+    
+    /// <summary>
+    /// Phase 1: Handle successful state verification from server
+    /// </summary>
+    private Task OnStateVerified(long serverSequenceNumber)
+    {
+        Console.WriteLine($"✅ State verified - client and server in sync at sequence {serverSequenceNumber}");
+        return Task.CompletedTask;
+    }
+    
+    /// <summary>
+    /// Phase 1: Handle required resync from server when state diverges
+    /// Improved to preserve and replay valid local operations
+    /// </summary>
+    private async Task OnRequiredResync(string serverContent, long serverSequenceNumber, string serverHash)
+    {
+        Console.WriteLine($"🚨 DESYNC DETECTED - attempting smart resync");
+        Console.WriteLine($"   Server seq: {serverSequenceNumber}, Client seq: {_lastKnownSequenceNumber}");
+        Console.WriteLine($"   Server hash: {serverHash[..8]}..., Content length: {serverContent?.Length}");
+        Console.WriteLine($"   Pending operations to preserve: {_pendingOperations.Count}");
+        
+        try
+        {
+            // Store pending operations for potential replay
+            var pendingOpsToReplay = new List<TextOperation>();
+            var currentTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            
+            // Identify recent operations that might still be valid
+            foreach (var op in _pendingOperations)
+            {
+                // Only replay operations from the last 5 seconds to avoid stale operations
+                var operationAge = currentTime - op.Timestamp;
+                if (operationAge < 5000) // 5 seconds
+                {
+                    Console.WriteLine($"🔄 Marking operation for replay: {op.OpType} at {op.Position} (age: {operationAge}ms)");
+                    pendingOpsToReplay.Add(op);
+                }
+                else
+                {
+                    Console.WriteLine($"🗑️ Discarding stale operation: {op.OpType} at {op.Position} (age: {operationAge}ms)");
+                }
+            }
+            
+            // Apply server content first
+            await JS.InvokeVoidAsync("setEnhancedEditorContent", _editorId, serverContent);
+            _lastKnownSequenceNumber = serverSequenceNumber;
+            
+            // Clear all pending operation tracking
+            _pendingOperations.Clear();
+            _pendingOperationMap.Clear();
+            _operationContentBackup.Clear();
+            
+            Console.WriteLine($"✅ Applied server state, attempting to replay {pendingOpsToReplay.Count} recent operations");
+            
+            // Attempt to replay recent local operations
+            if (pendingOpsToReplay.Count > 0 && IsCollaborationEnabled && _editHubConnection?.State == HubConnectionState.Connected)
+            {
+                var replayedCount = 0;
+                foreach (var op in pendingOpsToReplay)
+                {
+                    try
+                    {
+                        // Validate operation is still applicable
+                        var currentContent = await JS.InvokeAsync<string>("getEnhancedEditorContent", _editorId);
+                        if (IsOperationApplicable(op, currentContent))
+                        {
+                            // Apply locally first to maintain immediate user feedback
+                            await ApplyOperationToEditor(op);
+                            
+                            // Create new operation with updated timestamp
+                            var replayOp = new TextOperation
+                            {
+                                OpType = op.OpType,
+                                Position = op.Position,
+                                Content = op.Content,
+                                Length = op.Length,
+                                UserId = op.UserId,
+                                Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), // New timestamp
+                                SelectionStart = op.SelectionStart,
+                                SelectionEnd = op.SelectionEnd,
+                                OperationId = Guid.NewGuid().ToString() // New ID
+                            };
+                            
+                            // Re-send to server
+                            await _editHubConnection.InvokeAsync("SendTextOperation", PageId.ToString(), replayOp);
+                            
+                            // Track the replayed operation
+                            _pendingOperations.Enqueue(replayOp);
+                            _pendingOperationMap[replayOp.OperationId] = replayOp;
+                            
+                            replayedCount++;
+                            Console.WriteLine($"✅ Replayed operation: {op.OpType} at {op.Position}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"⚠️ Operation no longer applicable: {op.OpType} at {op.Position}");
+                        }
+                    }
+                    catch (Exception replayEx)
+                    {
+                        Console.WriteLine($"❌ Failed to replay operation {op.OpType}: {replayEx.Message}");
+                    }
+                }
+                
+                Console.WriteLine($"✅ Smart resync completed: replayed {replayedCount}/{pendingOpsToReplay.Count} operations");
+            }
+            else
+            {
+                Console.WriteLine($"✅ Basic resync completed (no operations to replay)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Resync failed: {ex.Message}");
+            Console.WriteLine($"   Stack trace: {ex.StackTrace}");
+            
+            // Fallback to basic resync
+            try
+            {
+                await JS.InvokeVoidAsync("setEnhancedEditorContent", _editorId, serverContent);
+                _lastKnownSequenceNumber = serverSequenceNumber;
+                _pendingOperations.Clear();
+                _pendingOperationMap.Clear();
+                _operationContentBackup.Clear();
+                Console.WriteLine($"✅ Fallback resync completed");
+            }
+            catch (Exception fallbackEx)
+            {
+                Console.WriteLine($"❌ Fallback resync also failed: {fallbackEx.Message}");
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Check if an operation can still be applied to the current content
+    /// </summary>
+    private bool IsOperationApplicable(TextOperation operation, string currentContent)
+    {
+        if (string.IsNullOrEmpty(currentContent))
+            return false;
+            
+        switch (operation.OpType)
+        {
+            case TextOperation.OperationType.Insert:
+                // Insert is applicable if position is within content bounds
+                return operation.Position >= 0 && operation.Position <= currentContent.Length;
+                
+            case TextOperation.OperationType.Delete:
+                // Delete is applicable if we have enough content to delete
+                return operation.Position >= 0 && 
+                       operation.Position + operation.Length <= currentContent.Length;
+                       
+            case TextOperation.OperationType.Replace:
+                // Replace is applicable if selection bounds are valid
+                return operation.SelectionStart >= 0 && 
+                       operation.SelectionEnd <= currentContent.Length &&
+                       operation.SelectionStart <= operation.SelectionEnd;
+                       
+            default:
+                return false;
+        }
+    }
+    
+    /// <summary>
+    /// Compute SHA-256 hash of content for state verification (client-side)
+    /// </summary>
+    private static string ComputeContentHash(string content)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content ?? "");
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToBase64String(hash);
     }
 
 }

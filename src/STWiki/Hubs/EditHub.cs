@@ -4,6 +4,7 @@ using STWiki.Models.Collaboration;
 using STWiki.Services;
 using STWiki.Data;
 using System.Security.Claims;
+using System.Security.Cryptography;
 
 namespace STWiki.Hubs;
 
@@ -48,16 +49,21 @@ public class EditHub : Hub
                 pageId, userId, userDisplayName, userEmail, Context.ConnectionId);
             
             // Join SignalR group
+            _logger.LogInformation("👥 Adding connection {ConnectionId} to group edit_{PageId}", Context.ConnectionId, pageId);
             await Groups.AddToGroupAsync(Context.ConnectionId, $"edit_{pageId}");
+            _logger.LogInformation("✅ Successfully added to group edit_{PageId}", pageId);
             
             // Send current document state to joining user
+            _logger.LogInformation("📄 Sending DocumentState to joining user {UserId}", userId);
             await Clients.Caller.SendAsync("DocumentState", session.CurrentContent, session.OperationCounter);
             
             // Send current user list to joining user
             var connectedUsers = session.ConnectedUsers.Values.ToList();
+            _logger.LogInformation("👥 Sending UserList with {UserCount} users to {UserId}", connectedUsers.Count, userId);
             await Clients.Caller.SendAsync("UserList", connectedUsers);
             
             // Notify others about new user
+            _logger.LogInformation("📢 Notifying others in group edit_{PageId} about new user {UserId}", pageId, userId);
             await Clients.OthersInGroup($"edit_{pageId}").SendAsync("UserJoined", userState);
             
             _logger.LogInformation("User {UserId} joined edit room for page {PageId}", userId, pageId);
@@ -96,12 +102,21 @@ public class EditHub : Hub
             
             foreach (var finalOperation in processedOperations)
             {
+                // Get session to check connected users for debugging
+                var session = await _editSessionService.GetSessionAsync(pageId);
+                var connectedCount = session?.ConnectedUsers.Count ?? 0;
+                
                 // Broadcast the processed operation to all other users in the room
+                _logger.LogInformation("🚀 SENDING ReceiveOperation to others in group edit_{PageId}: {OpType} at {Position} by {UserId} - {ConnectedCount} users in session", 
+                    pageId, finalOperation.OpType, finalOperation.Position, finalOperation.UserId, connectedCount);
+                    
                 await Clients.OthersInGroup($"edit_{pageId}").SendAsync("ReceiveOperation", finalOperation);
+                _logger.LogInformation("✅ Successfully sent ReceiveOperation to others in group edit_{PageId}", pageId);
                 
                 // Confirm operation back to sender if it's their operation
                 if (finalOperation.UserId == operation.UserId && finalOperation.OperationId == operation.OperationId)
                 {
+                    _logger.LogInformation("📤 Sending OperationConfirmed to caller for operation {OpId}", finalOperation.OperationId);
                     await Clients.Caller.SendAsync("OperationConfirmed", finalOperation.OperationId, finalOperation.ServerSequenceNumber);
                 }
             }
@@ -226,5 +241,65 @@ public class EditHub : Hub
         
         _logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
+    }
+    
+    /// <summary>
+    /// Phase 1: Enhanced State Reconciliation - Server-side state verification
+    /// Compares client state with server state and triggers resync if needed
+    /// </summary>
+    public async Task RequestStateSync(string pageId, long clientSequenceNumber, string clientContentHash)
+    {
+        try
+        {
+            _logger.LogInformation("📥 State sync request received for page {PageId} - Client seq: {ClientSeq}, hash: {ClientHash}", 
+                pageId, clientSequenceNumber, clientContentHash[..8] + "...");
+                
+            var session = await _editSessionService.GetSessionAsync(pageId);
+            if (session == null)
+            {
+                _logger.LogWarning("❌ Edit session not found for page {PageId}", pageId);
+                await Clients.Caller.SendAsync("Error", "Edit session not found");
+                return;
+            }
+
+            var serverContentHash = ComputeContentHash(session.CurrentContent);
+            var isInSync = clientSequenceNumber == session.GlobalSequenceNumber && 
+                          clientContentHash == serverContentHash;
+
+            _logger.LogInformation("🔍 State comparison for page {PageId}: Server seq: {ServerSeq}, hash: {ServerHash}, Content length: {ContentLength}, InSync: {InSync}", 
+                pageId, session.GlobalSequenceNumber, serverContentHash[..8] + "...", session.CurrentContent?.Length, isInSync);
+
+            if (isInSync)
+            {
+                await Clients.Caller.SendAsync("StateVerified", session.GlobalSequenceNumber);
+                _logger.LogInformation("✅ State verified for page {PageId} at sequence {Seq}", pageId, session.GlobalSequenceNumber);
+            }
+            else
+            {
+                // Send full resync
+                await Clients.Caller.SendAsync("RequiredResync", 
+                    session.CurrentContent, 
+                    session.GlobalSequenceNumber,
+                    serverContentHash);
+                _logger.LogWarning("🚨 State resync required for page {PageId}. Client seq: {ClientSeq}, Server seq: {ServerSeq}, Client hash: {ClientHash}, Server hash: {ServerHash}", 
+                    pageId, clientSequenceNumber, session.GlobalSequenceNumber, clientContentHash[..8] + "...", serverContentHash[..8] + "...");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ Error during state sync for page {PageId}", pageId);
+            await Clients.Caller.SendAsync("Error", "State sync failed");
+        }
+    }
+    
+    /// <summary>
+    /// Compute SHA-256 hash of content for state verification
+    /// </summary>
+    private static string ComputeContentHash(string content)
+    {
+        using var sha256 = SHA256.Create();
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content ?? "");
+        var hash = sha256.ComputeHash(bytes);
+        return Convert.ToBase64String(hash);
     }
 }
