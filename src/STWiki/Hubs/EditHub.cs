@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authorization;
 using STWiki.Models.Collaboration;
 using STWiki.Services;
+using STWiki.Services.Interfaces;
 using STWiki.Data;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -15,11 +16,19 @@ public class EditHub : Hub
     private readonly AppDbContext _context;
     private readonly ILogger<EditHub> _logger;
     
-    public EditHub(IEditSessionService editSessionService, AppDbContext context, ILogger<EditHub> logger)
+    // New refactored services (optional - for testing side-by-side)
+    private readonly ICollaborationService? _collaborationService;
+    private readonly ICollaborationSessionService? _collaborationSessionService;
+    
+    public EditHub(IEditSessionService editSessionService, AppDbContext context, ILogger<EditHub> logger,
+        ICollaborationService? collaborationService = null,
+        ICollaborationSessionService? collaborationSessionService = null)
     {
         _editSessionService = editSessionService;
         _context = context;
         _logger = logger;
+        _collaborationService = collaborationService;
+        _collaborationSessionService = collaborationSessionService;
     }
     
     public async Task JoinEditRoom(string pageId, string userId)
@@ -301,5 +310,107 @@ public class EditHub : Hub
         var bytes = System.Text.Encoding.UTF8.GetBytes(content ?? "");
         var hash = sha256.ComputeHash(bytes);
         return Convert.ToBase64String(hash);
+    }
+    
+    // ===== NEW REFACTORED ARCHITECTURE METHODS =====
+    
+    /// <summary>
+    /// Join edit room using the new refactored collaboration services
+    /// </summary>
+    public async Task JoinEditRoomV2(string pageId, string userId)
+    {
+        if (_collaborationService == null)
+        {
+            await Clients.Caller.SendAsync("Error", "Refactored collaboration services not available");
+            return;
+        }
+        
+        try
+        {
+            _logger.LogInformation("🚀 [V2] User {UserId} joining edit room for page {PageId}", userId, pageId);
+            
+            // Initialize collaboration for this page and user
+            await _collaborationService.InitializeAsync(Guid.Parse(pageId), userId);
+            
+            // Join SignalR group
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"edit_{pageId}_v2");
+            
+            // Get session information
+            var session = await _collaborationService.GetSessionAsync(Guid.Parse(pageId));
+            if (session != null)
+            {
+                // Send current state to joining user
+                await Clients.Caller.SendAsync("DocumentStateV2", session.CurrentContent, session.CurrentSequenceNumber);
+                
+                // Send connected users
+                var connectedUsers = await _collaborationService.GetConnectedUsersAsync(Guid.Parse(pageId));
+                await Clients.Caller.SendAsync("UserListV2", connectedUsers);
+                
+                // Notify others about new user
+                await Clients.OthersInGroup($"edit_{pageId}_v2").SendAsync("UserJoinedV2", userId);
+            }
+            
+            _logger.LogInformation("✅ [V2] User {UserId} successfully joined edit room for page {PageId}", userId, pageId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ [V2] Error joining edit room {PageId} for user {UserId}", pageId, userId);
+            await Clients.Caller.SendAsync("Error", $"[V2] Failed to join edit room: {ex.Message}");
+        }
+    }
+    
+    /// <summary>
+    /// Leave edit room using the new refactored collaboration services
+    /// </summary>
+    public async Task LeaveEditRoomV2(string pageId, string userId)
+    {
+        if (_collaborationService == null) return;
+        
+        try
+        {
+            _logger.LogInformation("👋 [V2] User {UserId} leaving edit room for page {PageId}", userId, pageId);
+            
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"edit_{pageId}_v2");
+            await Clients.OthersInGroup($"edit_{pageId}_v2").SendAsync("UserLeftV2", userId);
+            
+            // Dispose collaboration service for this user
+            await _collaborationService.DisposeAsync();
+            
+            _logger.LogInformation("✅ [V2] User {UserId} left edit room for page {PageId}", userId, pageId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ [V2] Error leaving edit room {PageId} for user {UserId}", pageId, userId);
+        }
+    }
+    
+    /// <summary>
+    /// Send text operation using the new refactored services  
+    /// </summary>
+    public async Task SendTextOperationV2(string pageId, string operationJson)
+    {
+        if (_collaborationService == null)
+        {
+            await Clients.Caller.SendAsync("OperationRejectedV2", "unknown", "Refactored services not available");
+            return;
+        }
+        
+        try
+        {
+            _logger.LogInformation("📝 [V2] Received operation for page {PageId}: {OperationJson}", pageId, operationJson);
+            
+            // For now, just echo back to test the pipeline
+            // TODO: Deserialize operation JSON and process through new services
+            
+            await Clients.OthersInGroup($"edit_{pageId}_v2").SendAsync("ReceiveOperationV2", operationJson);
+            await Clients.Caller.SendAsync("OperationConfirmedV2", "temp-id", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            
+            _logger.LogInformation("✅ [V2] Operation processed for page {PageId}", pageId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "❌ [V2] Error processing operation for page {PageId}", pageId);
+            await Clients.Caller.SendAsync("OperationRejectedV2", "unknown", ex.Message);
+        }
     }
 }

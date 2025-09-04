@@ -11,7 +11,7 @@
 @inject HttpClient HttpClient
 @inject IHttpContextAccessor HttpContextAccessor
 
-<div class="editor-container" data-editor-id="@_editorId">
+<div class="editor-container" id="editor-container-@_editorId" data-editor-id="@_editorId" data-format="@BodyFormat">
     <!-- Hidden field for this editor instance -->
     <input type="hidden" name="Body" data-role="body" />
     <!-- Format badge for this editor -->
@@ -97,6 +97,7 @@
                               rows="20" 
                               placeholder="@(BodyFormat == "markdown" ? "Start writing your wiki content in Markdown..." : "Start writing your wiki content in HTML...")"
                               data-room="@_safeRoom"
+                              data-role="editor"
                               style="resize: vertical; min-height: 400px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 14px; line-height: 1.5;">@_safeContent</textarea>
                     <div id="remote-cursor-overlay-@_editorId" class="remote-cursor-overlay"></div>
                     
@@ -116,7 +117,7 @@
                             <span data-role="char-count">0 characters</span>
                         </small>
                         <small class="text-muted">
-                            <span data-role="status-text">Ready</span>
+                            <span data-role="status">Ready</span>
                         </small>
                     </div>
                 </div>
@@ -263,10 +264,10 @@
                     await Task.Delay(50);
                 }
                 
-                // Create .NET object reference and initialize editor
+                // Create .NET object reference and initialize NEW modular editor
                 var objRef = DotNetObjectReference.Create(this);
-                var success = await JS.InvokeAsync<bool>("initEnhancedEditor", _editorId, _safeContent, objRef);
-                Console.WriteLine($"📝 Editor initialization success: {success} for page {PageId}");
+                var success = await JS.InvokeAsync<bool>("initWikiEditor", $"editor-container-{_editorId}", _safeContent, BodyFormat, objRef);
+                Console.WriteLine($"📝 NEW Editor initialization success: {success} for page {PageId}");
                 
                 if (success)
                 {

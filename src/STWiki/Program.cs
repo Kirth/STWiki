@@ -7,6 +7,7 @@ using Minio;
 using STWiki.Data;
 using STWiki.Models;
 using STWiki.Services;
+using STWiki.Extensions;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,6 +42,9 @@ builder.Services.AddScoped<STWiki.Services.UserService>();
 builder.Services.AddScoped<STWiki.Services.AdminService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
+
+// Add new collaborative editing services
+builder.Services.AddCollaborativeEditing();
 
 // Add configuration options
 builder.Services.Configure<STWiki.Models.CollaborationOptions>(
