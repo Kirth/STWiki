@@ -147,6 +147,8 @@ export class PreviewPlugin {
     this.debounced = debounce(() => this.render(), opts.delay ?? 120);
     this.worker = opts.worker || null; // optional Web Worker for heavy parsing
     this.resolveWikiMacros = opts.resolveWikiMacros || (async (html)=>html);
+    this.mediaCache = new Map(); // Cache for media API responses
+    this.pageCache = new Map(); // Cache for page lookup responses
   }
   init() { /* no-op */ }
   async onInput() { this.debounced(); }
@@ -169,6 +171,10 @@ export class PreviewPlugin {
     }
     // wiki macro pass (async)
     html = await this.resolveWikiMacros(html);
+    
+    // Process wiki-specific syntax
+    html = await this.processWikiSyntax(html);
+    
     editor.previewEl.innerHTML = html;
     // optional Prism hook
     if (window.Prism?.highlightAllUnder) {
@@ -185,6 +191,297 @@ export class PreviewPlugin {
       w.postMessage({ type:'render', format: fmt, text });
     });
   }
+  
+  async processWikiSyntax(html) {
+    // Process templates first (to avoid conflicts with other syntax)
+    html = this.parseTemplates(html);
+    
+    // Process page links (now async due to API calls)
+    html = await this.parseWikiLinks(html);
+    
+    // Process media links (async due to API calls)
+    html = await this.parseMediaLinks(html);
+    
+    return html;
+  }
+  
+  async parseWikiLinks(html) {
+    // Match [[page-slug]] and [[page-slug|Display Text]] patterns - exclude media links
+    const wikiLinkRegex = /\[\[(?!media:)([^|\]]+)(?:\|([^\]]+))?\]\]/g;
+    const matches = [...html.matchAll(wikiLinkRegex)];
+    
+    if (matches.length === 0) return html;
+    
+    console.log(`[PreviewPlugin] Found ${matches.length} wiki links to process`);
+    
+    // Collect all unique slugs for batch lookup
+    const slugsToLookup = [...new Set(matches.map(match => match[1].trim()))];
+    
+    // Get page info for all slugs at once
+    const pageInfo = await this.lookupPages(slugsToLookup);
+    
+    // Replace each match with appropriate link
+    for (const match of matches) {
+      const [fullMatch, slug, displayText] = match;
+      const cleanSlug = slug.trim();
+      const linkHtml = this.renderWikiLink(cleanSlug, displayText, pageInfo[cleanSlug]);
+      html = html.replace(fullMatch, linkHtml);
+    }
+    
+    return html;
+  }
+  
+  async lookupPages(slugs) {
+    const uncachedSlugs = slugs.filter(slug => !this.pageCache.has(slug));
+    
+    // Fetch uncached pages
+    if (uncachedSlugs.length > 0) {
+      try {
+        console.log(`[PreviewPlugin] Looking up ${uncachedSlugs.length} pages:`, uncachedSlugs);
+        
+        const response = await fetch(`/api/wiki/lookup?slugs=${uncachedSlugs.map(s => encodeURIComponent(s)).join(',')}`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[PreviewPlugin] Page lookup response:`, data);
+          
+          // Cache the results
+          uncachedSlugs.forEach(slug => {
+            const title = data.pages[slug] || null;
+            this.pageCache.set(slug, title);
+          });
+        } else {
+          console.error(`[PreviewPlugin] Page lookup failed: ${response.status}`);
+          // Cache null results to avoid repeated API calls
+          uncachedSlugs.forEach(slug => this.pageCache.set(slug, null));
+        }
+      } catch (error) {
+        console.error(`[PreviewPlugin] Error looking up pages:`, error);
+        uncachedSlugs.forEach(slug => this.pageCache.set(slug, null));
+      }
+    }
+    
+    // Return all requested page info from cache
+    const result = {};
+    slugs.forEach(slug => {
+      result[slug] = this.pageCache.get(slug) || null;
+    });
+    return result;
+  }
+  
+  renderWikiLink(slug, displayText, pageTitle) {
+    const exists = pageTitle !== null;
+    const text = displayText ? displayText.trim() : (pageTitle || slug);
+    const className = exists ? 'wiki-link wiki-link-exists' : 'wiki-link wiki-link-unknown';
+    const title = exists ? `Navigate to: ${pageTitle}` : `Page does not exist: ${slug}`;
+    
+    return `<a href="/wiki/${encodeURIComponent(slug)}" class="${className}" title="${esc(title)}">${esc(text)}</a>`;
+  }
+  
+  async parseMediaLinks(html) {
+    // Match [[media:filename|params]] patterns - case insensitive
+    const mediaRegex = /\[\[media:([^|\]]+)(?:\|([^\]]+))?\]\]/gi;
+    const matches = [...html.matchAll(mediaRegex)];
+    
+    console.log(`[PreviewPlugin] Found ${matches.length} media links to process`);
+    
+    for (const match of matches) {
+      const [fullMatch, filename, params] = match;
+      console.log(`[PreviewPlugin] Processing media: "${filename}" with params: "${params}"`);
+      const mediaHtml = await this.renderMediaLink(filename.trim(), params);
+      html = html.replace(fullMatch, mediaHtml);
+    }
+    
+    return html;
+  }
+  
+  async renderMediaLink(filename, params) {
+    try {
+      console.log(`[PreviewPlugin] Rendering media link for: ${filename}`);
+      
+      // Try to get media info from cache first
+      let mediaInfo = this.mediaCache.get(filename);
+      
+      if (!mediaInfo) {
+        console.log(`[PreviewPlugin] Media not in cache, fetching from API: ${filename}`);
+        
+        // Search for media by filename
+        const apiUrl = `/api/media?search=${encodeURIComponent(filename)}&pageSize=20`;
+        console.log(`[PreviewPlugin] API URL: ${apiUrl}`);
+        
+        const response = await fetch(apiUrl);
+        console.log(`[PreviewPlugin] API response status: ${response.status}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[PreviewPlugin] API response data:`, data);
+          
+          if (data.items && data.items.length > 0) {
+            // Look for exact match first, then partial match
+            mediaInfo = data.items.find(item => item.fileName === filename) || 
+                       data.items.find(item => item.fileName.includes(filename)) ||
+                       data.items[0];
+            
+            if (mediaInfo) {
+              console.log(`[PreviewPlugin] Found media:`, mediaInfo);
+              this.mediaCache.set(filename, mediaInfo);
+            }
+          }
+        } else {
+          console.error(`[PreviewPlugin] API error: ${response.status} ${response.statusText}`);
+        }
+      } else {
+        console.log(`[PreviewPlugin] Using cached media info for: ${filename}`);
+      }
+      
+      if (!mediaInfo) {
+        console.warn(`[PreviewPlugin] No media found for: ${filename}`);
+        return `<span class="media-link-error" title="Media file not found: ${filename}">📄 ${esc(filename)} (not found)</span>`;
+      }
+      
+      // Parse parameters
+      const paramObj = this.parseMediaParams(params);
+      console.log(`[PreviewPlugin] Media parameters:`, paramObj);
+      
+      // Render based on content type
+      if (mediaInfo.contentType.startsWith('image/')) {
+        return this.renderImageMedia(mediaInfo, paramObj);
+      } else {
+        return this.renderFileMedia(mediaInfo, paramObj);
+      }
+    } catch (error) {
+      console.error(`[PreviewPlugin] Failed to render media link for ${filename}:`, error);
+      return `<span class="media-link-error" title="Error loading media: ${error.message}">📄 ${esc(filename)} (error)</span>`;
+    }
+  }
+  
+  parseMediaParams(paramString) {
+    const params = {};
+    if (!paramString) return params;
+    
+    const pairs = paramString.split('|');
+    for (const pair of pairs) {
+      const [key, value] = pair.split('=').map(s => s.trim());
+      if (key) {
+        params[key] = value || true;
+      }
+    }
+    return params;
+  }
+  
+  renderImageMedia(mediaInfo, params) {
+    const { id, fileName, thumbnailUrl, width, height } = mediaInfo;
+    const imageUrl = thumbnailUrl || `/api/media/${id}`;
+    
+    // Handle size parameters
+    let sizeStyle = '';
+    if (params.size) {
+      sizeStyle = `max-width: ${params.size}px;`;
+    } else if (params.width) {
+      sizeStyle = `width: ${params.width}px;`;
+    }
+    
+    // Handle alignment
+    let alignClass = '';
+    if (params.align === 'left') alignClass = 'float-start me-3';
+    else if (params.align === 'right') alignClass = 'float-end ms-3';
+    else if (params.align === 'center') alignClass = 'd-block mx-auto';
+    
+    const alt = params.alt || params.caption || fileName;
+    const caption = params.caption ? `<figcaption class="figure-caption">${esc(params.caption)}</figcaption>` : '';
+    
+    if (caption) {
+      return `<figure class="figure ${alignClass}">
+        <img src="${imageUrl}" alt="${esc(alt)}" class="figure-img img-fluid rounded" style="${sizeStyle}" 
+             title="Click to view full size" onclick="window.open('/api/media/${id}', '_blank')">
+        ${caption}
+      </figure>`;
+    } else {
+      return `<img src="${imageUrl}" alt="${esc(alt)}" class="img-fluid rounded ${alignClass}" 
+               style="${sizeStyle} cursor: pointer;" title="Click to view full size"
+               onclick="window.open('/api/media/${id}', '_blank')">`;
+    }
+  }
+  
+  renderFileMedia(mediaInfo, params) {
+    const { id, fileName, contentType, fileSize } = mediaInfo;
+    const sizeStr = this.formatFileSize(fileSize);
+    const icon = this.getFileIcon(contentType);
+    
+    return `<a href="/api/media/${id}" target="_blank" class="file-link d-inline-flex align-items-center text-decoration-none">
+      <i class="bi bi-${icon} me-2"></i>
+      <span class="me-2">${esc(fileName)}</span>
+      <small class="text-muted">(${sizeStr})</small>
+    </a>`;
+  }
+  
+  parseTemplates(html) {
+    // Match {{template-name param=value}} patterns
+    return html.replace(/\{\{([^}]+)\}\}/g, (match, content) => {
+      const parts = content.trim().split(/\s+/);
+      const templateName = parts[0];
+      const params = parts.slice(1).map(p => {
+        const [key, value] = p.split('=');
+        return value ? `${key}: ${value}` : key;
+      }).join(', ');
+      
+      const icon = this.getTemplateIcon(templateName);
+      const description = this.getTemplateDescription(templateName);
+      
+      return `<div class="template-placeholder border rounded p-3 mb-3 bg-light">
+        <div class="d-flex align-items-center">
+          <i class="bi bi-${icon} text-primary me-2 fs-5"></i>
+          <div>
+            <strong>${esc(templateName)}</strong>
+            ${params ? `<small class="text-muted ms-2">(${esc(params)})</small>` : ''}
+            <div class="small text-muted">${description}</div>
+          </div>
+        </div>
+      </div>`;
+    });
+  }
+  
+  getTemplateIcon(templateName) {
+    const icons = {
+      'recent-pages': 'clock-history',
+      'child-pages': 'folder',
+      'popular-pages': 'star',
+      'top-contributors': 'people',
+      'wiki-statistics': 'bar-chart',
+      'recently-edited': 'pencil-square'
+    };
+    return icons[templateName] || 'puzzle';
+  }
+  
+  getTemplateDescription(templateName) {
+    const descriptions = {
+      'recent-pages': 'Shows recently updated pages',
+      'child-pages': 'Lists sub-pages of current page',
+      'popular-pages': 'Displays most viewed pages',
+      'top-contributors': 'Shows top wiki contributors',
+      'wiki-statistics': 'Displays wiki metrics and statistics',
+      'recently-edited': 'Shows recent page changes'
+    };
+    return descriptions[templateName] || 'Dynamic template content will appear here';
+  }
+  
+  formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+  
+  getFileIcon(contentType) {
+    if (contentType.includes('pdf')) return 'file-earmark-pdf';
+    if (contentType.includes('word') || contentType.includes('document')) return 'file-earmark-word';
+    if (contentType.includes('excel') || contentType.includes('spreadsheet')) return 'file-earmark-excel';
+    if (contentType.includes('powerpoint') || contentType.includes('presentation')) return 'file-earmark-ppt';
+    if (contentType.startsWith('text/')) return 'file-earmark-text';
+    if (contentType.startsWith('image/')) return 'file-earmark-image';
+    return 'file-earmark';
+  }
+  
   destroy() { /* worker is external */ }
 }
 

@@ -190,6 +190,32 @@ public class WikiApiController : ControllerBase
         }
     }
 
+    [HttpGet("lookup")]
+    public async Task<IActionResult> LookupPages([FromQuery] string? slugs)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(slugs))
+                return BadRequest(new { error = "slugs parameter is required" });
+
+            var slugList = slugs.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
+            if (!slugList.Any())
+                return BadRequest(new { error = "No valid slugs provided" });
+
+            var pages = await _context.Pages
+                .Where(p => slugList.Contains(p.Slug))
+                .Select(p => new { p.Slug, p.Title })
+                .ToDictionaryAsync(p => p.Slug, p => p.Title);
+
+            return Ok(new { pages = pages });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to lookup pages");
+            return StatusCode(500, new { error = "Failed to lookup pages" });
+        }
+    }
+
     [HttpPost("{id}/set-render-mode")]
     [Authorize(Policy = "RequireAdmin")]
     public async Task<IActionResult> SetRenderMode(Guid id, [FromBody] RenderModeRequest request)
