@@ -25,6 +25,7 @@ public class MediaApiController : ControllerBase
     [Authorize(Policy = "RequireEditor")]
     public async Task<ActionResult<MediaUploadResponse>> UploadFile(
         IFormFile file,
+        [FromForm] string? filename = null,
         [FromForm] string? description = null,
         [FromForm] string? altText = null)
     {
@@ -37,7 +38,7 @@ public class MediaApiController : ControllerBase
 
         try
         {
-            var result = await _mediaService.UploadFileAsync(file, description, altText, userId);
+            var result = await _mediaService.UploadFileAsync(file, filename, description, altText, userId);
 
             if (!result.Success)
             {

@@ -92,6 +92,12 @@ class MediaLibrary {
                     </div>
                     <div class="mt-2">
                         <input type="text" class="form-control form-control-sm mb-1" 
+                               placeholder="Filename" 
+                               data-file-index="${index}" 
+                               data-field="filename"
+                               value="${this.escapeHtml(this.getFilenameWithoutExtension(file.name))}"
+                               required>
+                        <input type="text" class="form-control form-control-sm mb-1" 
                                placeholder="Description (optional)" 
                                data-file-index="${index}" 
                                data-field="description"
@@ -131,9 +137,13 @@ class MediaLibrary {
                 const formData = new FormData();
                 formData.append('file', file);
                 
+                const filenameInput = document.querySelector(`input[data-file-index="${index}"][data-field="filename"]`);
                 const descriptionInput = document.querySelector(`input[data-file-index="${index}"][data-field="description"]`);
                 const altTextInput = document.querySelector(`input[data-file-index="${index}"][data-field="altText"]`);
                 
+                if (filenameInput?.value?.trim()) {
+                    formData.append('filename', filenameInput.value.trim());
+                }
                 if (descriptionInput?.value) {
                     formData.append('description', descriptionInput.value);
                 }
@@ -157,6 +167,7 @@ class MediaLibrary {
                     fileName: uploadResult.fileName,
                     url: uploadResult.url,
                     id: uploadResult.id,
+                    filename: filenameInput?.value?.trim() || '',
                     description: descriptionInput?.value || '',
                     altText: altTextInput?.value || ''
                 });
@@ -440,6 +451,11 @@ class MediaLibrary {
         if (contentType.includes('powerpoint') || contentType.includes('presentation')) return 'file-earmark-ppt';
         if (contentType.startsWith('text/')) return 'file-earmark-text';
         return 'file-earmark';
+    }
+
+    getFilenameWithoutExtension(fileName) {
+        const lastDotIndex = fileName.lastIndexOf('.');
+        return lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
     }
 
     formatFileSize(bytes) {

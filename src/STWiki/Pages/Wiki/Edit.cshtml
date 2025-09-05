@@ -836,6 +836,7 @@
                                 <div class="mb-3">
                                     <label class="form-label">File Name <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control" id="fallback-filename" required>
+                                    <div class="form-text">The name to use for the uploaded file (without extension)</div>
                                 </div>
                                 <div class="row mb-3">
                                     <div class="col-md-6">
@@ -940,15 +941,11 @@
             
             try {
                 const formData = new FormData();
+                formData.append('file', file);
                 
                 if (metadata.filename) {
-                    const extension = file.name.split('.').pop();
-                    const newFile = new File([file], `${metadata.filename}.${extension}`, { type: file.type });
-                    formData.append('file', newFile);
-                } else {
-                    formData.append('file', file);
+                    formData.append('filename', metadata.filename);
                 }
-                
                 if (metadata.description) formData.append('description', metadata.description);
                 if (metadata.altText) formData.append('altText', metadata.altText);
                 

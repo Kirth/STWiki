@@ -4,7 +4,7 @@ namespace STWiki.Services;
 
 public interface IMediaService
 {
-    Task<MediaUploadResult> UploadFileAsync(IFormFile file, string? description, string? altText, string userId, CancellationToken cancellationToken = default);
+    Task<MediaUploadResult> UploadFileAsync(IFormFile file, string? filename, string? description, string? altText, string userId, CancellationToken cancellationToken = default);
     Task<MediaFile?> GetMediaFileAsync(Guid id, CancellationToken cancellationToken = default);
     Task<MediaFile?> GetMediaFileByNameAsync(string fileName, CancellationToken cancellationToken = default);
     Task<List<MediaFile>> GetUserMediaAsync(string userId, int page = 1, int pageSize = 20, CancellationToken cancellationToken = default);

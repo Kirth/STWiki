@@ -32,6 +32,7 @@ public class MediaService : IMediaService
 
     public async Task<MediaUploadResult> UploadFileAsync(
         IFormFile file, 
+        string? filename,
         string? description, 
         string? altText, 
         string userId, 
@@ -85,9 +86,19 @@ public class MediaService : IMediaService
                 }
             }
 
+            // Use custom filename if provided, otherwise use original filename
+            var finalFileName = !string.IsNullOrWhiteSpace(filename) ? filename.Trim() : Path.GetFileNameWithoutExtension(file.FileName);
+            
+            // Ensure filename has the correct extension
+            var extension = Path.GetExtension(file.FileName);
+            if (!string.IsNullOrEmpty(extension) && !finalFileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase))
+            {
+                finalFileName += extension;
+            }
+
             var mediaFile = new MediaFile
             {
-                OriginalFileName = file.FileName,
+                OriginalFileName = finalFileName,
                 StoredFileName = Path.GetFileName(objectKey),
                 ContentType = file.ContentType,
                 FileSize = finalFileSize,
