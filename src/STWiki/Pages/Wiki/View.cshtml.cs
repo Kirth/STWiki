@@ -27,6 +27,11 @@ public class ViewModel : PageModel
     public STWiki.Data.Entities.User? UpdatedByUser { get; set; }
     public string Slug { get; set; } = string.Empty;
     public string RenderedContent { get; set; } = string.Empty;
+    
+    // Draft status properties
+    public bool HasDraft { get; set; }
+    public DateTimeOffset? LastDraftAt { get; set; }
+    public DateTimeOffset? LastCommittedAt { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string slug)
     {
@@ -48,6 +53,11 @@ public class ViewModel : PageModel
 
         if (Page != null)
         {
+            // Set draft status properties
+            HasDraft = Page.HasUncommittedChanges;
+            LastDraftAt = Page.LastDraftAt;
+            LastCommittedAt = Page.LastCommittedAt;
+            
             // Look up the user who last updated this page
             if (!string.IsNullOrEmpty(Page.UpdatedBy))
             {

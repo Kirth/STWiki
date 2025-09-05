@@ -31,6 +31,12 @@ public class Page
     [MaxLength(255)]
     public string UpdatedBy { get; set; } = "";
 
+    // Draft status tracking
+    public DateTimeOffset? LastCommittedAt { get; set; }
+    public DateTimeOffset? LastDraftAt { get; set; }
+    public bool HasUncommittedChanges { get; set; }
+    public string LastCommittedContent { get; set; } = "";
+
     // Hierarchical relationships
     public Guid? ParentId { get; set; }
     public virtual Page? Parent { get; set; }

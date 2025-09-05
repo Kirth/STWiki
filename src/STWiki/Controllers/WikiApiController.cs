@@ -57,10 +57,19 @@ public class WikiApiController : ControllerBase
                 contentToSave = request.Content;
             }
 
-            // For autosave, we don't create a revision - just update the page body
+            // For autosave, we don't create a revision - just update the page body and track draft status
+            // If this is the first draft save, preserve the last committed content
+            if (!page.HasUncommittedChanges)
+            {
+                page.LastCommittedContent = page.Body;
+                page.LastCommittedAt ??= page.UpdatedAt; // Set if not already set
+            }
+            
             page.Body = contentToSave;
             page.UpdatedAt = DateTimeOffset.UtcNow;
             page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
+            page.LastDraftAt = DateTimeOffset.UtcNow;
+            page.HasUncommittedChanges = true;
 
             await _context.SaveChangesAsync();
 
@@ -156,13 +165,19 @@ public class WikiApiController : ControllerBase
 
             _context.Revisions.Add(revision);
 
-            // Update the page
+            // Update the page and clear draft status
             if (request.Title != null)
                 page.Title = request.Title;
             page.Body = revision.Snapshot;
             page.Summary = revision.Note;
             page.UpdatedAt = revision.CreatedAt;
             page.UpdatedBy = revision.Author;
+            
+            // Clear draft tracking - content is now committed
+            page.HasUncommittedChanges = false;
+            page.LastCommittedAt = revision.CreatedAt;
+            page.LastCommittedContent = revision.Snapshot;
+            page.LastDraftAt = null;
 
             await _context.SaveChangesAsync();
 
@@ -187,6 +202,48 @@ public class WikiApiController : ControllerBase
         {
             _logger.LogError(ex, "Failed to commit changes to page {PageId}", id);
             return StatusCode(500, new { error = "Failed to commit changes" });
+        }
+    }
+
+    [HttpPost("{id}/discard-draft")]
+    [Authorize(Policy = "RequireEditor")]
+    public async Task<IActionResult> DiscardDraft(Guid id)
+    {
+        try
+        {
+            var page = await _context.Pages.FindAsync(id);
+            if (page == null)
+                return NotFound(new { error = "Page not found" });
+
+            if (page.IsLocked)
+                return BadRequest(new { error = "Page is locked for editing" });
+
+            if (!page.HasUncommittedChanges)
+                return BadRequest(new { error = "No draft to discard" });
+
+            // Revert to last committed content
+            page.Body = page.LastCommittedContent;
+            page.UpdatedAt = DateTimeOffset.UtcNow;
+            page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
+            
+            // Clear draft status
+            page.HasUncommittedChanges = false;
+            page.LastDraftAt = null;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Discarded draft for page {PageId} by {User}", id, page.UpdatedBy);
+
+            return Ok(new { 
+                message = "Draft discarded successfully", 
+                timestamp = page.UpdatedAt,
+                content = page.Body
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to discard draft for page {PageId}", id);
+            return StatusCode(500, new { error = "Failed to discard draft" });
         }
     }
 

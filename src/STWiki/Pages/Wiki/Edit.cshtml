@@ -82,6 +82,30 @@
             }
         </div>
 
+    @* Draft Status Indicator *@
+    @if (Model.HasDraft && !Model.IsNew)
+    {
+        <div class="alert alert-info alert-dismissible fade show" role="alert" id="draft-indicator">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-pencil-square text-primary me-2"></i>
+                    <div>
+                        <strong>Editing Draft Content</strong>
+                        <div class="small text-muted">
+                            Auto-saved @if(Model.LastDraftAt.HasValue) { <text>@Model.LastDraftAt.Value.ToString("yyyy-MM-dd HH:mm")</text> }
+                            @if(Model.LastCommittedAt.HasValue) { <text> • Last committed @Model.LastCommittedAt.Value.ToString("yyyy-MM-dd HH:mm")</text> }
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="discardDraft()">
+                        <i class="bi bi-trash me-1"></i>Discard Draft
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (!ModelState.IsValid)
     {
         <div class="alert alert-danger">
@@ -137,7 +161,10 @@
                                        param-PageId="@(Model.PageId ?? Guid.Empty)"
                                        param-InitialContentRaw="@Model.Body"
                                        param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
-                                       param-BodyFormat="@Model.BodyFormat" />
+                                       param-BodyFormat="@Model.BodyFormat"
+                                       param-HasDraft="@Model.HasDraft"
+                                       param-LastDraftAt="@Model.LastDraftAt"
+                                       param-LastCommittedAt="@Model.LastCommittedAt" />
                         </div>
                         <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
                         <span asp-validation-for="Body" class="text-danger"></span>
@@ -1266,6 +1293,90 @@
                 console.log('✅ DOM operation traps installed');
             })();
         </script>
+        
+    <script>
+        // Draft handling function for edit page
+        function discardDraft() {
+            if (!confirm('Are you sure you want to discard your draft? This will permanently remove any uncommitted changes and reload the last committed version.')) {
+                return;
+            }
+            
+            const pageId = '@Model.PageId';
+            if (!pageId) {
+                alert('Cannot discard draft - page ID not found');
+                return;
+            }
+            
+            fetch(`/api/wiki/${pageId}/discard-draft`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    // Hide the draft indicator
+                    const draftIndicator = document.getElementById('draft-indicator');
+                    if (draftIndicator) {
+                        draftIndicator.style.display = 'none';
+                    }
+                    
+                    // Show success message
+                    showToast(data.message, 'success');
+                    
+                    // Reload the page to show committed content
+                    setTimeout(() => window.location.reload(), 1000);
+                } else if (data.error) {
+                    showToast(data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error discarding draft:', error);
+                showToast('Failed to discard draft', 'error');
+            });
+        }
+        
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            toast.className = 'toast-notification';
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: ${type === 'success' ? '#198754' : '#dc3545'};
+                color: white;
+                padding: 0.75rem 1rem;
+                border-radius: 0.375rem;
+                z-index: 1050;
+                animation: slideIn 0.3s ease-out;
+            `;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => document.body.removeChild(toast), 300);
+            }, 3000);
+        }
+        
+        // Add the slideIn/slideOut animations
+        if (!document.getElementById('draft-animations')) {
+            const style = document.createElement('style');
+            style.id = 'draft-animations';
+            style.textContent = `
+                @@keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to   { transform: translateX(0);    opacity: 1; }
+                }
+                @@keyframes slideOut {
+                    from { transform: translateX(0);    opacity: 1; }
+                    to   { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+    </script>
         
     <style>
             /* Prism.js Code Block Enhancements */

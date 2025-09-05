@@ -27,7 +27,17 @@
                     Commit Changes
                 </button>
             </div>
-            <div class="editor-status">
+            <div class="editor-status d-flex gap-2">
+                @if (HasDraft && !IsNewPage)
+                {
+                    <span class="badge bg-info" title="This page has uncommitted draft content">
+                        <i class="bi bi-pencil-square me-1"></i>Draft
+                        @if (LastDraftAt.HasValue)
+                        {
+                            <small> (@LastDraftAt.Value.ToString("HH:mm"))</small>
+                        }
+                    </span>
+                }
                 @if (IsFullyReady)
                 {
                     <span class="badge bg-success">Ready</span>
@@ -174,6 +184,15 @@
     
     [Parameter]
     public bool EnableCollaboration { get; set; } = true;
+    
+    [Parameter]
+    public bool HasDraft { get; set; }
+    
+    [Parameter]
+    public DateTimeOffset? LastDraftAt { get; set; }
+    
+    [Parameter]
+    public DateTimeOffset? LastCommittedAt { get; set; }
     
     // Safe versions for DOM use
     private string _editorId = $"simple-editor-{Guid.NewGuid():N}";

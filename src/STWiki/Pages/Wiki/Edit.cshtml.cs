@@ -65,6 +65,11 @@ public class EditModel : PageModel
     [BindProperty]
     [StringLength(100)]
     public string? PageSlugSegment { get; set; }
+    
+    // Draft status properties
+    public bool HasDraft { get; set; }
+    public DateTimeOffset? LastDraftAt { get; set; }
+    public DateTimeOffset? LastCommittedAt { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string? slug)
     {
@@ -165,6 +170,11 @@ public class EditModel : PageModel
         UpdatedAt = existingPage.UpdatedAt;
         UpdatedBy = existingPage.UpdatedBy;
         IsLocked = existingPage.IsLocked;
+        
+        // Set draft status
+        HasDraft = existingPage.HasUncommittedChanges;
+        LastDraftAt = existingPage.LastDraftAt;
+        LastCommittedAt = existingPage.LastCommittedAt;
 
         // Check if page is locked - still show the form but with warnings
         if (existingPage.IsLocked)
