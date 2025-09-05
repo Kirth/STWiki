@@ -114,19 +114,27 @@
 
 <!-- Media Details Modal -->
 <div class="modal fade" id="mediaDetailsModal" tabindex="-1" aria-labelledby="mediaDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="mediaDetailsModalLabel">Media Details</h5>
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="mediaDetailsModalLabel">
+                    <i class="bi bi-file-earmark-image text-primary me-2"></i>Media Details
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body" id="mediaDetailsContent">
+            <div class="modal-body p-4" id="mediaDetailsContent">
                 <!-- Content will be loaded dynamically -->
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="saveMediaDetails()">Save Changes</button>
-                <button type="button" class="btn btn-danger" onclick="deleteMediaFile()">Delete</button>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle me-1"></i>Close
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveMediaDetails()">
+                    <i class="bi bi-save me-1"></i>Save Changes
+                </button>
+                <button type="button" class="btn btn-danger" onclick="deleteMediaFile()">
+                    <i class="bi bi-trash me-1"></i>Delete
+                </button>
             </div>
         </div>
     </div>

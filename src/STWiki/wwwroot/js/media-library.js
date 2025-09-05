@@ -310,30 +310,155 @@ class MediaLibrary {
         const modalElement = document.getElementById('mediaDetailsModal');
         const modal = new bootstrap.Modal(modalElement);
         
-        // Find the media item in the current grid
-        const mediaItem = document.querySelector(`[data-id="${mediaId}"]`);
-        if (!mediaItem) return;
-
-        const fileName = mediaItem.querySelector('.card-title').textContent;
-        const fileSize = mediaItem.querySelector('.text-muted').textContent.split(' • ')[0];
-        
+        // Show loading state
         document.getElementById('mediaDetailsContent').innerHTML = `
-            <div class="mb-3">
-                <label for="mediaDescription" class="form-label">Description</label>
-                <textarea class="form-control" id="mediaDescription" rows="3" placeholder="Enter description..."></textarea>
-            </div>
-            <div class="mb-3">
-                <label for="mediaAltText" class="form-label">Alt Text</label>
-                <input type="text" class="form-control" id="mediaAltText" placeholder="Enter alt text...">
-            </div>
-            <div class="mb-3">
-                <strong>File Name:</strong> ${this.escapeHtml(fileName)}<br>
-                <strong>File Size:</strong> ${fileSize}<br>
-                <strong>Media Link:</strong> <code>[[media:${this.escapeHtml(fileName)}]]</code>
+            <div class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading media details...</p>
             </div>
         `;
         
         modal.show();
+        
+        try {
+            // Fetch detailed media information from the API
+            const response = await fetch(`/api/media/${mediaId}/details`);
+            if (!response.ok) {
+                throw new Error('Failed to fetch media details');
+            }
+            
+            const mediaData = await response.json();
+            const fileName = mediaData.fileName;
+            const fileSize = this.formatFileSize(mediaData.fileSize);
+            const isImage = mediaData.contentType.startsWith('image/');
+            const currentDescription = mediaData.description || '';
+            const currentAltText = mediaData.altText || '';
+            
+            // Create preview section
+            let previewHtml = '';
+            if (isImage) {
+                // For images, show a larger preview
+                const imageUrl = `/api/media/${mediaId}`;
+                const thumbnailUrl = mediaData.thumbnailUrl || imageUrl;
+                previewHtml = `
+                    <div class="mb-4 text-center">
+                        <div class="border rounded p-3 bg-light">
+                            <img src="${thumbnailUrl}" 
+                                 alt="${this.escapeHtml(fileName)}" 
+                                 class="img-fluid rounded shadow-sm" 
+                                 style="max-height: 300px; cursor: pointer;"
+                                 onclick="window.open('${imageUrl}', '_blank')"
+                                 title="Click to view full size">
+                            <div class="mt-2">
+                                <small class="text-muted">Click image to view full size</small>
+                            </div>
+                            ${mediaData.width && mediaData.height ? 
+                                `<div class="mt-1"><small class="text-muted">${mediaData.width} × ${mediaData.height} pixels</small></div>` : 
+                                ''
+                            }
+                        </div>
+                    </div>
+                `;
+            } else {
+                // For non-images, show file icon and type
+                const fileIcon = this.getFileIcon(mediaData.contentType);
+                previewHtml = `
+                    <div class="mb-4 text-center">
+                        <div class="border rounded p-4 bg-light">
+                            <i class="bi bi-${fileIcon} display-2 text-muted"></i>
+                            <div class="mt-2">
+                                <small class="text-muted">${mediaData.contentType}</small>
+                            </div>
+                            <div class="mt-1">
+                                <a href="/api/media/${mediaId}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-download me-1"></i>Download
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Create the media link with copy functionality
+            const mediaLink = `[[media:${fileName}]]`;
+            
+            document.getElementById('mediaDetailsContent').innerHTML = `
+                ${previewHtml}
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="mediaDescription" class="form-label fw-medium">Description</label>
+                            <textarea class="form-control" id="mediaDescription" rows="3" 
+                                      placeholder="Enter description...">${this.escapeHtml(currentDescription)}</textarea>
+                            <div class="form-text">This description will also serve as alt-text for images</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="mediaAltText" class="form-label fw-medium">Alt Text</label>
+                            <input type="text" class="form-control" id="mediaAltText" 
+                                   placeholder="Enter alt text..."
+                                   value="${this.escapeHtml(currentAltText)}">
+                            <div class="form-text">Accessibility text for screen readers</div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-header bg-transparent">
+                                <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>File Information</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-2">
+                                    <strong>File Name:</strong><br>
+                                    <span class="text-muted">${this.escapeHtml(fileName)}</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>File Size:</strong><br>
+                                    <span class="text-muted">${fileSize}</span>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>Uploaded:</strong><br>
+                                    <span class="text-muted">${new Date(mediaData.uploadedAt).toLocaleString()}</span>
+                                </div>
+                                
+                                <div class="mb-2">
+                                    <strong>Media Link:</strong>
+                                </div>
+                                <div class="input-group">
+                                    <input type="text" class="form-control font-monospace" 
+                                           id="mediaLinkInput" 
+                                           value="${this.escapeHtml(mediaLink)}" 
+                                           readonly>
+                                    <button class="btn btn-outline-primary" 
+                                            type="button" 
+                                            onclick="mediaLibrary.copyMediaLinkFromModal()"
+                                            title="Copy media link">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">Use this link in wiki pages to reference this media file</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+        } catch (error) {
+            console.error('Failed to load media details:', error);
+            document.getElementById('mediaDetailsContent').innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-exclamation-triangle display-4 text-warning"></i>
+                    <h5 class="mt-3">Failed to Load Media Details</h5>
+                    <p class="text-muted">${error.message}</p>
+                    <button type="button" class="btn btn-primary" onclick="mediaLibrary.showMediaDetails('${mediaId}')">
+                        Try Again
+                    </button>
+                </div>
+            `;
+        }
     }
 
     async saveMediaDetails() {
@@ -422,6 +547,43 @@ class MediaLibrary {
             document.execCommand('copy');
             document.body.removeChild(textArea);
             this.showSuccessMessage('Media link copied to clipboard');
+        });
+    }
+
+    copyMediaLinkFromModal() {
+        const mediaLinkInput = document.getElementById('mediaLinkInput');
+        if (!mediaLinkInput) return;
+        
+        const link = mediaLinkInput.value;
+        
+        // Select the text in the input
+        mediaLinkInput.select();
+        mediaLinkInput.setSelectionRange(0, 99999); // For mobile devices
+        
+        navigator.clipboard.writeText(link).then(() => {
+            // Temporarily change button appearance to show success
+            const button = event.target.closest('button');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="bi bi-check-circle-fill text-success"></i>';
+            button.classList.add('btn-success');
+            button.classList.remove('btn-outline-primary');
+            
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.classList.remove('btn-success');
+                button.classList.add('btn-outline-primary');
+            }, 1500);
+            
+            this.showSuccessMessage('Media link copied to clipboard');
+        }).catch(() => {
+            // Fallback for older browsers
+            try {
+                document.execCommand('copy');
+                this.showSuccessMessage('Media link copied to clipboard');
+            } catch (err) {
+                // If all else fails, just select the text so user can copy manually
+                this.showErrorMessage('Could not copy automatically. Please select and copy the text manually.');
+            }
         });
     }
 

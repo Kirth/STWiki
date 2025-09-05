@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using STWiki.Data;
 using STWiki.Data.Entities;
 using STWiki.Services;
 using System.ComponentModel.DataAnnotations;
@@ -13,11 +15,13 @@ public class MediaApiController : ControllerBase
 {
     private readonly IMediaService _mediaService;
     private readonly ILogger<MediaApiController> _logger;
+    private readonly AppDbContext _context;
 
-    public MediaApiController(IMediaService mediaService, ILogger<MediaApiController> logger)
+    public MediaApiController(IMediaService mediaService, ILogger<MediaApiController> logger, AppDbContext context)
     {
         _mediaService = mediaService;
         _logger = logger;
+        _context = context;
     }
 
     [HttpPost("upload")]
@@ -94,7 +98,8 @@ public class MediaApiController : ControllerBase
                 {
                     Id = m.Id,
                     FileName = m.OriginalFileName,
-                    Description = m.Description,
+                    Description = m.Description ?? "",
+                    AltText = m.AltText ?? "",
                     ContentType = m.ContentType,
                     FileSize = m.FileSize,
                     UploadedAt = m.UploadedAt,
@@ -115,6 +120,51 @@ public class MediaApiController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get media files for user {UserId}", userId);
+            return StatusCode(500, new { error = "Internal server error" });
+        }
+    }
+
+    [HttpGet("{id}/details")]
+    public async Task<ActionResult<MediaItemResponse>> GetMediaDetails(Guid id)
+    {
+        var userId = User.Identity?.Name;
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        try
+        {
+            var mediaFile = await _mediaService.GetMediaFileAsync(id);
+            
+            if (mediaFile == null)
+                return NotFound();
+
+            // Verify user owns the file or has access
+            if (mediaFile.UploadedByUserId != null && 
+                !await _context.Users.AnyAsync(u => u.Id == mediaFile.UploadedByUserId && u.UserId == userId))
+                return Forbid();
+
+            var response = new MediaItemResponse
+            {
+                Id = mediaFile.Id,
+                FileName = mediaFile.OriginalFileName,
+                Description = mediaFile.Description ?? "",
+                ContentType = mediaFile.ContentType,
+                FileSize = mediaFile.FileSize,
+                UploadedAt = mediaFile.UploadedAt,
+                Url = Url.Action("GetFile", new { id = mediaFile.Id })!,
+                ThumbnailUrl = IsImage(mediaFile.ContentType) 
+                    ? Url.Action("GetThumbnail", new { id = mediaFile.Id, size = 300 })
+                    : null,
+                Width = mediaFile.Width,
+                Height = mediaFile.Height,
+                AltText = mediaFile.AltText ?? ""
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get media details for {MediaFileId}", id);
             return StatusCode(500, new { error = "Internal server error" });
         }
     }
@@ -258,6 +308,7 @@ public class MediaItemResponse
     public Guid Id { get; set; }
     public string FileName { get; set; } = "";
     public string Description { get; set; } = "";
+    public string AltText { get; set; } = "";
     public string ContentType { get; set; } = "";
     public long FileSize { get; set; }
     public DateTimeOffset UploadedAt { get; set; }
