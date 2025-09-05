@@ -1315,18 +1315,47 @@
             })
             .then(response => response.json())
             .then(data => {
-                if (data.message) {
+                if (data.message && data.content !== undefined) {
                     // Hide the draft indicator
                     const draftIndicator = document.getElementById('draft-indicator');
                     if (draftIndicator) {
                         draftIndicator.style.display = 'none';
                     }
                     
+                    // Update editor content immediately
+                    try {
+                        // Find the editor textarea
+                        const editorTextarea = document.querySelector('[data-role="editor"]');
+                        if (editorTextarea && window.setEnhancedEditorContent) {
+                            console.log('Updating editor content with discarded draft result...');
+                            window.setEnhancedEditorContent(editorTextarea.id, data.content);
+                            console.log('✅ Updated editor content directly');
+                        }
+                        
+                        // Also update the hidden textarea (for form submission)
+                        const bodyTextarea = document.getElementById('body-textarea');
+                        if (bodyTextarea) {
+                            bodyTextarea.value = data.content;
+                        }
+                        
+                        // Sync the form field
+                        const bodyField = document.querySelector('textarea[name="Body"]');
+                        if (bodyField) {
+                            bodyField.value = data.content;
+                        }
+                        
+                        console.log('✅ Updated all editor fields with reverted content');
+                    } catch (error) {
+                        console.warn('Could not update editor content directly:', error);
+                    }
+                    
                     // Show success message
                     showToast(data.message, 'success');
                     
-                    // Reload the page to show committed content
-                    setTimeout(() => window.location.reload(), 1000);
+                    // Optional: Reload page to ensure everything is fully synced (reduced delay since we updated content directly)
+                    setTimeout(() => {
+                        window.location.href = window.location.href;
+                    }, 800);
                 } else if (data.error) {
                     showToast(data.error, 'error');
                 }

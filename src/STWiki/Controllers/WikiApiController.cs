@@ -57,19 +57,22 @@ public class WikiApiController : ControllerBase
                 contentToSave = request.Content;
             }
 
-            // For autosave, we don't create a revision - just update the page body and track draft status
-            // If this is the first draft save, preserve the last committed content
+            // For autosave, we store draft in DraftContent and leave Body (published content) unchanged
+            // If this is the first draft save, preserve the committed content and set baseline
             if (!page.HasUncommittedChanges)
             {
                 page.LastCommittedContent = page.Body;
                 page.LastCommittedAt ??= page.UpdatedAt; // Set if not already set
             }
             
-            page.Body = contentToSave;
-            page.UpdatedAt = DateTimeOffset.UtcNow;
-            page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
+            // CRITICAL FIX: Save draft to DraftContent, not Body
+            page.DraftContent = contentToSave;
             page.LastDraftAt = DateTimeOffset.UtcNow;
             page.HasUncommittedChanges = true;
+            
+            // Only update metadata, NOT the main content
+            page.UpdatedAt = DateTimeOffset.UtcNow;
+            page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
 
             await _context.SaveChangesAsync();
 
@@ -165,10 +168,10 @@ public class WikiApiController : ControllerBase
 
             _context.Revisions.Add(revision);
 
-            // Update the page and clear draft status
+            // Update the page and clear draft status  
             if (request.Title != null)
                 page.Title = request.Title;
-            page.Body = revision.Snapshot;
+            page.Body = revision.Snapshot;  // This commits the content to live page
             page.Summary = revision.Note;
             page.UpdatedAt = revision.CreatedAt;
             page.UpdatedBy = revision.Author;
@@ -178,6 +181,7 @@ public class WikiApiController : ControllerBase
             page.LastCommittedAt = revision.CreatedAt;
             page.LastCommittedContent = revision.Snapshot;
             page.LastDraftAt = null;
+            page.DraftContent = null; // Clear the draft since it's now committed
 
             await _context.SaveChangesAsync();
 
@@ -221,8 +225,8 @@ public class WikiApiController : ControllerBase
             if (!page.HasUncommittedChanges)
                 return BadRequest(new { error = "No draft to discard" });
 
-            // Revert to last committed content
-            page.Body = page.LastCommittedContent;
+            // Clear draft content (Body remains unchanged as committed content)
+            page.DraftContent = null;
             page.UpdatedAt = DateTimeOffset.UtcNow;
             page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
             
@@ -237,7 +241,7 @@ public class WikiApiController : ControllerBase
             return Ok(new { 
                 message = "Draft discarded successfully", 
                 timestamp = page.UpdatedAt,
-                content = page.Body
+                content = page.Body  // Return the committed content (not the draft)
             });
         }
         catch (Exception ex)

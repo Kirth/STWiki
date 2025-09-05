@@ -162,9 +162,18 @@ public class EditModel : PageModel
         Console.WriteLine($"🔍 DEBUG - Original slug from DB: '{OriginalSlug}'");
         
         Summary = existingPage.Summary;
+        
+        // CRITICAL FIX: Load draft content if available, otherwise committed content
+        var contentToEdit = !string.IsNullOrEmpty(existingPage.DraftContent) 
+            ? existingPage.DraftContent 
+            : existingPage.Body;
+            
         Console.WriteLine($"🔍 EDIT LOAD - Raw body from DB length: {existingPage.Body?.Length ?? -1}");
-        Body = CleanStringForBlazor(existingPage.Body);
-        Console.WriteLine($"🔍 EDIT LOAD - Cleaned body length: {Body?.Length ?? -1}");
+        Console.WriteLine($"🔍 EDIT LOAD - Draft content length: {existingPage.DraftContent?.Length ?? -1}");
+        Console.WriteLine($"🔍 EDIT LOAD - Using content for editing: {(existingPage.DraftContent != null ? "DRAFT" : "COMMITTED")}");
+        
+        Body = CleanStringForBlazor(contentToEdit);
+        Console.WriteLine($"🔍 EDIT LOAD - Final cleaned content length: {Body?.Length ?? -1}");
         BodyFormat = existingPage.BodyFormat;
         CreatedAt = existingPage.CreatedAt;
         UpdatedAt = existingPage.UpdatedAt;

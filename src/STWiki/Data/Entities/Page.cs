@@ -36,6 +36,7 @@ public class Page
     public DateTimeOffset? LastDraftAt { get; set; }
     public bool HasUncommittedChanges { get; set; }
     public string LastCommittedContent { get; set; } = "";
+    public string? DraftContent { get; set; }
 
     // Hierarchical relationships
     public Guid? ParentId { get; set; }
