@@ -1115,9 +1115,18 @@
                             let editorContent = '';
                             let syncMethod = '';
                             
-                            // Method 1: Look for enhanced editor textarea in editor container
+                            // Method 1: Use the new wiki editor content getter if available
                             const editorContainer = document.querySelector('.editor-container');
-                            if (editorContainer) {
+                            if (editorContainer && window.getWikiEditorContent) {
+                                const containerId = editorContainer.id || 'editor-container';
+                                editorContent = window.getWikiEditorContent(containerId) || '';
+                                if (editorContent) {
+                                    syncMethod = `getWikiEditorContent: ${containerId}`;
+                                }
+                            }
+                            
+                            // Method 2: Look for enhanced editor textarea in editor container
+                            if (!editorContent && editorContainer) {
                                 // Try various selectors for the editor textarea
                                 const selectors = [
                                     'textarea[id*="simple-editor-"]',
@@ -1137,20 +1146,20 @@
                                 }
                             }
                             
-                            // Method 2: Use the enhanced editor global function if available
+                            // Method 3: Use the enhanced editor global function if available
                             if (!editorContent && typeof getEnhancedEditorContent === 'function') {
                                 // Try to find any editor instance
                                 const editorTextareas = document.querySelectorAll('textarea:not(#body-textarea)');
                                 for (const textarea of editorTextareas) {
                                     if (textarea.id && textarea.id.includes('editor')) {
                                         editorContent = getEnhancedEditorContent(textarea.id) || '';
-                                        syncMethod = `global function: ${textarea.id}`;
+                                        syncMethod = `getEnhancedEditorContent: ${textarea.id}`;
                                         break;
                                     }
                                 }
                             }
                             
-                            // Method 3: Try to get content from any visible textarea that's not the hidden one
+                            // Method 4: Try to get content from any visible textarea that's not the hidden one
                             if (!editorContent) {
                                 const visibleTextareas = Array.from(document.querySelectorAll('textarea:not(#body-textarea)'))
                                     .filter(ta => ta.offsetParent !== null && ta.value && ta.value.trim());
@@ -1176,6 +1185,37 @@
                                     visible: ta.offsetParent !== null,
                                     contentLength: ta.value?.length || 0
                                 })));
+                            }
+                            
+                            // Client-side validation: ensure Body field has content
+                            if (!bodyTextarea.value || bodyTextarea.value.trim().length === 0) {
+                                console.error('❌ Body field is empty after sync, preventing form submission');
+                                e.preventDefault();
+                                
+                                // Show user-friendly error message
+                                alert('Error: Content appears to be empty. Please ensure your content is properly loaded in the editor before saving.');
+                                
+                                // Try one more time to force sync content
+                                setTimeout(() => {
+                                    console.log('🔄 Attempting emergency content sync...');
+                                    
+                                    // Try to force sync again
+                                    let emergencyContent = '';
+                                    if (window.getWikiEditorContent && editorContainer) {
+                                        const containerId = editorContainer.id || 'editor-container';
+                                        emergencyContent = window.getWikiEditorContent(containerId) || '';
+                                    }
+                                    
+                                    if (emergencyContent) {
+                                        bodyTextarea.value = emergencyContent;
+                                        console.log('✅ Emergency sync successful, content length:', emergencyContent.length);
+                                        alert('Content has been recovered. Please try saving again.');
+                                    } else {
+                                        console.log('❌ Emergency sync failed - no content available');
+                                    }
+                                }, 100);
+                                
+                                return false;
                             }
                         } catch (error) {
                             console.error('❌ Error syncing editor content:', error);
@@ -1295,78 +1335,156 @@
         </script>
         
     <script>
-        // Draft handling function for edit page
-        function discardDraft() {
-            if (!confirm('Are you sure you want to discard your draft? This will permanently remove any uncommitted changes and reload the last committed version.')) {
-                return;
-            }
+        console.log('🚀 Script block started - setting up discardDraft function...');
+        
+        // Define the complete async discardDraft function
+        function defineDiscardDraft() {
+            console.log('📝 Defining full discardDraft function with race condition prevention...');
             
-            const pageId = '@Model.PageId';
-            if (!pageId) {
-                alert('Cannot discard draft - page ID not found');
-                return;
-            }
-            
-            fetch(`/api/wiki/${pageId}/discard-draft`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.message && data.content !== undefined) {
-                    // Hide the draft indicator
-                    const draftIndicator = document.getElementById('draft-indicator');
-                    if (draftIndicator) {
-                        draftIndicator.style.display = 'none';
-                    }
-                    
-                    // Update editor content immediately
-                    try {
-                        // Find the editor textarea
-                        const editorTextarea = document.querySelector('[data-role="editor"]');
-                        if (editorTextarea && window.setEnhancedEditorContent) {
-                            console.log('Updating editor content with discarded draft result...');
-                            window.setEnhancedEditorContent(editorTextarea.id, data.content);
-                            console.log('✅ Updated editor content directly');
-                        }
-                        
-                        // Also update the hidden textarea (for form submission)
-                        const bodyTextarea = document.getElementById('body-textarea');
-                        if (bodyTextarea) {
-                            bodyTextarea.value = data.content;
-                        }
-                        
-                        // Sync the form field
-                        const bodyField = document.querySelector('textarea[name="Body"]');
-                        if (bodyField) {
-                            bodyField.value = data.content;
-                        }
-                        
-                        console.log('✅ Updated all editor fields with reverted content');
-                    } catch (error) {
-                        console.warn('Could not update editor content directly:', error);
-                    }
-                    
-                    // Show success message
-                    showToast(data.message, 'success');
-                    
-                    // Optional: Reload page to ensure everything is fully synced (reduced delay since we updated content directly)
-                    setTimeout(() => {
-                        window.location.href = window.location.href;
-                    }, 800);
-                } else if (data.error) {
-                    showToast(data.error, 'error');
+            window.discardDraft = async function discardDraft() {
+                console.log('🎯 discardDraft function called!');
+                if (!confirm('Are you sure you want to discard your draft? This will permanently remove any uncommitted changes and reload the last committed version.')) {
+                    return;
                 }
-            })
-            .catch(error => {
-                console.error('Error discarding draft:', error);
-                showToast('Failed to discard draft', 'error');
-            });
+                
+                const pageId = '@Model.PageId';
+                if (!pageId) {
+                    alert('Cannot discard draft - page ID not found');
+                    return;
+                }
+                
+                // Step 1: Coordinate with Blazor editor to pause autosave and collaboration
+                try {
+                    const editorContainer = document.querySelector('.editor-container');
+                    if (editorContainer && editorContainer._blazorComponentRef) {
+                        console.log('🚫 Calling BeginDiscardDraft to pause automatic operations...');
+                        await editorContainer._blazorComponentRef.invokeMethodAsync('BeginDiscardDraft');
+                        console.log('✅ Automatic operations paused');
+                    }
+                } catch (error) {
+                    console.warn('Could not coordinate with Blazor editor:', error);
+                    // Continue anyway - the server-side changes are most important
+                }
+                
+                // Step 2: Call API to discard draft
+                try {
+                    const response = await fetch(`/api/wiki/${pageId}/discard-draft`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.message && data.content !== undefined) {
+                        // Hide the draft indicator
+                        const draftIndicator = document.getElementById('draft-indicator');
+                        if (draftIndicator) {
+                            draftIndicator.style.display = 'none';
+                        }
+                        
+                        // Step 3: Update editor content immediately
+                        try {
+                            console.log('Updating editor content with discarded draft result...');
+                            
+                            // Method 1: Use the new wiki editor content setter if available
+                            const editorContainer = document.querySelector('.editor-container');
+                            if (editorContainer && window.setWikiEditorContent) {
+                                const containerId = editorContainer.id || 'editor-container';
+                                console.log('Using setWikiEditorContent for container:', containerId);
+                                window.setWikiEditorContent(containerId, data.content);
+                                console.log('✅ Updated editor content using setWikiEditorContent');
+                            }
+                            // Method 2: Fallback to enhanced editor if available
+                            else if (window.setEnhancedEditorContent) {
+                                // Find the correct enhanced editor textarea
+                                const editorTextarea = document.querySelector('textarea[id*="simple-editor-"]') || 
+                                                     document.querySelector('textarea[id*="editor-"]') ||
+                                                     document.querySelector('[data-role="editor"]');
+                                
+                                if (editorTextarea) {
+                                    console.log('Using setEnhancedEditorContent for editor:', editorTextarea.id);
+                                    window.setEnhancedEditorContent(editorTextarea.id, data.content);
+                                    console.log('✅ Updated editor content using setEnhancedEditorContent');
+                                }
+                            }
+                            
+                            // Always update the hidden textarea (for form submission)
+                            const bodyTextarea = document.getElementById('body-textarea');
+                            if (bodyTextarea) {
+                                bodyTextarea.value = data.content;
+                                console.log('✅ Updated hidden body textarea');
+                            }
+                            
+                            // Also sync the form field (ASP.NET Core model binding target)
+                            const bodyField = document.querySelector('textarea[name="Body"]');
+                            if (bodyField && bodyField !== bodyTextarea) {
+                                bodyField.value = data.content;
+                                console.log('✅ Updated form Body field');
+                            }
+                            
+                            console.log('✅ Updated all editor fields with reverted content');
+                        } catch (error) {
+                            console.error('Could not update editor content directly:', error);
+                        }
+                        
+                        // Step 4: Signal completion to Blazor editor
+                        try {
+                            const editorContainer = document.querySelector('.editor-container');
+                            if (editorContainer && editorContainer._blazorComponentRef) {
+                                console.log('✅ Calling EndDiscardDraft to signal completion...');
+                                await editorContainer._blazorComponentRef.invokeMethodAsync('EndDiscardDraft');
+                                console.log('✅ Draft discard coordination completed');
+                            }
+                        } catch (error) {
+                            console.warn('Could not signal completion to Blazor editor:', error);
+                        }
+                        
+                        // Show success message
+                        window.showToast(data.message, 'success');
+                        
+                        // Optional: Reload page to ensure everything is fully synced (reduced delay since we updated content directly)
+                        setTimeout(() => {
+                            window.location.href = window.location.href;
+                        }, 800);
+                    } else if (data.error) {
+                        window.showToast(data.error, 'error');
+                    }
+                } catch (error) {
+                    console.error('Error discarding draft:', error);
+                    
+                    // Even on error, signal completion to Blazor editor to restore normal operations
+                    try {
+                        const editorContainer = document.querySelector('.editor-container');
+                        if (editorContainer && editorContainer._blazorComponentRef) {
+                            console.log('❌ Error occurred - calling EndDiscardDraft to restore operations...');
+                            await editorContainer._blazorComponentRef.invokeMethodAsync('EndDiscardDraft');
+                            console.log('✅ Normal operations restored after error');
+                        }
+                    } catch (coordError) {
+                        console.warn('Could not restore operations after error:', coordError);
+                    }
+                    
+                    window.showToast('Failed to discard draft', 'error');
+                }
+            };
+            
+            console.log('✅ Full discardDraft function defined. Type:', typeof window.discardDraft);
         }
         
-        function showToast(message, type = 'success') {
+        // Call the definition function when DOM is ready
+        document.addEventListener('DOMContentLoaded', defineDiscardDraft);
+        
+        // Also define immediately in case DOMContentLoaded already fired
+        if (document.readyState === 'loading') {
+            console.log('⏳ Document still loading, waiting for DOMContentLoaded...');
+        } else {
+            console.log('📝 DOM already loaded - defining discardDraft function immediately...');
+            defineDiscardDraft();
+        }
+        
+        window.showToast = function showToast(message, type = 'success') {
             const toast = document.createElement('div');
             toast.className = 'toast-notification';
             toast.textContent = message;

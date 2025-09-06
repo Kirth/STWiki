@@ -231,6 +231,11 @@
     private readonly string ComponentId = Guid.NewGuid().ToString("N")[..8];
     private int RenderCount = 0;
     private int MethodCallCount = 0;
+    
+    // Draft discard coordination state
+    private bool _isDiscardingDraft = false;
+    private DateTime? _lastDiscardTime = null;
+    private readonly object _discardLock = new object();
 
     protected override void OnInitialized()
     {
@@ -438,6 +443,23 @@
     private async Task AutoSave()
     {
         if (!IsReady || IsNewPage) return;
+        
+        // Check if we're currently discarding a draft or recently did
+        lock (_discardLock)
+        {
+            if (_isDiscardingDraft)
+            {
+                Console.WriteLine("⏸️ Autosave paused - draft discard in progress");
+                return;
+            }
+            
+            // Don't autosave for 2 minutes after a draft discard to prevent race conditions
+            if (_lastDiscardTime.HasValue && DateTime.UtcNow.Subtract(_lastDiscardTime.Value).TotalMinutes < 2)
+            {
+                Console.WriteLine("⏸️ Autosave paused - recent draft discard detected");
+                return;
+            }
+        }
         
         try
         {
@@ -663,6 +685,46 @@
         Console.WriteLine($"🎯 [{ComponentId}:{callId}] HandleInsertBold called from JavaScript");
         await InsertBold();
         Console.WriteLine($"✅ [{ComponentId}:{callId}] HandleInsertBold completed");
+    }
+    
+    [JSInvokable]
+    public async Task BeginDiscardDraft()
+    {
+        var callId = ++MethodCallCount;
+        Console.WriteLine($"🎯 [{ComponentId}:{callId}] BeginDiscardDraft called from JavaScript");
+        
+        // Set draft discard coordination state to pause autosave and state sync
+        lock (_discardLock)
+        {
+            _isDiscardingDraft = true;
+            _lastDiscardTime = DateTime.UtcNow;
+            Console.WriteLine($"🚫 Draft discard state activated - autosave and state sync paused");
+        }
+        
+        // If collaboration is active, pause collaborative operations temporarily
+        if (IsCollaborationEnabled)
+        {
+            Console.WriteLine($"⏸️ Pausing collaborative operations during draft discard");
+        }
+        
+        Console.WriteLine($"✅ [{ComponentId}:{callId}] BeginDiscardDraft completed - timers paused");
+    }
+    
+    [JSInvokable]
+    public async Task EndDiscardDraft()
+    {
+        var callId = ++MethodCallCount;
+        Console.WriteLine($"🎯 [{ComponentId}:{callId}] EndDiscardDraft called from JavaScript");
+        
+        // Clear the immediate discard flag but keep the timestamp
+        lock (_discardLock)
+        {
+            _isDiscardingDraft = false;
+            // _lastDiscardTime remains set to prevent autosave for 2 minutes
+            Console.WriteLine($"✅ Draft discard completed - autosave will remain paused for 2 minutes");
+        }
+        
+        Console.WriteLine($"✅ [{ComponentId}:{callId}] EndDiscardDraft completed");
     }
 
     // Collaboration methods
@@ -1537,6 +1599,23 @@
         {
             Console.WriteLine($"⏭️ State sync skipped - not connected (state: {_editHubConnection?.State})");
             return;
+        }
+        
+        // Check if we're currently discarding a draft or recently did
+        lock (_discardLock)
+        {
+            if (_isDiscardingDraft)
+            {
+                Console.WriteLine("⏸️ State sync paused - draft discard in progress");
+                return;
+            }
+            
+            // Don't perform state sync for 2 minutes after a draft discard
+            if (_lastDiscardTime.HasValue && DateTime.UtcNow.Subtract(_lastDiscardTime.Value).TotalMinutes < 2)
+            {
+                Console.WriteLine("⏸️ State sync paused - recent draft discard detected");
+                return;
+            }
         }
 
         try
