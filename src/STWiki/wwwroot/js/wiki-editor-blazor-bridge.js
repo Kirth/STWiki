@@ -422,6 +422,37 @@ window.checkBlazorConnection = function() {
     return true; // Always return true for now
 };
 
+// Set up immediate auto-save on content changes
+window.setupImmediateAutoSave = function(editorId) {
+    console.log(`🚀 Setting up immediate auto-save for editor: ${editorId}`);
+    
+    const containerId = `editor-container-${editorId}`;
+    const editorData = window.wikiEditors.get(containerId);
+    
+    if (!editorData?.editor?.textarea) {
+        console.warn(`⚠️ Could not find editor data for ${containerId}`);
+        return;
+    }
+    
+    const textarea = editorData.editor.textarea;
+    
+    // Set up input listener for immediate auto-save
+    textarea.addEventListener('input', function() {
+        // Find the Blazor component reference
+        const editorContainer = document.getElementById(containerId);
+        if (editorContainer && editorContainer._blazorComponentRef) {
+            try {
+                // Trigger immediate auto-save via Blazor
+                editorContainer._blazorComponentRef.invokeMethodAsync('TriggerImmediateAutoSave');
+            } catch (error) {
+                console.warn('Could not trigger immediate auto-save:', error);
+            }
+        }
+    });
+    
+    console.log(`✅ Immediate auto-save set up for ${editorId}`);
+};
+
 window.updateRemoteCursor = function(editorId, userId, start, end, color, displayName) {
     console.log(`👆 [V2] Update remote cursor: ${displayName} at ${start}-${end}`);
     // TODO: Implement remote cursor display

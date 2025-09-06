@@ -180,6 +180,9 @@
     private bool IsFullyReady => IsReady && IsBlazorConnected;
     private bool IsNewPage => PageId == Guid.Empty;
     private Timer? AutosaveTimer = null;
+    private Timer? ImmediateAutoSaveTimer = null;
+    private CancellationTokenSource? _cancellationTokenSource = new();
+    private readonly SemaphoreSlim _autosaveSemaphore = new(1, 1);
     
     // Single-user editor state
     
@@ -256,12 +259,12 @@
                     
                     Console.WriteLine($"✅ Single-user editor initialized for page {PageId}");
                     
-                    // Start autosave timer for existing pages
-                    if (!IsNewPage)
-                    {
-                        AutosaveTimer = new Timer(async _ => await AutoSave(), null, 
-                            TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-                    }
+                    // Start autosave timer for all pages (reduced frequency since we have immediate saves)
+                    AutosaveTimer = new Timer(async _ => await AutoSave(), null, 
+                        TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60)); // Reduced to 60 seconds
+                    
+                    // Set up immediate auto-save on content changes (works for all pages)
+                    await JS.InvokeVoidAsync("setupImmediateAutoSave", _editorId);
                 }
                 
                 StateHasChanged();
@@ -292,7 +295,7 @@
             var json = JsonSerializer.Serialize(request);
             var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             
-            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/autosave", httpContent);
+            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/autosave", httpContent, _cancellationTokenSource?.Token ?? default);
             var responseContent = await response.Content.ReadAsStringAsync();
             
             // Check if we got redirected to login page (auth failure)
@@ -344,7 +347,7 @@
             var json = JsonSerializer.Serialize(request);
             var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             
-            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/commit", httpContent);
+            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/commit", httpContent, _cancellationTokenSource?.Token ?? default);
             var responseContent = await response.Content.ReadAsStringAsync();
             Console.WriteLine($"CommitChanges() response status: {response.StatusCode}");
             Console.WriteLine($"CommitChanges() response content: {responseContent}");
@@ -388,24 +391,40 @@
 
     private async Task AutoSave()
     {
-        if (!IsReady || IsNewPage) return;
+        if (!IsReady || _cancellationTokenSource?.Token.IsCancellationRequested == true) return;
         
-        // Check if we're currently discarding a draft or recently did
-        lock (_discardLock)
+        // For new pages, we can't auto-save to the API yet, but we can still track changes
+        if (IsNewPage)
         {
-            if (_isDiscardingDraft)
-            {
-                Console.WriteLine("⏸️ Autosave paused - draft discard in progress");
-                return;
-            }
-            
-            // Don't autosave for 2 minutes after a draft discard to prevent race conditions
-            if (_lastDiscardTime.HasValue && DateTime.UtcNow.Subtract(_lastDiscardTime.Value).TotalMinutes < 2)
-            {
-                Console.WriteLine("⏸️ Autosave paused - recent draft discard detected");
-                return;
-            }
+            Console.WriteLine("⏸️ Autosave skipped for new page - no PageId available");
+            return;
         }
+        
+        // Prevent overlapping autosave operations
+        if (!await _autosaveSemaphore.WaitAsync(0, _cancellationTokenSource?.Token ?? default))
+        {
+            Console.WriteLine("⏸️ Autosave skipped - another save in progress");
+            return;
+        }
+        
+        try
+        {
+            // Check if we're currently discarding a draft or recently did
+            lock (_discardLock)
+            {
+                if (_isDiscardingDraft)
+                {
+                    Console.WriteLine("⏸️ Autosave paused - draft discard in progress");
+                    return;
+                }
+                
+                // Don't autosave for 2 minutes after a draft discard to prevent race conditions
+                if (_lastDiscardTime.HasValue && DateTime.UtcNow.Subtract(_lastDiscardTime.Value).TotalMinutes < 2)
+                {
+                    Console.WriteLine("⏸️ Autosave paused - recent draft discard detected");
+                    return;
+                }
+            }
         
         try
         {
@@ -422,7 +441,7 @@
             var json = JsonSerializer.Serialize(request);
             var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
             
-            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/autosave", httpContent);
+            var response = await MakeAuthenticatedRequest($"/api/wiki/{PageId}/autosave", httpContent, _cancellationTokenSource?.Token ?? default);
             var responseContent = await response.Content.ReadAsStringAsync();
             
             // Check if we got redirected to login page (auth failure)
@@ -437,6 +456,16 @@
                 {
                     using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
                     await JS.InvokeVoidAsync("showEditorStatus", "Auto-saved");
+                    
+                    // Mark content as saved to prevent unnecessary beforeunload warnings
+                    try
+                    {
+                        await JS.InvokeVoidAsync("markContentAsSaved");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Could not mark content as saved: {ex.Message}");
+                    }
                 }
                 catch
                 {
@@ -452,15 +481,29 @@
                 Console.WriteLine($"Autosave failed with status: {response.StatusCode}");
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Expected when component is being disposed - don't log as error
+            Console.WriteLine("🔄 Autosave canceled (component disposing)");
+        }
         catch (Exception ex)
         {
-            Console.WriteLine($"Autosave error: {ex.Message}");
+            Console.WriteLine($"❌ Autosave error: {ex.Message}");
+        }
+        }
+        finally
+        {
+            _autosaveSemaphore.Release();
         }
     }
 
     public async ValueTask DisposeAsync()
     {
+        // Cancel any ongoing autosave operations
+        _cancellationTokenSource?.Cancel();
+        
         AutosaveTimer?.Dispose();
+        ImmediateAutoSaveTimer?.Dispose();
         
         try
         {
@@ -473,16 +516,19 @@
         {
             // Best effort cleanup
         }
+        
+        _cancellationTokenSource?.Dispose();
+        _autosaveSemaphore.Dispose();
     }
 
     // Helper method to make authenticated HTTP requests with cookies
-    private async Task<HttpResponseMessage> MakeAuthenticatedRequest(string url, HttpContent content)
+    private async Task<HttpResponseMessage> MakeAuthenticatedRequest(string url, HttpContent content, CancellationToken cancellationToken = default)
     {
         var httpContext = HttpContextAccessor.HttpContext;
         if (httpContext == null)
         {
             // Fallback to regular HttpClient if no context available
-            return await HttpClient.PostAsync(url, content);
+            return await HttpClient.PostAsync(url, content, cancellationToken);
         }
 
         // Create a new HttpClient that includes authentication cookies
@@ -492,6 +538,9 @@
         };
 
         using var authenticatedClient = new HttpClient(handler);
+        
+        // Set timeout to prevent hung connections
+        authenticatedClient.Timeout = TimeSpan.FromSeconds(30);
         
         // Set base URL
         var baseUrl = await JS.InvokeAsync<string>("eval", "window.location.origin");
@@ -511,7 +560,7 @@
             authenticatedClient.DefaultRequestHeaders.Add("Authorization", authHeader);
         }
         
-        return await authenticatedClient.PostAsync(url, content);
+        return await authenticatedClient.PostAsync(url, content, cancellationToken);
     }
 
     private async Task InsertMarkdown(string before, string after)
@@ -639,5 +688,42 @@
         }
         
         Console.WriteLine($"✅ [{ComponentId}:{callId}] EndDiscardDraft completed");
+    }
+    
+    [JSInvokable]
+    public async Task TriggerImmediateAutoSave()
+    {
+        var callId = ++MethodCallCount;
+        Console.WriteLine($"🎯 [{ComponentId}:{callId}] TriggerImmediateAutoSave called from JavaScript");
+        
+        // Use a timer to debounce rapid changes (save 2 seconds after last change)
+        ImmediateAutoSaveTimer?.Dispose();
+        ImmediateAutoSaveTimer = new Timer(async _ => {
+            Console.WriteLine($"💾 [{ComponentId}:{callId}] Executing immediate auto-save");
+            await AutoSave();
+            ImmediateAutoSaveTimer?.Dispose();
+            ImmediateAutoSaveTimer = null;
+        }, null, TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+        
+        Console.WriteLine($"✅ [{ComponentId}:{callId}] Immediate auto-save scheduled (2 second delay)");
+    }
+    
+    // Stub methods for collaboration system (not used in single-user editor)
+    [JSInvokable]
+    public async Task OnTextChange(string content, int position, string changeType, string changeContent)
+    {
+        // This is called by the collaboration plugin but we don't need it for single-user editing
+        // Just log and ignore to prevent JavaScript errors
+        Console.WriteLine($"🔄 [{ComponentId}] OnTextChange ignored (single-user mode): {changeType} at {position}");
+        await Task.CompletedTask;
+    }
+    
+    [JSInvokable]
+    public async Task OnTextReplace(int start, int end, string content)
+    {
+        // This is called by the collaboration plugin but we don't need it for single-user editing
+        // Just log and ignore to prevent JavaScript errors
+        Console.WriteLine($"🔄 [{ComponentId}] OnTextReplace ignored (single-user mode): {start}-{end}");
+        await Task.CompletedTask;
     }
 }

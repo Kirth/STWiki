@@ -1,10 +1,22 @@
 // draft-management.js
-// Draft discard functionality
+// Draft discard functionality and unsaved changes detection
 
-console.log('🚀 Script block started - setting up discardDraft function...');
+console.log('🚀 Script block started - setting up draft management...');
+
+// Global state for tracking unsaved changes
+let hasUnsavedChanges = false;
+let originalContent = '';
+let currentPageId = null;
 
 // Initialize draft management with the page ID
 window.initializeDraftManagement = function(pageId) {
+    console.log('📝 Initializing draft management for page:', pageId);
+    currentPageId = pageId;
+    
+    // Set up unsaved changes detection
+    setupChangeTracking();
+    setupBeforeUnloadWarning();
+    
     console.log('📝 Defining full discardDraft function with race condition prevention...');
     
     window.discardDraft = async function discardDraft() {
@@ -136,6 +148,116 @@ window.initializeDraftManagement = function(pageId) {
     };
     
     console.log('✅ Full discardDraft function defined. Type:', typeof window.discardDraft);
+};
+
+// Set up change tracking for the editor
+function setupChangeTracking() {
+    console.log('🎯 Setting up change tracking...');
+    
+    // Get initial content from editor
+    setTimeout(() => {
+        const editorContainer = document.querySelector('.editor-container');
+        if (editorContainer && window.getWikiEditorContent) {
+            const containerId = editorContainer.id || 'editor-container';
+            originalContent = window.getWikiEditorContent(containerId) || '';
+            console.log('📝 Original content captured:', originalContent.length, 'characters');
+        }
+        
+        // Set up periodic change checking
+        setInterval(checkForChanges, 1000); // Check every second
+    }, 1000); // Wait for editor to be fully initialized
+}
+
+// Check if editor content has changed
+function checkForChanges() {
+    const editorContainer = document.querySelector('.editor-container');
+    if (!editorContainer || !window.getWikiEditorContent) return;
+    
+    const containerId = editorContainer.id || 'editor-container';
+    const currentContent = window.getWikiEditorContent(containerId) || '';
+    
+    const wasChanged = hasUnsavedChanges;
+    hasUnsavedChanges = currentContent !== originalContent;
+    
+    // Log when state changes
+    if (hasUnsavedChanges !== wasChanged) {
+        console.log('🔄 Change state updated:', hasUnsavedChanges ? 'HAS UNSAVED CHANGES' : 'NO UNSAVED CHANGES');
+        updateChangeIndicator();
+    }
+}
+
+// Update visual indicator of unsaved changes
+function updateChangeIndicator() {
+    const form = document.querySelector('form');
+    const saveButton = document.querySelector('button[type="submit"]');
+    
+    if (hasUnsavedChanges) {
+        // Add visual indicators
+        if (form) {
+            form.style.border = '2px solid orange';
+            form.style.borderRadius = '5px';
+        }
+        if (saveButton) {
+            saveButton.style.backgroundColor = '#fd7e14';
+            saveButton.textContent = saveButton.textContent.replace(/^(Create|Save)/, '$1*');
+        }
+    } else {
+        // Remove visual indicators
+        if (form) {
+            form.style.border = '';
+            form.style.borderRadius = '';
+        }
+        if (saveButton) {
+            saveButton.style.backgroundColor = '';
+            saveButton.textContent = saveButton.textContent.replace(/\*$/, '');
+        }
+    }
+}
+
+// Set up beforeunload warning
+function setupBeforeUnloadWarning() {
+    console.log('⚠️ Setting up beforeunload warning...');
+    
+    window.addEventListener('beforeunload', function(e) {
+        if (hasUnsavedChanges) {
+            console.log('⚠️ Preventing navigation - unsaved changes detected');
+            // Standard way to trigger browser's leave confirmation dialog
+            e.preventDefault();
+            e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+            return 'You have unsaved changes. Are you sure you want to leave?';
+        }
+    });
+}
+
+// Mark content as saved (called after successful save operations)
+window.markContentAsSaved = function() {
+    console.log('✅ Content marked as saved');
+    hasUnsavedChanges = false;
+    
+    // Update original content to current content
+    const editorContainer = document.querySelector('.editor-container');
+    if (editorContainer && window.getWikiEditorContent) {
+        const containerId = editorContainer.id || 'editor-container';
+        originalContent = window.getWikiEditorContent(containerId) || '';
+    }
+    
+    updateChangeIndicator();
+};
+
+// Accept the current draft (just hide the prompt)
+window.acceptDraft = function() {
+    console.log('✅ User accepted draft content');
+    hideDraftPrompt();
+    window.showToast('Continuing with draft content', 'success');
+};
+
+// Hide the draft prompt
+window.hideDraftPrompt = function() {
+    console.log('👁️ Hiding draft prompt');
+    const draftIndicator = document.getElementById('draft-indicator');
+    if (draftIndicator) {
+        draftIndicator.style.display = 'none';
+    }
 };
 
 window.showToast = function showToast(message, type = 'success') {
