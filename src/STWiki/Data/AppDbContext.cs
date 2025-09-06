@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Redirect> Redirects { get; set; } = default!;
     public DbSet<Activity> Activities { get; set; } = default!;
     public DbSet<User> Users { get; set; } = default!;
+    public DbSet<Draft> Drafts { get; set; } = default!;
     public DbSet<MediaFile> MediaFiles { get; set; } = default!;
     public DbSet<MediaThumbnail> MediaThumbnails { get; set; } = default!;
     public DbSet<PageMediaReference> PageMediaReferences { get; set; } = default!;
@@ -164,6 +165,39 @@ public class AppDbContext : DbContext
                 .WithMany(m => m.PageReferences)
                 .HasForeignKey(r => r.MediaFileId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Draft configuration and indexes
+        modelBuilder.Entity<Draft>(entity =>
+        {
+            // Unique index on user and page combination - one draft per user per page
+            entity.HasIndex(e => new { e.UserId, e.PageId })
+                .IsUnique()
+                .HasDatabaseName("IX_Drafts_UserId_PageId");
+
+            // Index on PageId for finding all drafts for a page
+            entity.HasIndex(e => e.PageId)
+                .HasDatabaseName("IX_Drafts_PageId");
+
+            // Index on UserId for finding all user's drafts
+            entity.HasIndex(e => e.UserId)
+                .HasDatabaseName("IX_Drafts_UserId");
+
+            // Index on UpdatedAt for cleanup/maintenance
+            entity.HasIndex(e => e.UpdatedAt)
+                .HasDatabaseName("IX_Drafts_UpdatedAt");
+
+            // Foreign key to Page
+            entity.HasOne(d => d.Page)
+                .WithMany()
+                .HasForeignKey(d => d.PageId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Optional foreign key to BaseRevision
+            entity.HasOne(d => d.BaseRevision)
+                .WithMany()
+                .HasForeignKey(d => d.BaseRevisionId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

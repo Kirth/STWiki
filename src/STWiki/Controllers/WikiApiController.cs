@@ -37,30 +37,39 @@ public class WikiApiController : ControllerBase
             if (page.IsLocked)
                 return BadRequest(new { error = "Page is locked for editing" });
 
+            var currentUserId = User.Identity?.Name ?? "Anonymous";
             var contentToSave = request.Content;
 
-            // For autosave, we store draft in DraftContent and leave Body (published content) unchanged
-            // If this is the first draft save, preserve the committed content and set baseline
-            if (!page.HasUncommittedChanges)
+            // Find or create user-specific draft
+            var existingDraft = await _context.Drafts
+                .FirstOrDefaultAsync(d => d.UserId == currentUserId && d.PageId == id);
+
+            if (existingDraft != null)
             {
-                page.LastCommittedContent = page.Body;
-                page.LastCommittedAt ??= page.UpdatedAt; // Set if not already set
+                // Update existing draft
+                existingDraft.Content = contentToSave;
+                existingDraft.UpdatedAt = DateTimeOffset.UtcNow;
             }
-            
-            // Save draft to DraftContent, not Body
-            page.DraftContent = contentToSave;
-            page.LastDraftAt = DateTimeOffset.UtcNow;
-            page.HasUncommittedChanges = true;
-            
-            // Only update metadata, NOT the main content
-            page.UpdatedAt = DateTimeOffset.UtcNow;
-            page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
+            else
+            {
+                // Create new draft for this user
+                var newDraft = new Draft
+                {
+                    PageId = id,
+                    UserId = currentUserId,
+                    Content = contentToSave,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    BaseContent = page.Body // Store what the draft is based on
+                };
+                _context.Drafts.Add(newDraft);
+            }
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Autosaved page {PageId} by {User}", id, page.UpdatedBy);
+            _logger.LogInformation("Autosaved draft for page {PageId} by user {User}", id, currentUserId);
 
-            return Ok(new { message = "Draft saved", timestamp = page.UpdatedAt });
+            return Ok(new { message = "Draft saved", timestamp = DateTimeOffset.UtcNow });
         }
         catch (Exception ex)
         {
@@ -85,14 +94,14 @@ public class WikiApiController : ControllerBase
             if (page.IsLocked)
                 return BadRequest(new { error = "Page is locked for editing" });
 
-            var currentUser = User.Identity?.Name ?? "Anonymous";
+            var currentUserId = User.Identity?.Name ?? "Anonymous";
             var contentToCommit = request.Content;
             
             // Create a regular single-user revision
             var revision = new Revision
             {
                 PageId = page.Id,
-                Author = currentUser,
+                Author = currentUserId,
                 Note = request.Summary ?? "",
                 Snapshot = contentToCommit,
                 Format = page.BodyFormat,
@@ -101,7 +110,7 @@ public class WikiApiController : ControllerBase
 
             _context.Revisions.Add(revision);
 
-            // Update the page and clear draft status  
+            // Update the page
             if (request.Title != null)
                 page.Title = request.Title;
             page.Body = revision.Snapshot;  // This commits the content to live page
@@ -109,12 +118,13 @@ public class WikiApiController : ControllerBase
             page.UpdatedAt = revision.CreatedAt;
             page.UpdatedBy = revision.Author;
             
-            // Clear draft tracking - content is now committed
-            page.HasUncommittedChanges = false;
-            page.LastCommittedAt = revision.CreatedAt;
-            page.LastCommittedContent = revision.Snapshot;
-            page.LastDraftAt = null;
-            page.DraftContent = null; // Clear the draft since it's now committed
+            // Delete user's draft since content is now committed
+            var userDraft = await _context.Drafts
+                .FirstOrDefaultAsync(d => d.UserId == currentUserId && d.PageId == id);
+            if (userDraft != null)
+            {
+                _context.Drafts.Remove(userDraft);
+            }
 
             await _context.SaveChangesAsync();
 
@@ -146,25 +156,23 @@ public class WikiApiController : ControllerBase
             if (page.IsLocked)
                 return BadRequest(new { error = "Page is locked for editing" });
 
-            if (!page.HasUncommittedChanges)
+            var currentUserId = User.Identity?.Name ?? "Anonymous";
+
+            // Find and delete user's draft
+            var userDraft = await _context.Drafts
+                .FirstOrDefaultAsync(d => d.UserId == currentUserId && d.PageId == id);
+
+            if (userDraft == null)
                 return BadRequest(new { error = "No draft to discard" });
 
-            // Clear draft content (Body remains unchanged as committed content)
-            page.DraftContent = null;
-            page.UpdatedAt = DateTimeOffset.UtcNow;
-            page.UpdatedBy = User.Identity?.Name ?? "Anonymous";
-            
-            // Clear draft status
-            page.HasUncommittedChanges = false;
-            page.LastDraftAt = null;
-
+            _context.Drafts.Remove(userDraft);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Discarded draft for page {PageId} by {User}", id, page.UpdatedBy);
+            _logger.LogInformation("Discarded draft for page {PageId} by user {User}", id, currentUserId);
 
             return Ok(new { 
                 message = "Draft discarded successfully", 
-                timestamp = page.UpdatedAt,
+                timestamp = DateTimeOffset.UtcNow,
                 content = page.Body  // Return the committed content (not the draft)
             });
         }

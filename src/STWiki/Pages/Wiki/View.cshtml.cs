@@ -53,10 +53,25 @@ public class ViewModel : PageModel
 
         if (Page != null)
         {
-            // Set draft status properties
-            HasDraft = Page.HasUncommittedChanges;
-            LastDraftAt = Page.LastDraftAt;
-            LastCommittedAt = Page.LastCommittedAt;
+            // Check for user-specific draft (only for authenticated users)
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var currentUserId = User.Identity.Name ?? "Anonymous";
+                var userDraft = await _context.Drafts
+                    .FirstOrDefaultAsync(d => d.UserId == currentUserId && d.PageId == Page.Id);
+                
+                // Set draft status properties based on user's draft
+                HasDraft = userDraft != null;
+                LastDraftAt = userDraft?.UpdatedAt;
+                LastCommittedAt = Page.UpdatedAt;
+            }
+            else
+            {
+                // Anonymous users don't have drafts
+                HasDraft = false;
+                LastDraftAt = null;
+                LastCommittedAt = Page.UpdatedAt;
+            }
             
             // Look up the user who last updated this page
             if (!string.IsNullOrEmpty(Page.UpdatedBy))

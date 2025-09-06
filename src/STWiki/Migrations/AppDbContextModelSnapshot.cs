@@ -99,6 +99,56 @@ namespace STWiki.Migrations
                     b.ToTable("Activities");
                 });
 
+            modelBuilder.Entity("STWiki.Data.Entities.Draft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BaseContent")
+                        .HasColumnType("text");
+
+                    b.Property<long?>("BaseRevisionId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PageId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BaseRevisionId");
+
+                    b.HasIndex("PageId")
+                        .HasDatabaseName("IX_Drafts_PageId");
+
+                    b.HasIndex("UpdatedAt")
+                        .HasDatabaseName("IX_Drafts_UpdatedAt");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_Drafts_UserId");
+
+                    b.HasIndex("UserId", "PageId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Drafts_UserId_PageId");
+
+                    b.ToTable("Drafts");
+                });
+
             modelBuilder.Entity("STWiki.Data.Entities.MediaFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -503,6 +553,24 @@ namespace STWiki.Migrations
                     b.Navigation("Page");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("STWiki.Data.Entities.Draft", b =>
+                {
+                    b.HasOne("STWiki.Data.Entities.Revision", "BaseRevision")
+                        .WithMany()
+                        .HasForeignKey("BaseRevisionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("STWiki.Data.Entities.Page", "Page")
+                        .WithMany()
+                        .HasForeignKey("PageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("BaseRevision");
+
+                    b.Navigation("Page");
                 });
 
             modelBuilder.Entity("STWiki.Data.Entities.MediaFile", b =>

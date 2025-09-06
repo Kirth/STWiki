@@ -164,14 +164,18 @@ public class EditModel : PageModel
         
         Summary = existingPage.Summary;
         
-        // CRITICAL FIX: Load draft content if available, otherwise committed content
-        var contentToEdit = !string.IsNullOrEmpty(existingPage.DraftContent) 
-            ? existingPage.DraftContent 
-            : existingPage.Body;
+        var currentUserId = User.Identity?.Name ?? "Anonymous";
+        
+        // Check for user-specific draft
+        var userDraft = await _context.Drafts
+            .FirstOrDefaultAsync(d => d.UserId == currentUserId && d.PageId == existingPage.Id);
+        
+        // Use draft content if user has a draft, otherwise use committed content
+        var contentToEdit = userDraft != null ? userDraft.Content : existingPage.Body;
             
         Console.WriteLine($"🔍 EDIT LOAD - Raw body from DB length: {existingPage.Body?.Length ?? -1}");
-        Console.WriteLine($"🔍 EDIT LOAD - Draft content length: {existingPage.DraftContent?.Length ?? -1}");
-        Console.WriteLine($"🔍 EDIT LOAD - Using content for editing: {(existingPage.DraftContent != null ? "DRAFT" : "COMMITTED")}");
+        Console.WriteLine($"🔍 EDIT LOAD - User draft content length: {userDraft?.Content?.Length ?? -1}");
+        Console.WriteLine($"🔍 EDIT LOAD - Using content for editing: {(userDraft != null ? "USER DRAFT" : "COMMITTED")}");
         
         Body = CleanStringForBlazor(contentToEdit);
         Console.WriteLine($"🔍 EDIT LOAD - Final cleaned content length: {Body?.Length ?? -1}");
@@ -188,10 +192,10 @@ public class EditModel : PageModel
                 .FirstOrDefaultAsync(u => u.UserId == existingPage.UpdatedBy);
         }
         
-        // Set draft status
-        HasDraft = existingPage.HasUncommittedChanges;
-        LastDraftAt = existingPage.LastDraftAt;
-        LastCommittedAt = existingPage.LastCommittedAt;
+        // Set user-specific draft status
+        HasDraft = userDraft != null;
+        LastDraftAt = userDraft?.UpdatedAt;
+        LastCommittedAt = existingPage.UpdatedAt;
 
         // Check if page is locked - still show the form but with warnings
         if (existingPage.IsLocked)
