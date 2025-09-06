@@ -29,6 +29,20 @@
     border-color: #333 !important;
 }
 
+[data-bs-theme="dark"] .navbar-brand {
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .nav-link,
+[data-bs-theme="dark"] .dropdown-toggle {
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .nav-link:hover,
+[data-bs-theme="dark"] .dropdown-toggle:hover {
+    color: #ffffff !important;
+}
+
 [data-bs-theme="dark"] .card {
     background-color: #1e1e1e;
     border-color: #333;
@@ -199,4 +213,27 @@
 
 [data-bs-theme="dark"] .breadcrumb-item.active {
     color: #a0a0a0;
+}
+
+/* Breadcrumb container background fix */
+[data-bs-theme="dark"] .breadcrumb {
+    background-color: rgba(45, 45, 45, 0.8) !important;
+}
+
+[data-bs-theme="dark"] nav[aria-label="breadcrumb"] > .d-flex {
+    background-color: rgba(45, 45, 45, 0.8) !important;
+    border-color: rgba(64, 64, 64, 0.5) !important;
+}
+
+/* Override hardcoded white backgrounds from site.css */
+[data-bs-theme="dark"] body {
+    background-color: #121212 !important;
+}
+
+/* Template sections that might have white backgrounds */
+[data-bs-theme="dark"] .template-section,
+[data-bs-theme="dark"] .wiki-section,
+[data-bs-theme="dark"] .main-page-section {
+    background-color: #1e1e1e !important;
+    color: #e0e0e0 !important;
 }
