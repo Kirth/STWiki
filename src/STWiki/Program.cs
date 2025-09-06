@@ -7,7 +7,6 @@ using Minio;
 using STWiki.Data;
 using STWiki.Models;
 using STWiki.Services;
-using STWiki.Extensions;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -30,29 +29,26 @@ builder.Services.AddHttpContextAccessor();
 
 // Add custom services
 builder.Services.AddSingleton<STWiki.Services.MarkdownService>();
-builder.Services.AddSingleton<STWiki.Services.DiffService>();
+builder.Services.AddScoped<STWiki.Services.DiffService>();
 builder.Services.AddScoped<STWiki.Services.TemplateService>();
 builder.Services.AddScoped<STWiki.Services.IRedirectService, STWiki.Services.RedirectService>();
-builder.Services.AddSingleton<STWiki.Services.IEditSessionService, STWiki.Services.EditSessionService>();
 builder.Services.AddScoped<STWiki.Services.ActivityService>();
 builder.Services.AddScoped<STWiki.Services.BreadcrumbService>();
 builder.Services.AddScoped<STWiki.Services.IPageHierarchyService, STWiki.Services.PageHierarchyService>();
 builder.Services.AddScoped<STWiki.Services.AdvancedSearchService>();
 builder.Services.AddScoped<STWiki.Services.UserService>();
 builder.Services.AddScoped<STWiki.Services.AdminService>();
+builder.Services.AddScoped<STWiki.Services.IDiffCacheService, STWiki.Services.DiffCacheService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
-// Add new collaborative editing services
-builder.Services.AddCollaborativeEditing();
-
 // Add configuration options
-builder.Services.Configure<STWiki.Models.CollaborationOptions>(
-    builder.Configuration.GetSection(STWiki.Models.CollaborationOptions.SectionName));
 builder.Services.Configure<ObjectStorageConfiguration>(
     builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName));
 builder.Services.Configure<MediaConfiguration>(
     builder.Configuration.GetSection(MediaConfiguration.SectionName));
+builder.Services.Configure<STWiki.Services.DiffCacheOptions>(
+    builder.Configuration.GetSection(STWiki.Services.DiffCacheOptions.SectionName));
 
 // Add media services
 var storageConfig = builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName).Get<ObjectStorageConfiguration>() 
@@ -71,11 +67,7 @@ builder.Services.AddSingleton<IMinioClient>(provider =>
 builder.Services.AddScoped<IObjectStorageService, MinIOStorageService>();
 builder.Services.AddScoped<IMediaService, MediaService>();
 
-// Add SignalR
-builder.Services.AddSignalR();
-
-// Add background services
-builder.Services.AddHostedService<STWiki.BackgroundServices.EditSessionCleanupService>();
+// Background services removed - no collaboration cleanup needed
 
 // Add authentication
 builder.Services.AddAuthentication(options =>
@@ -231,7 +223,6 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 app.MapBlazorHub();
-app.MapHub<STWiki.Hubs.EditHub>("/editHub");
 app.MapControllers();
 
 // Default redirect to home page

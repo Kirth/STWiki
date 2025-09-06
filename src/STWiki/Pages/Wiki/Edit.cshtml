@@ -166,7 +166,7 @@
                                        param-LastDraftAt="@Model.LastDraftAt"
                                        param-LastCommittedAt="@Model.LastCommittedAt" />
                         </div>
-                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
+                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea">@Model.Body</textarea>
                         <span asp-validation-for="Body" class="text-danger"></span>
                     </div>
                 </div>

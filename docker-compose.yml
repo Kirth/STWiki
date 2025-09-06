@@ -19,17 +19,6 @@ services:
     networks:
       - stwiki-network
 
-  yws:
-    image: y-websocket:latest
-    build: 
-      context: ./docker/y-websocket
-      dockerfile: Dockerfile
-    ports: ["1234:1234"]
-    networks:
-      - stwiki-network
-    environment:
-      PORT: 1234
-
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -69,7 +58,6 @@ services:
     depends_on:
       - db
       - dex
-      - yws
       - minio
 
 volumes:
