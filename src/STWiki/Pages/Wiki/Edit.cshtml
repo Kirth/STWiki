@@ -68,7 +68,14 @@
                             </span>
                             <span>
                                 <i class="bi bi-person text-info me-1"></i>
-                                by @Html.UserLink(Model.UpdatedBy, Model.UpdatedBy ?? "Unknown")
+                                by @if (Model.UpdatedByUser != null)
+                                {
+                                    @Html.UserLink(Model.UpdatedByUser)
+                                }
+                                else
+                                {
+                                    @Html.UserLink(Model.UpdatedBy, Model.UpdatedBy ?? "Unknown")
+                                }
                             </span>
                         </div>
                     </div>

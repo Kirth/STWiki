@@ -50,6 +50,7 @@ public class EditModel : PageModel
     public DateTimeOffset? CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
     public string? UpdatedBy { get; set; }
+    public STWiki.Data.Entities.User? UpdatedByUser { get; set; }
 
     // Original slug for tracking changes
     [BindProperty]
@@ -179,6 +180,13 @@ public class EditModel : PageModel
         UpdatedAt = existingPage.UpdatedAt;
         UpdatedBy = existingPage.UpdatedBy;
         IsLocked = existingPage.IsLocked;
+        
+        // Look up the user who last updated this page
+        if (!string.IsNullOrEmpty(existingPage.UpdatedBy))
+        {
+            UpdatedByUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.UserId == existingPage.UpdatedBy);
+        }
         
         // Set draft status
         HasDraft = existingPage.HasUncommittedChanges;
