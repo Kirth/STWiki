@@ -1,0 +1,59 @@
+/* View Page Styles - STWiki */
+/* This file contains styling specific to the wiki view page */
+
+/* Prism.js Code Block Enhancements for Wiki Content */
+.wiki-content pre[class*="language-"] {
+    margin: 1.5em 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow-x: auto;
+    font-size: 14px;
+    line-height: 1.5;
+    position: relative;
+}
+
+.wiki-content code[class*="language-"] {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+.wiki-content pre[class*="language-"]:before {
+    content: attr(data-language);
+    position: absolute;
+    top: 0.5em;
+    right: 1em;
+    font-size: 0.75em;
+    color: rgba(255,255,255,0.6);
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 0.1em;
+}
+
+/* Inline code styling */
+.wiki-content code:not([class*="language-"]) {
+    background: rgba(0,0,0,0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: #e83e8c;
+}
+
+/* Keep breadcrumb/actions tight on one line when possible */
+.wiki-page .min-w-0 { 
+    min-width: 0; 
+}
+
+.wiki-page nav a:hover { 
+    text-decoration: underline; 
+}
+
+/* Toast notification animations */
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+}
+
+@keyframes slideOut {
+    from { transform: translateX(0);    opacity: 1; }
+    to   { transform: translateX(100%); opacity: 0; }
+}

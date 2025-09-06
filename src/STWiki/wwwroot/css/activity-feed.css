@@ -1,0 +1,32 @@
+/*
+ * Activity Feed Styles
+ * Extracted from RecentChanges.cshtml
+ * Styles for activity feed components including icons, items, and hover effects
+ */
+
+.activity-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bs-gray-100);
+    border-radius: 50%;
+    font-size: 1.1rem;
+}
+
+[data-bs-theme="dark"] .activity-icon {
+    background-color: var(--bs-gray-800);
+}
+
+.activity-item:hover {
+    background-color: var(--bs-gray-50);
+}
+
+[data-bs-theme="dark"] .activity-item:hover {
+    background-color: var(--bs-gray-800);
+}
+
+.activity-description a:hover {
+    text-decoration: underline !important;
+}

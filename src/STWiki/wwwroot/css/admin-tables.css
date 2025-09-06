@@ -1,0 +1,36 @@
+/**
+ * Admin Tables CSS
+ * Styles for administrative table components including activity logs
+ * Extracted from inline styles for better maintainability
+ */
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.table td {
+    border-color: #f8f9fa;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* Dark mode support */
+[data-bs-theme="dark"] .table th {
+    color: #e0e0e0;
+    background-color: #2d2d2d;
+}
+
+[data-bs-theme="dark"] .table td {
+    border-color: #404040;
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}

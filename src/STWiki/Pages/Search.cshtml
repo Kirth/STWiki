@@ -4,39 +4,9 @@
     ViewData["Title"] = "Search";
 }
 
-<style>
-    .search-highlight mark {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 0.1em 0.2em;
-        border-radius: 0.25rem;
-        font-weight: 600;
-    }
-    
-    .search-result-snippet {
-        font-size: 0.9rem;
-        line-height: 1.4;
-        color: #6c757d;
-    }
-    
-    .search-match-badge {
-        font-size: 0.7rem;
-    }
-    
-    .pagination .page-link {
-        color: #495057;
-    }
-    
-    .pagination .page-item.active .page-link {
-        background-color: #007bff;
-        border-color: #007bff;
-    }
-    
-    .list-group-item:hover {
-        background-color: #f8f9fa;
-        transition: background-color 0.15s ease-in-out;
-    }
-</style>
+@section Styles {
+    <link rel="stylesheet" href="~/css/search-page.css" />
+}
 
 <div class="wiki-container">
     <h1>Search Wiki</h1>

@@ -8,7 +8,7 @@
 
 <div class="editor-container" id="editor-container-@_editorId" data-editor-id="@_editorId" data-format="@BodyFormat">
     <!-- Hidden field for this editor instance -->
-    <input type="hidden" name="Body" data-role="body" />
+    <input type="hidden" name="Body" data-role="body" value="@_safeContent" />
     <!-- Format badge for this editor -->
     <span data-role="format-badge" style="display: none;">@BodyFormat</span>
     

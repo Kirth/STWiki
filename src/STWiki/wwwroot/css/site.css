@@ -902,6 +902,189 @@ nav[aria-label="breadcrumb"] .breadcrumb {
     opacity: 1;
 }
 
+/* =============================================================================
+   DARK MODE OVERRIDES - Comprehensive dark theme support for site.css
+   ============================================================================= */
+
+/* Form controls dark mode */
+[data-bs-theme="dark"] .form-control {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .form-control:focus {
+    background-color: #2d2d2d;
+    border-color: #86b7fe;
+    color: #e0e0e0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Alert dark mode */
+[data-bs-theme="dark"] .alert-info {
+    background-color: #1b2a2d;
+    border-color: #2b5a5c;
+    color: #c6f5fb;
+}
+
+[data-bs-theme="dark"] .alert-warning {
+    background-color: #2d2a1b;
+    border-color: #5c5b2b;
+    color: #f5f2c6;
+}
+
+/* Wiki content dark mode */
+[data-bs-theme="dark"] .wiki-content pre {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .wiki-content th {
+    background-color: #2d2d2d !important;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .wiki-content th,
+[data-bs-theme="dark"] .wiki-content td {
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .wiki-content blockquote {
+    color: #a0a0a0;
+    border-left-color: #0d6efd;
+}
+
+/* Editor dark mode */
+[data-bs-theme="dark"] .editor-container {
+    background-color: #1e1e1e;
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .editor-content {
+    background-color: #1e1e1e;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .editor-toolbar {
+    border-color: #404040;
+}
+
+/* Autocomplete dark mode */
+[data-bs-theme="dark"] .autocomplete-dropdown {
+    background: #1e1e1e;
+    border-color: #404040;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.3);
+}
+
+[data-bs-theme="dark"] .autocomplete-item {
+    border-bottom-color: #404040;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .autocomplete-item:hover,
+[data-bs-theme="dark"] .autocomplete-item.selected {
+    background-color: rgba(13, 110, 253, 0.2);
+}
+
+[data-bs-theme="dark"] .autocomplete-footer {
+    background-color: #2d2d2d;
+    border-top-color: #404040;
+    color: #a0a0a0;
+}
+
+[data-bs-theme="dark"] .autocomplete-title {
+    color: #e0e0e0;
+}
+
+/* Wiki link dark mode */
+[data-bs-theme="dark"] .wiki-link {
+    background-color: rgba(134, 183, 254, 0.1);
+    border-color: rgba(134, 183, 254, 0.2);
+    color: #86b7fe;
+}
+
+[data-bs-theme="dark"] .wiki-link:hover {
+    background-color: rgba(134, 183, 254, 0.15);
+    border-color: rgba(134, 183, 254, 0.3);
+}
+
+[data-bs-theme="dark"] .wiki-link-exists {
+    color: #86b7fe;
+}
+
+[data-bs-theme="dark"] .wiki-link-exists:hover {
+    border-bottom-color: #86b7fe;
+    color: #b3ccfe;
+}
+
+[data-bs-theme="dark"] .wiki-link-unknown {
+    color: #ff6b6b;
+    border-bottom-color: #ff6b6b;
+}
+
+[data-bs-theme="dark"] .wiki-link-unknown:hover {
+    color: #ff5555;
+    border-bottom-color: #ff6b6b;
+}
+
+/* Template and media dark mode */
+[data-bs-theme="dark"] .wiki-template {
+    background-color: rgba(255, 193, 7, 0.15);
+    border-color: rgba(255, 193, 7, 0.3);
+    color: #ffc107;
+}
+
+[data-bs-theme="dark"] .template-placeholder {
+    background: linear-gradient(135deg, #2d2d2d 0%, #1e1e1e 100%);
+    border-color: #404040;
+    border-left-color: #0d6efd;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .media-link-error {
+    color: #ff6b6b;
+    background-color: #3d1a1a;
+    border-color: #5c2b2b;
+}
+
+[data-bs-theme="dark"] .file-link {
+    border-color: #404040;
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .file-link:hover {
+    background-color: #404040;
+    border-color: #86b7fe;
+}
+
+/* Drag and drop dark mode */
+[data-bs-theme="dark"] .drag-drop-overlay {
+    background: rgba(134, 183, 254, 0.1);
+    border-color: #86b7fe;
+}
+
+[data-bs-theme="dark"] .drag-drop-overlay.drag-over {
+    background: rgba(134, 183, 254, 0.2);
+    border-color: #86b7fe;
+}
+
+/* Remote cursor dark mode adjustments */
+[data-bs-theme="dark"] .remote-cursor-overlay {
+    border-color: rgba(134, 183, 254, 0.3);
+}
+
+[data-bs-theme="dark"] .remote-cursor {
+    background: rgba(134, 183, 254, 0.7);
+}
+
+[data-bs-theme="dark"] .remote-cursor-label {
+    background-color: #86b7fe;
+    color: #000;
+}
+
 /* Touch-friendly improvements */
 @media (hover: none) and (pointer: coarse) {
     /* Larger touch targets */

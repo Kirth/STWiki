@@ -1,0 +1,202 @@
+/* Dark Theme CSS - STWiki */
+/* This file contains all dark mode styling for the application */
+
+/* Dark mode color variables */
+[data-bs-theme="dark"] {
+    --bs-body-bg: #121212;
+    --bs-body-color: #e0e0e0;
+    --bs-border-color: #333;
+}
+
+/* Body and background override */
+[data-bs-theme="dark"] body {
+    background-color: #121212 !important;
+    color: #e0e0e0 !important;
+}
+
+/* Typography in dark mode */
+[data-bs-theme="dark"] h1,
+[data-bs-theme="dark"] h2, 
+[data-bs-theme="dark"] h3,
+[data-bs-theme="dark"] h4,
+[data-bs-theme="dark"] h5,
+[data-bs-theme="dark"] h6 {
+    color: #e0e0e0 !important;
+}
+
+[data-bs-theme="dark"] .navbar {
+    background-color: #1e1e1e !important;
+    border-color: #333 !important;
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: #1e1e1e;
+    border-color: #333;
+}
+
+[data-bs-theme="dark"] .card-header {
+    background-color: #2d2d2d;
+    border-color: #333;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: #2d2d2d !important;
+}
+
+[data-bs-theme="dark"] .border,
+[data-bs-theme="dark"] .border-top {
+    border-color: #333 !important;
+}
+
+[data-bs-theme="dark"] .text-muted {
+    color: #a0a0a0 !important;
+}
+
+/* Form controls */
+[data-bs-theme="dark"] .form-control {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .form-control:focus {
+    background-color: #2d2d2d;
+    border-color: #0d6efd;
+    color: #e0e0e0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+[data-bs-theme="dark"] .input-group-text {
+    background-color: #2d2d2d;
+    border-color: #404040;
+    color: #a0a0a0;
+}
+
+/* Dropdown menus */
+[data-bs-theme="dark"] .dropdown-menu {
+    background-color: #1e1e1e;
+    border-color: #333;
+}
+
+[data-bs-theme="dark"] .dropdown-item {
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .dropdown-item:hover {
+    background-color: #2d2d2d;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .dropdown-divider {
+    border-color: #333;
+}
+
+[data-bs-theme="dark"] .dropdown-header {
+    color: #a0a0a0;
+}
+
+/* Wiki content */
+[data-bs-theme="dark"] .wiki-content {
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .wiki-content pre {
+    background-color: #2d2d2d !important;
+    color: #e0e0e0;
+}
+
+[data-bs-theme="dark"] .wiki-content blockquote {
+    color: #a0a0a0;
+    border-left-color: #0d6efd;
+}
+
+[data-bs-theme="dark"] .wiki-content table th,
+[data-bs-theme="dark"] .wiki-content table td {
+    border-color: #333;
+    background-color: #1e1e1e;
+}
+
+[data-bs-theme="dark"] .wiki-content table th {
+    background-color: #2d2d2d !important;
+}
+
+/* Editor styles */
+[data-bs-theme="dark"] .editor-container {
+    background-color: #1e1e1e;
+    border-color: #333;
+}
+
+[data-bs-theme="dark"] .editor-content {
+    background-color: #1e1e1e !important;
+}
+
+[data-bs-theme="dark"] .editor-toolbar {
+    border-color: #333;
+}
+
+/* Code block dark mode */
+[data-bs-theme="dark"] .wiki-content code:not([class*="language-"]) {
+    background: rgba(255,255,255,0.1);
+    color: #ff79c6;
+}
+
+[data-bs-theme="dark"] .wiki-content pre[class*="language-"] {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Alert styles for dark mode */
+[data-bs-theme="dark"] .alert-info {
+    background-color: #1b2a2d;
+    border-color: #2b5a5c;
+    color: #c6f5fb;
+}
+
+[data-bs-theme="dark"] .alert-danger {
+    background-color: #2d1b1b;
+    border-color: #5c2b2b;
+    color: #f5c6cb;
+}
+
+[data-bs-theme="dark"] .alert-success {
+    background-color: #1b2d1b;
+    border-color: #2b5c2b;
+    color: #c6f5cb;
+}
+
+[data-bs-theme="dark"] .alert-warning {
+    background-color: #2d2a1b;
+    border-color: #5c5b2b;
+    color: #f5f2c6;
+}
+
+/* Button adjustments for dark mode */
+[data-bs-theme="dark"] .btn-outline-secondary {
+    border-color: #6c757d;
+    color: #6c757d;
+}
+
+[data-bs-theme="dark"] .btn-outline-secondary:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary {
+    color: #86b7fe;
+    border-color: #86b7fe;
+}
+
+[data-bs-theme="dark"] .btn-outline-primary:hover {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+/* Breadcrumb navigation */
+[data-bs-theme="dark"] .breadcrumb-item a {
+    color: #86b7fe;
+}
+
+[data-bs-theme="dark"] .breadcrumb-item.active {
+    color: #a0a0a0;
+}
