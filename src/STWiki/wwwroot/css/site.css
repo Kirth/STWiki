@@ -38,6 +38,31 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--bs-dark);
 }
 
+/* Links and clickable elements */
+a {
+    cursor: pointer !important;
+}
+
+a[role="button"],
+.btn-link,
+[data-bs-toggle],
+.dropdown-toggle,
+.nav-link,
+.navbar-brand,
+.breadcrumb-item a,
+.list-group-item-action,
+.page-link,
+.close,
+.badge,
+.wiki-link,
+.autocomplete-item,
+[onclick],
+[data-bs-dismiss],
+[data-bs-target],
+.clickable {
+    cursor: pointer !important;
+}
+
 h1 { font-size: 2.5rem; }
 h2 { font-size: 2rem; }
 h3 { font-size: 1.75rem; }
