@@ -310,6 +310,7 @@
                 {
                     using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
                     await JS.InvokeVoidAsync("showEditorStatus", "Draft saved");
+                    await JS.InvokeVoidAsync("markContentAsSaved");
                 }
                 catch
                 {
@@ -366,6 +367,7 @@
                     await JS.InvokeVoidAsync("showEditorStatus", "Changes committed successfully");
                     // Notify that changes have been committed via API
                     await JS.InvokeVoidAsync("markContentAsCommitted");
+                    await JS.InvokeVoidAsync("markContentAsSaved");
                 }
                 catch
                 {
@@ -456,16 +458,7 @@
                 {
                     using var jsonDoc = System.Text.Json.JsonDocument.Parse(responseContent);
                     await JS.InvokeVoidAsync("showEditorStatus", "Auto-saved");
-                    
-                    // Mark content as saved to prevent unnecessary beforeunload warnings
-                    try
-                    {
-                        await JS.InvokeVoidAsync("markContentAsSaved");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Could not mark content as saved: {ex.Message}");
-                    }
+                    await JS.InvokeVoidAsync("markContentAsSaved");
                 }
                 catch
                 {
