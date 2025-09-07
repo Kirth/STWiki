@@ -3,7 +3,10 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
+using Minio;
 using STWiki.Data;
+using STWiki.Helpers;
+using STWiki.Models;
 using STWiki.Services;
 using System.Security.Claims;
 
@@ -13,18 +16,59 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    // Set route ordering to ensure Edit pages are processed before View pages  
+    options.Conventions.AddPageRoute("/Wiki/Edit", "/{*slug:regex(.*\\/edit$)}");
+    options.Conventions.AddPageRoute("/Wiki/Edit", "/edit");
+    options.Conventions.AddPageRoute("/Wiki/History", "/{*slug:regex(.*\\/history$)}");
+    options.Conventions.AddPageRoute("/Wiki/History", "/history");
+});
 builder.Services.AddServerSideBlazor();
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 
 // Add custom services
 builder.Services.AddSingleton<STWiki.Services.MarkdownService>();
-builder.Services.AddSingleton<STWiki.Services.DiffService>();
+builder.Services.AddScoped<STWiki.Services.DiffService>();
 builder.Services.AddScoped<STWiki.Services.TemplateService>();
 builder.Services.AddScoped<STWiki.Services.IRedirectService, STWiki.Services.RedirectService>();
+builder.Services.AddScoped<STWiki.Services.ActivityService>();
+builder.Services.AddScoped<STWiki.Services.BreadcrumbService>();
+builder.Services.AddScoped<STWiki.Services.IPageHierarchyService, STWiki.Services.PageHierarchyService>();
+builder.Services.AddScoped<STWiki.Services.AdvancedSearchService>();
+builder.Services.AddScoped<STWiki.Services.UserService>();
+builder.Services.AddScoped<STWiki.Services.AdminService>();
+builder.Services.AddScoped<STWiki.Services.IDiffCacheService, STWiki.Services.DiffCacheService>();
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
+
+// Add configuration options
+builder.Services.Configure<ObjectStorageConfiguration>(
+    builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName));
+builder.Services.Configure<MediaConfiguration>(
+    builder.Configuration.GetSection(MediaConfiguration.SectionName));
+builder.Services.Configure<STWiki.Services.DiffCacheOptions>(
+    builder.Configuration.GetSection(STWiki.Services.DiffCacheOptions.SectionName));
+
+// Add media services
+var storageConfig = builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName).Get<ObjectStorageConfiguration>() 
+    ?? new ObjectStorageConfiguration();
+
+builder.Services.AddSingleton<IMinioClient>(provider =>
+{
+    var config = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ObjectStorageConfiguration>>().Value;
+    return new MinioClient()
+        .WithEndpoint(config.Endpoint)
+        .WithCredentials(config.AccessKey, config.SecretKey)
+        .WithSSL(config.UseSSL)
+        .Build();
+});
+
+builder.Services.AddScoped<IObjectStorageService, MinIOStorageService>();
+builder.Services.AddScoped<IMediaService, MediaService>();
+
+// Background services removed - no collaboration cleanup needed
 
 // Add authentication
 builder.Services.AddAuthentication(options =>
@@ -89,6 +133,26 @@ builder.Services.AddAuthentication(options =>
                     logger.LogInformation("Token claim: {Type} = {Value}", claim.Type, claim.Value);
                 }
             }
+            
+            // Log user login activity
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var activityService = context.HttpContext.RequestServices.GetRequiredService<STWiki.Services.ActivityService>();
+                    var userName = context.Principal?.Identity?.Name ?? "Unknown";
+                    var userDisplayName = UserLinkHelper.GetUserDisplayName(context.Principal);
+                    var ipAddress = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
+                    var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
+                    
+                    await activityService.LogUserLoginAsync(userName, userDisplayName, ipAddress, userAgent);
+                    logger.LogInformation("Logged login activity for user: {UserName}", userName);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to log user login activity");
+                }
+            });
             
             return Task.CompletedTask;
         },
@@ -166,5 +230,18 @@ app.MapControllers();
 // Default redirect to home page
 app.MapGet("/", () => Results.Redirect("/main-page"));
 
+// Handle command-line arguments for admin tasks
+if (args.Contains("--populate-hierarchy"))
+{
+    using var scope = app.Services.CreateScope();
+    var hierarchyService = scope.ServiceProvider.GetRequiredService<STWiki.Services.IPageHierarchyService>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    
+    logger.LogInformation("Starting ParentId population from command line");
+    var updatedCount = await hierarchyService.PopulateParentIdsFromSlugsAsync();
+    logger.LogInformation("Completed ParentId population. Updated {Count} pages", updatedCount);
+    
+    return; // Exit without starting the web server
+}
 
 app.Run();

@@ -1,0 +1,56 @@
+/*
+ * History Page Styles
+ * Styles for the Wiki History page (/Wiki/History)
+ * 
+ * Contains styles for:
+ * - Avatar styling with hover effects
+ * - Revision row transitions
+ * - Diff display area
+ * - Button group transitions
+ * - Card styling with rounded corners
+ * - Badge styling
+ * - Pagination styling
+ */
+
+.avatar-circle {
+    transition: all 0.2s ease;
+}
+
+.avatar-circle:hover {
+    transform: scale(1.1);
+}
+
+.revision-row {
+    transition: background-color 0.2s ease;
+}
+
+.revision-row:hover {
+    background-color: rgba(0,123,255,0.05) !important;
+}
+
+.diff-content-wrapper {
+    max-height: 800px;
+    overflow-y: auto;
+}
+
+.btn-group .btn {
+    transition: all 0.2s ease;
+}
+
+.card {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.card-header {
+    border-radius: 12px 12px 0 0;
+}
+
+.badge {
+    border-radius: 8px;
+}
+
+.pagination .page-link {
+    border-radius: 8px;
+    margin: 0 2px;
+}

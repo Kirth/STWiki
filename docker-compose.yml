@@ -19,16 +19,25 @@ services:
     networks:
       - stwiki-network
 
-  yws:
-    image: y-websocket:latest
-    build: 
-      context: ./docker/y-websocket
-      dockerfile: Dockerfile
-    ports: ["1234:1234"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_DEFAULT_BUCKETS: stwiki-media
+    ports: 
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
     networks:
       - stwiki-network
-    environment:
-      PORT: 1234
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
 
   app:
     build:
@@ -49,11 +58,12 @@ services:
     depends_on:
       - db
       - dex
-      - yws
+      - minio
 
 volumes:
   pg_data:
   nuget_cache:
+  minio_data:
 
 networks:
   stwiki-network:

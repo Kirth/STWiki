@@ -1,0 +1,299 @@
+@page "/admin/users"
+@model STWiki.Pages.Admin.UsersModel
+@{
+    ViewData["Title"] = "User Management";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-shield-check"></i> Admin Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/admin/dashboard" class="list-group-item list-group-item-action">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                    <a href="/admin/users" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-people"></i> User Management
+                    </a>
+                    <a href="/admin/pages" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-text"></i> Page Management
+                    </a>
+                    <a href="/admin/activity" class="list-group-item list-group-item-action">
+                        <i class="bi bi-activity"></i> Activity Monitor
+                    </a>
+                    <a href="/admin/settings" class="list-group-item list-group-item-action">
+                        <i class="bi bi-gear"></i> System Settings
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="bi bi-people me-2"></i>User Management
+                </h2>
+                <div class="text-muted">
+                    <i class="bi bi-person-lines-fill me-1"></i>@Model.TotalUsers total users
+                </div>
+            </div>
+
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    @TempData["SuccessMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    @TempData["ErrorMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            }
+
+            <!-- Search and Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="get" class="row align-items-end">
+                        <div class="col-md-8">
+                            <label for="search" class="form-label">Search Users</label>
+                            <input type="text" class="form-control" id="search" name="search" value="@Model.SearchTerm" 
+                                   placeholder="Search by name, email, or username...">
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-search me-2"></i>Search
+                            </button>
+                            @if (!string.IsNullOrEmpty(Model.SearchTerm))
+                            {
+                                <a href="/admin/users" class="btn btn-outline-secondary ms-2">
+                                    <i class="bi bi-x-circle me-1"></i>Clear
+                                </a>
+                            }
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Users Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Users</h6>
+                    @if (!string.IsNullOrEmpty(Model.SearchTerm))
+                    {
+                        <small class="text-muted">
+                            Showing @Model.Users.Count results for "@Model.SearchTerm"
+                        </small>
+                    }
+                </div>
+                <div class="card-body p-0">
+                    @if (Model.Users.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Email</th>
+                                        <th>Joined</th>
+                                        <th>Last Login</th>
+                                        <th>Profile</th>
+                                        <th class="text-end">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var user in Model.Users)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div>
+                                                        @if (!string.IsNullOrEmpty(user.AvatarUrl))
+                                                        {
+                                                            <img src="@user.AvatarUrl" alt="Avatar" class="rounded-circle me-2" width="32" height="32" style="object-fit: cover;">
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 14px;">
+                                                                @(user.DisplayName.FirstOrDefault().ToString().ToUpper())
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                    <div>
+                                                        <div class="fw-bold">@user.DisplayName</div>
+                                                        <small class="text-muted">@@(@user.PreferredUsername)</small>
+                                                        @if (!string.IsNullOrEmpty(user.UserId))
+                                                        {
+                                                            <br><small class="text-muted" style="font-size: 0.7em; font-family: monospace;">sub: @user.UserId</small>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="text-muted">@user.Email</span>
+                                            </td>
+                                            <td>
+                                                <span title="@user.CreatedAt.ToString("F")">
+                                                    @user.CreatedAt.ToString("MMM d, yyyy")
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @if (user.LastLoginAt.HasValue)
+                                                {
+                                                    <span title="@user.LastLoginAt.Value.ToString("F")">
+                                                        @GetTimeAgo(user.LastLoginAt.Value)
+                                                    </span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Never</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (user.IsProfilePublic)
+                                                {
+                                                    <span class="badge bg-success">Public</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Private</span>
+                                                }
+                                            </td>
+                                            <td class="text-end">
+                                                <div class="btn-group btn-group-sm">
+                                                    <a href="/user/@Uri.EscapeDataString(GetUserSlug(user))" 
+                                                       class="btn btn-outline-primary" title="View Profile" target="_blank">
+                                                        <i class="bi bi-eye"></i>
+                                                    </a>
+                                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle dropdown-toggle-split" 
+                                                            data-bs-toggle="dropdown">
+                                                        <span class="visually-hidden">Toggle Dropdown</span>
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li>
+                                                            <a class="dropdown-item" href="/user/@Uri.EscapeDataString(GetUserSlug(user))" target="_blank">
+                                                                <i class="bi bi-eye me-2"></i>View Profile
+                                                            </a>
+                                                        </li>
+                                                        <li>
+                                                            <a class="dropdown-item" href="/user/@Uri.EscapeDataString(GetUserSlug(user))/contributions" target="_blank">
+                                                                <i class="bi bi-journal-text me-2"></i>View Contributions
+                                                            </a>
+                                                        </li>
+                                                        <li><hr class="dropdown-divider"></li>
+                                                        <li>
+                                                            <form method="post" asp-page-handler="ToggleUserProfile" class="d-inline">
+                                                                <input type="hidden" name="userId" value="@user.Id" />
+                                                                <input type="hidden" name="isPublic" value="@(!user.IsProfilePublic)" />
+                                                                <button type="submit" class="dropdown-item">
+                                                                    @if (user.IsProfilePublic)
+                                                                    {
+                                                                        <text><i class="bi bi-eye-slash me-2"></i>Make Private</text>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <text><i class="bi bi-eye me-2"></i>Make Public</text>
+                                                                    }
+                                                                </button>
+                                                            </form>
+                                                        </li>
+                                                    </ul>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        @if (Model.TotalPages > 1)
+                        {
+                            <div class="card-footer">
+                                <nav aria-label="User pagination">
+                                    <ul class="pagination justify-content-center mb-0">
+                                        <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+                                            <a class="page-link" href="/admin/users?page=@(Model.CurrentPage - 1)&search=@Uri.EscapeDataString(Model.SearchTerm)">
+                                                <i class="bi bi-chevron-left"></i>
+                                            </a>
+                                        </li>
+
+                                        @for (int i = Math.Max(1, Model.CurrentPage - 2); i <= Math.Min(Model.TotalPages, Model.CurrentPage + 2); i++)
+                                        {
+                                            <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                                <a class="page-link" href="/admin/users?page=@i&search=@Uri.EscapeDataString(Model.SearchTerm)">@i</a>
+                                            </li>
+                                        }
+
+                                        <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+                                            <a class="page-link" href="/admin/users?page=@(Model.CurrentPage + 1)&search=@Uri.EscapeDataString(Model.SearchTerm)">
+                                                <i class="bi bi-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2">
+                                    <small class="text-muted">
+                                        Page @Model.CurrentPage of @Model.TotalPages 
+                                        (@Model.TotalUsers total users)
+                                    </small>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-people display-1 text-muted"></i>
+                            <h4 class="text-muted mt-3">No Users Found</h4>
+                            @if (!string.IsNullOrEmpty(Model.SearchTerm))
+                            {
+                                <p class="text-muted">No users match your search criteria.</p>
+                                <a href="/admin/users" class="btn btn-primary">View All Users</a>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No users have been registered yet.</p>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private string GetTimeAgo(DateTimeOffset timestamp)
+    {
+        var timeSpan = DateTimeOffset.UtcNow - timestamp;
+        
+        if (timeSpan.TotalMinutes < 1) return "just now";
+        if (timeSpan.TotalMinutes < 60) return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24) return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 7) return $"{(int)timeSpan.TotalDays}d ago";
+        if (timeSpan.TotalDays < 30) return $"{(int)(timeSpan.TotalDays / 7)}w ago";
+        
+        return timestamp.ToString("MMM d, yyyy");
+    }
+
+    private string GetUserSlug(STWiki.Data.Entities.User user)
+    {
+        if (!string.IsNullOrEmpty(user.PreferredUsername))
+            return user.PreferredUsername;
+        if (!string.IsNullOrEmpty(user.DisplayName))
+            return user.DisplayName;
+        return user.UserId;
+    }
+}

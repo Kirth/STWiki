@@ -1,0 +1,194 @@
+@page "/user/settings/profile"
+@model STWiki.Pages.User.Settings.ProfileModel
+@{
+    ViewData["Title"] = "Profile Settings";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-gear"></i> Control Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/user/dashboard" class="list-group-item list-group-item-action">
+                        <i class="bi bi-house"></i> Dashboard
+                    </a>
+                    <a href="/user/settings/profile" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-person"></i> Profile Settings
+                    </a>
+                    <a href="/user/settings/preferences" class="list-group-item list-group-item-action">
+                        <i class="bi bi-sliders"></i> Preferences
+                    </a>
+                    <a href="/user/settings/security" class="list-group-item list-group-item-action">
+                        <i class="bi bi-shield-lock"></i> Security
+                    </a>
+                    <div class="dropdown-divider"></div>
+                    <a href="/user/@Model.UserProfile.PreferredUsername" class="list-group-item list-group-item-action">
+                        <i class="bi bi-eye"></i> View Public Profile
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="bi bi-person me-2"></i>Profile Settings
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (TempData["SuccessMessage"] != null)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            @TempData["SuccessMessage"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    }
+
+                    <form method="post">
+                        <div asp-validation-summary="All" class="alert alert-danger" style="display: none;"></div>
+                        
+                        <!-- Avatar Preview -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="text-center">
+                                    <div id="avatar-preview" class="mb-3">
+                                        @if (!string.IsNullOrEmpty(Model.AvatarUrl))
+                                        {
+                                            <img src="@Model.AvatarUrl" alt="Avatar Preview" class="rounded-circle" width="120" height="120" style="object-fit: cover;">
+                                        }
+                                        else
+                                        {
+                                            <div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 120px; height: 120px;">
+                                                <i class="bi bi-person fs-1"></i>
+                                            </div>
+                                        }
+                                    </div>
+                                    <small class="text-muted">Profile Avatar</small>
+                                </div>
+                            </div>
+                            <div class="col-md-9">
+                                <!-- Basic Info -->
+                                <div class="mb-3">
+                                    <label asp-for="DisplayName" class="form-label">Display Name <span class="text-danger">*</span></label>
+                                    <input asp-for="DisplayName" class="form-control" placeholder="Enter your display name" maxlength="255" required>
+                                    <span asp-validation-for="DisplayName" class="text-danger small"></span>
+                                    <div class="form-text">This is how your name will appear to other users.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" value="@Model.UserProfile.Email" readonly>
+                                    <div class="form-text">Email address is managed by your authentication provider and cannot be changed here.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Username</label>
+                                    <input type="text" class="form-control" value="@Model.UserProfile.PreferredUsername" readonly>
+                                    <div class="form-text">Username is managed by your authentication provider and cannot be changed here.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label asp-for="Bio" class="form-label">Bio <span class="text-muted small">(optional)</span></label>
+                                    <textarea asp-for="Bio" class="form-control" rows="4" placeholder="Tell others about yourself... (optional)" maxlength="1000"></textarea>
+                                    <span asp-validation-for="Bio" class="text-danger small"></span>
+                                    <div class="form-text">
+                                        <span id="bio-count">@(Model.Bio?.Length ?? 0)</span>/1000 characters - Leave blank if you prefer not to share a bio
+                                    </div>
+                                </div>
+
+                                <div class="mb-4">
+                                    <label asp-for="AvatarUrl" class="form-label">Avatar URL <span class="text-muted small">(optional)</span></label>
+                                    <input asp-for="AvatarUrl" type="url" class="form-control" placeholder="https://example.com/avatar.jpg (optional)" maxlength="500">
+                                    <span asp-validation-for="AvatarUrl" class="text-danger small"></span>
+                                    <div class="form-text">Enter a URL to an image to use as your profile avatar. Leave blank to use the default avatar.</div>
+                                </div>
+
+                                <div class="d-flex justify-content-between">
+                                    <a href="/user/dashboard" class="btn btn-secondary">
+                                        <i class="bi bi-arrow-left me-2"></i>Back to Dashboard
+                                    </a>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-check-lg me-2"></i>Save Changes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Account Info Card -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h6 class="mb-0">Account Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Member Since:</strong><br>
+                            <span class="text-muted">@Model.UserProfile.CreatedAt.ToString("MMMM d, yyyy 'at' h:mm tt")</span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Last Login:</strong><br>
+                            <span class="text-muted">
+                                @if (Model.UserProfile.LastLoginAt.HasValue)
+                                {
+                                    @Model.UserProfile.LastLoginAt.Value.ToString("MMMM d, yyyy 'at' h:mm tt")
+                                }
+                                else
+                                {
+                                    <span>Never</span>
+                                }
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Bio character counter
+        document.querySelector('#Bio').addEventListener('input', function() {
+            document.querySelector('#bio-count').textContent = this.value.length;
+        });
+
+        // Avatar URL preview
+        document.querySelector('#AvatarUrl').addEventListener('input', function() {
+            const preview = document.querySelector('#avatar-preview');
+            const url = this.value.trim();
+            
+            if (url) {
+                // Test if URL is valid by creating an image element
+                const img = new Image();
+                img.onload = function() {
+                    preview.innerHTML = `<img src="${url}" alt="Avatar Preview" class="rounded-circle" width="120" height="120" style="object-fit: cover;">`;
+                };
+                img.onerror = function() {
+                    preview.innerHTML = `<div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 120px; height: 120px;">
+                        <i class="bi bi-person fs-1"></i>
+                    </div>`;
+                };
+                img.src = url;
+            } else {
+                preview.innerHTML = `<div class="bg-secondary text-white rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 120px; height: 120px;">
+                    <i class="bi bi-person fs-1"></i>
+                </div>`;
+            }
+        });
+    </script>
+}

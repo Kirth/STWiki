@@ -13,17 +13,20 @@ public class HistoryModel : PageModel
     private readonly AppDbContext _context;
     private readonly MarkdownService _markdownService;
     private readonly DiffService _diffService;
+    private readonly UserService _userService;
 
-    public HistoryModel(AppDbContext context, MarkdownService markdownService, DiffService diffService)
+    public HistoryModel(AppDbContext context, MarkdownService markdownService, DiffService diffService, UserService userService)
     {
         _context = context;
         _markdownService = markdownService;
         _diffService = diffService;
+        _userService = userService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
     public string Slug { get; set; } = string.Empty;
     public List<Revision> Revisions { get; set; } = new();
+    public Dictionary<string, string> AuthorDisplayNames { get; set; } = new();
     public string RenderedContent { get; set; } = string.Empty;
     
     // Pagination properties
@@ -40,14 +43,21 @@ public class HistoryModel : PageModel
     public Revision? CompareFromRevision { get; set; }
     public Revision? CompareToRevision { get; set; }
     public string DiffHtml { get; set; } = string.Empty;
+    public string? DiffViewMode { get; set; }
+    public string? DiffGranularity { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string slug, int page = 1)
     {
         Slug = slug;
         CurrentPage = Math.Max(1, page);
         
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+        
         Page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (Page != null)
         {
@@ -77,9 +87,26 @@ public class HistoryModel : PageModel
                 "html" => Page.Body,
                 _ => $"<pre>{Page.Body}</pre>"
             };
+
+            // Load author display names
+            await LoadAuthorDisplayNamesAsync();
         }
 
         return Page();
+    }
+
+    private async Task LoadAuthorDisplayNamesAsync()
+    {
+        if (!Revisions.Any()) return;
+
+        var authorIds = Revisions.Select(r => r.Author).Distinct().ToList();
+        AuthorDisplayNames.Clear();
+
+        foreach (var authorId in authorIds)
+        {
+            var user = await _userService.GetUserByUserIdAsync(authorId);
+            AuthorDisplayNames[authorId] = user?.DisplayName ?? authorId;
+        }
     }
 
     public async Task<IActionResult> OnGetViewRevisionAsync(string slug, long revisionId, int page = 1)
@@ -87,8 +114,13 @@ public class HistoryModel : PageModel
         Slug = slug;
         CurrentPage = Math.Max(1, page);
         
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+        
         Page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (Page == null)
             return NotFound();
@@ -135,6 +167,9 @@ public class HistoryModel : PageModel
             _ => $"<pre>{Page.Body}</pre>"
         };
 
+        // Load author display names
+        await LoadAuthorDisplayNamesAsync();
+
         return Page();
     }
 
@@ -150,8 +185,13 @@ public class HistoryModel : PageModel
             return Forbid();
         }
 
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+
         var page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (page == null)
             return NotFound();
@@ -186,16 +226,22 @@ public class HistoryModel : PageModel
 
         await _context.SaveChangesAsync();
 
-        return RedirectToPage("/Wiki/View", new { slug });
+        return RedirectToPage("/Wiki/View", new { slug = pageSlug });
     }
 
-    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId, int page = 1)
+    public async Task<IActionResult> OnGetDiffAsync(string slug, long fromRevisionId, long toRevisionId, int page = 1, 
+        string viewMode = "unified", string granularity = "line", bool ignoreWhitespace = false, int contextLines = 3)
     {
         Slug = slug;
         CurrentPage = Math.Max(1, page);
         
+        // Remove "/history" suffix from slug to get the actual page slug
+        var pageSlug = slug.EndsWith("/history", StringComparison.OrdinalIgnoreCase) 
+            ? slug.Substring(0, slug.Length - "/history".Length)
+            : slug;
+        
         Page = await _context.Pages
-            .FirstOrDefaultAsync(p => p.Slug.ToLower() == slug.ToLower());
+            .FirstOrDefaultAsync(p => p.Slug.ToLower() == pageSlug.ToLower());
 
         if (Page == null)
             return NotFound();
@@ -228,10 +274,65 @@ public class HistoryModel : PageModel
 
         if (CompareFromRevision != null && CompareToRevision != null)
         {
-            // Generate diff HTML
-            DiffHtml = _diffService.GenerateHtmlDiff(
-                CompareFromRevision.Snapshot, 
-                CompareToRevision.Snapshot);
+            DiffViewMode = viewMode;
+            DiffGranularity = granularity;
+
+            // Create diff options
+            var options = new DiffOptions
+            {
+                Granularity = granularity switch
+                {
+                    "word" => STWiki.Services.DiffGranularity.Word,
+                    "character" => STWiki.Services.DiffGranularity.Character,
+                    _ => STWiki.Services.DiffGranularity.Line
+                },
+                ViewMode = viewMode switch
+                {
+                    "sidebyside" => STWiki.Services.DiffViewMode.SideBySide,
+                    "inline" => STWiki.Services.DiffViewMode.Inline,
+                    "stats" => STWiki.Services.DiffViewMode.Stats,
+                    _ => STWiki.Services.DiffViewMode.Unified
+                },
+                IgnoreWhitespace = ignoreWhitespace,
+                ContextLines = contextLines,
+                ShowStats = true
+            };
+
+            try
+            {
+                // Try to get from cache first if available
+                var cachedDiff = await (_diffService as IAdvancedDiffService)?.GetCachedDiffAsync(fromRevisionId, toRevisionId, options);
+                
+                STWiki.Services.DiffService.DiffResult? diffResult = null;
+                if (cachedDiff != null && cachedDiff.Lines.Any())
+                {
+                    diffResult = cachedDiff;
+                }
+                else
+                {
+                    // Generate new diff
+                    diffResult = await (_diffService as IAdvancedDiffService)?.GenerateAdvancedDiffAsync(
+                        CompareFromRevision.Snapshot, 
+                        CompareToRevision.Snapshot, 
+                        options) ?? _diffService.GenerateLineDiff(CompareFromRevision.Snapshot, CompareToRevision.Snapshot);
+                    
+                    // Cache the result - handled internally by the service
+                }
+
+                // Render HTML based on view mode
+                if (diffResult != null)
+                {
+                    DiffHtml = await (_diffService as IAdvancedDiffService)?.RenderDiffHtmlAsync(diffResult, options.ViewMode) 
+                        ?? _diffService.GenerateHtmlDiff(CompareFromRevision.Snapshot, CompareToRevision.Snapshot);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Fallback to basic diff if advanced diff fails
+                DiffHtml = _diffService.GenerateHtmlDiff(
+                    CompareFromRevision.Snapshot, 
+                    CompareToRevision.Snapshot);
+            }
         }
 
         // Render current content for reference
@@ -241,6 +342,9 @@ public class HistoryModel : PageModel
             "html" => Page.Body,
             _ => $"<pre>{Page.Body}</pre>"
         };
+
+        // Load author display names
+        await LoadAuthorDisplayNamesAsync();
 
         return Page();
     }

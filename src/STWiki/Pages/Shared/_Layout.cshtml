@@ -8,6 +8,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="css/site.css" rel="stylesheet" />
+    <link href="css/dark-theme.css" rel="stylesheet" />
+    @await RenderSectionAsync("Styles", required: false)
 </head>
 <body>
     <header>
@@ -30,15 +32,14 @@
                     <div class="mx-auto my-2 my-lg-0" style="max-width: 500px; width: 100%;">
                         <form action="/search" method="get" class="position-relative">
                             <div class="input-group">
-                                <span class="input-group-text bg-white border-end-0">
+                                <span class="input-group-text border-end-0">
                                     <i class="bi bi-search text-muted"></i>
                                 </span>
                                 <input class="form-control border-start-0 ps-0" 
                                        type="search" 
                                        name="q" 
                                        placeholder="Search wiki pages..." 
-                                       aria-label="Search"
-                                       style="background: white;">
+                                       aria-label="Search">
                             </div>
                         </form>
                     </div>
@@ -48,6 +49,46 @@
                         <button class="btn btn-outline-secondary btn-sm" id="darkModeToggle" title="Toggle dark mode">
                             <i class="bi bi-moon" id="darkModeIcon"></i>
                         </button>
+                    </div>
+
+                    <!-- Navigation Links -->
+                    <div class="navbar-nav me-3">
+                        <div class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                <i class="bi bi-grid-3x3-gap me-1"></i>
+                                <span class="d-none d-lg-inline">Browse</span>
+                            </a>
+                            <ul class="dropdown-menu shadow">
+                                <li>
+                                    <a class="dropdown-item" href="/recent-changes">
+                                        <i class="bi bi-clock-history me-2 text-primary"></i>
+                                        Recent Changes
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="/search">
+                                        <i class="bi bi-search me-2 text-success"></i>
+                                        Advanced Search
+                                    </a>
+                                </li>
+                                @if (User.Identity?.IsAuthenticated == true && (User.HasClaim("groups", "stwiki-editor") || User.HasClaim("groups", "stwiki-admin")))
+                                {
+                                <li>
+                                    <a class="dropdown-item" href="/media">
+                                        <i class="bi bi-file-earmark-image me-2 text-warning"></i>
+                                        Media Library
+                                    </a>
+                                </li>
+                                }
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="/new">
+                                        <i class="bi bi-file-plus me-2 text-info"></i>
+                                        New Page
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
 
                     <!-- User section -->
@@ -60,10 +101,39 @@
                                    role="button" 
                                    data-bs-toggle="dropdown">
                                     <i class="bi bi-person-circle me-2 fs-5"></i>
-                                    <span class="d-none d-md-inline">@(User.Identity.Name ?? "User")</span>
+                                    <span class="d-none d-md-inline">@(User.FindFirst("display_name")?.Value ?? User.FindFirst("name")?.Value ?? "User")</span>
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end shadow">
-                                    <li><h6 class="dropdown-header">@(User.Identity.Name ?? "User")</h6></li>
+                                    <li><h6 class="dropdown-header">@(User.FindFirst("display_name")?.Value ?? User.FindFirst("name")?.Value ?? "User")</h6></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="/user/@Uri.EscapeDataString(User.FindFirst("user_slug")?.Value ?? User.Identity.Name ?? "")">
+                                            <i class="bi bi-person me-2"></i>
+                                            My Profile
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item" href="/user/@Uri.EscapeDataString(User.FindFirst("user_slug")?.Value ?? User.Identity.Name ?? "")/contributions">
+                                            <i class="bi bi-journal-text me-2"></i>
+                                            My Contributions
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li>
+                                        <a class="dropdown-item" href="/user/dashboard">
+                                            <i class="bi bi-gear me-2"></i>
+                                            Control Panel
+                                        </a>
+                                    </li>
+                                    @if (User.HasClaim("groups", "stwiki-admin"))
+                                    {
+                                        <li>
+                                            <a class="dropdown-item" href="/admin/dashboard">
+                                                <i class="bi bi-shield-check me-2 text-warning"></i>
+                                                Admin Panel
+                                            </a>
+                                        </li>
+                                    }
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <a class="dropdown-item" href="/Account/Logout">
@@ -136,208 +206,6 @@
             });
         })();
     </script>
-    
-    <style>
-        /* Dark mode styles */
-        [data-bs-theme="dark"] {
-            --bs-body-bg: #121212;
-            --bs-body-color: #e0e0e0;
-            --bs-border-color: #333;
-        }
-        
-        /* Body and background override */
-        [data-bs-theme="dark"] body {
-            background-color: #121212 !important;
-            color: #e0e0e0 !important;
-        }
-        
-        /* Typography in dark mode */
-        [data-bs-theme="dark"] h1,
-        [data-bs-theme="dark"] h2, 
-        [data-bs-theme="dark"] h3,
-        [data-bs-theme="dark"] h4,
-        [data-bs-theme="dark"] h5,
-        [data-bs-theme="dark"] h6 {
-            color: #e0e0e0 !important;
-        }
-        
-        [data-bs-theme="dark"] .navbar {
-            background-color: #1e1e1e !important;
-            border-color: #333 !important;
-        }
-        
-        [data-bs-theme="dark"] .card {
-            background-color: #1e1e1e;
-            border-color: #333;
-        }
-        
-        [data-bs-theme="dark"] .card-header {
-            background-color: #2d2d2d;
-            border-color: #333;
-        }
-        
-        [data-bs-theme="dark"] .bg-light {
-            background-color: #2d2d2d !important;
-        }
-        
-        [data-bs-theme="dark"] .border,
-        [data-bs-theme="dark"] .border-top {
-            border-color: #333 !important;
-        }
-        
-        [data-bs-theme="dark"] .text-muted {
-            color: #a0a0a0 !important;
-        }
-        
-        /* Form controls */
-        [data-bs-theme="dark"] .form-control {
-            background-color: #2d2d2d;
-            border-color: #404040;
-            color: #e0e0e0;
-        }
-        
-        [data-bs-theme="dark"] .form-control:focus {
-            background-color: #2d2d2d;
-            border-color: #0d6efd;
-            color: #e0e0e0;
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
-        }
-        
-        [data-bs-theme="dark"] .input-group-text {
-            background-color: #2d2d2d;
-            border-color: #404040;
-            color: #a0a0a0;
-        }
-        
-        /* Dropdown menus */
-        [data-bs-theme="dark"] .dropdown-menu {
-            background-color: #1e1e1e;
-            border-color: #333;
-        }
-        
-        [data-bs-theme="dark"] .dropdown-item {
-            color: #e0e0e0;
-        }
-        
-        [data-bs-theme="dark"] .dropdown-item:hover {
-            background-color: #2d2d2d;
-            color: #e0e0e0;
-        }
-        
-        [data-bs-theme="dark"] .dropdown-divider {
-            border-color: #333;
-        }
-        
-        [data-bs-theme="dark"] .dropdown-header {
-            color: #a0a0a0;
-        }
-        
-        /* Wiki content */
-        [data-bs-theme="dark"] .wiki-content {
-            color: #e0e0e0;
-        }
-        
-        [data-bs-theme="dark"] .wiki-content pre {
-            background-color: #2d2d2d !important;
-            color: #e0e0e0;
-        }
-        
-        [data-bs-theme="dark"] .wiki-content blockquote {
-            color: #a0a0a0;
-            border-left-color: #0d6efd;
-        }
-        
-        [data-bs-theme="dark"] .wiki-content table th,
-        [data-bs-theme="dark"] .wiki-content table td {
-            border-color: #333;
-            background-color: #1e1e1e;
-        }
-        
-        [data-bs-theme="dark"] .wiki-content table th {
-            background-color: #2d2d2d !important;
-        }
-        
-        /* Editor styles */
-        [data-bs-theme="dark"] .editor-container {
-            background-color: #1e1e1e;
-            border-color: #333;
-        }
-        
-        [data-bs-theme="dark"] .editor-content {
-            background-color: #1e1e1e !important;
-        }
-        
-        [data-bs-theme="dark"] .editor-toolbar {
-            border-color: #333;
-        }
-        
-        /* Code block dark mode */
-        [data-bs-theme="dark"] .wiki-content code:not([class*="language-"]) {
-            background: rgba(255,255,255,0.1);
-            color: #ff79c6;
-        }
-        
-        [data-bs-theme="dark"] .wiki-content pre[class*="language-"] {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        }
-        
-        /* Alert styles for dark mode */
-        [data-bs-theme="dark"] .alert-info {
-            background-color: #1b2a2d;
-            border-color: #2b5a5c;
-            color: #c6f5fb;
-        }
-        
-        [data-bs-theme="dark"] .alert-danger {
-            background-color: #2d1b1b;
-            border-color: #5c2b2b;
-            color: #f5c6cb;
-        }
-        
-        [data-bs-theme="dark"] .alert-success {
-            background-color: #1b2d1b;
-            border-color: #2b5c2b;
-            color: #c6f5cb;
-        }
-        
-        [data-bs-theme="dark"] .alert-warning {
-            background-color: #2d2a1b;
-            border-color: #5c5b2b;
-            color: #f5f2c6;
-        }
-        
-        /* Button adjustments for dark mode */
-        [data-bs-theme="dark"] .btn-outline-secondary {
-            border-color: #6c757d;
-            color: #6c757d;
-        }
-        
-        [data-bs-theme="dark"] .btn-outline-secondary:hover {
-            background-color: #6c757d;
-            border-color: #6c757d;
-            color: #fff;
-        }
-        
-        [data-bs-theme="dark"] .btn-outline-primary {
-            color: #86b7fe;
-            border-color: #86b7fe;
-        }
-        
-        [data-bs-theme="dark"] .btn-outline-primary:hover {
-            background-color: #0d6efd;
-            border-color: #0d6efd;
-            color: #fff;
-        }
-        
-        /* Breadcrumb navigation */
-        [data-bs-theme="dark"] .breadcrumb-item a {
-            color: #86b7fe;
-        }
-        
-        [data-bs-theme="dark"] .breadcrumb-item.active {
-            color: #a0a0a0;
-        }
-    </style>
     
     @await RenderSectionAsync("Scripts", required: false)
 </body>

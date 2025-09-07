@@ -1,0 +1,211 @@
+@page "/admin/settings"
+@model STWiki.Pages.Admin.SettingsModel
+@{
+    ViewData["Title"] = "System Settings";
+}
+
+<div class="container-fluid py-4">
+    <div class="row">
+        <!-- Sidebar -->
+        <div class="col-md-3 col-lg-2">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-shield-check"></i> Admin Panel
+                    </h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    <a href="/admin/dashboard" class="list-group-item list-group-item-action">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                    <a href="/admin/users" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people"></i> User Management
+                    </a>
+                    <a href="/admin/pages" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-text"></i> Page Management
+                    </a>
+                    <a href="/admin/activity" class="list-group-item list-group-item-action">
+                        <i class="bi bi-activity"></i> Activity Monitor
+                    </a>
+                    <a href="/admin/settings" class="list-group-item list-group-item-action active">
+                        <i class="bi bi-gear"></i> System Settings
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="col-md-9 col-lg-10">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="bi bi-gear me-2"></i>System Settings
+                </h2>
+            </div>
+
+            <!-- System Information -->
+            <div class="row mb-4">
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-info-circle me-2"></i>System Information
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <strong>Environment:</strong><br>
+                                    <span class="badge bg-info">@Model.SystemInfo.GetValueOrDefault("Environment", "Unknown")</span>
+                                </div>
+                                <div class="col-6">
+                                    <strong>Server Time:</strong><br>
+                                    <span class="text-muted">@((DateTimeOffset)Model.SystemInfo["ServerTime"]).ToString("F")</span>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="col-6">
+                                    <strong>.NET Version:</strong><br>
+                                    <span class="text-muted">@Model.SystemInfo.GetValueOrDefault("DotNetVersion", "Unknown")</span>
+                                </div>
+                                <div class="col-6">
+                                    <strong>Processors:</strong><br>
+                                    <span class="text-muted">@Model.SystemInfo.GetValueOrDefault("ProcessorCount", "Unknown") cores</span>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="col-12">
+                                    <strong>Memory Usage:</strong><br>
+                                    <span class="text-muted">@(((long)Model.SystemInfo.GetValueOrDefault("WorkingSet", 0L)) / 1024 / 1024) MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="bi bi-wrench me-2"></i>Quick Actions
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary" onclick="refreshSystemInfo()">
+                                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh System Info
+                                </button>
+                                <a href="/admin/activity" class="btn btn-outline-info">
+                                    <i class="bi bi-activity me-2"></i>View System Activity
+                                </a>
+                                <a href="/admin/users" class="btn btn-outline-success">
+                                    <i class="bi bi-people me-2"></i>Manage Users
+                                </a>
+                                <a href="/admin/pages" class="btn btn-outline-warning">
+                                    <i class="bi bi-file-earmark-text me-2"></i>Manage Pages
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Configuration Settings -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-sliders me-2"></i>Application Configuration
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>Configuration Management:</strong> 
+                        Application settings are managed through environment variables and configuration files. 
+                        For security reasons, sensitive configuration values are not displayed here.
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Authentication</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="bi bi-check-circle text-success me-2"></i>OIDC Authentication Enabled</li>
+                                <li><i class="bi bi-check-circle text-success me-2"></i>Authorization Policies Active</li>
+                                <li><i class="bi bi-check-circle text-success me-2"></i>Claims Transformation Active</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Features</h6>
+                            <ul class="list-unstyled">
+                                <li><i class="bi bi-check-circle text-success me-2"></i>User Profiles Enabled</li>
+                                <li><i class="bi bi-check-circle text-success me-2"></i>Activity Logging Active</li>
+                                <li><i class="bi bi-check-circle text-success me-2"></i>Admin Panel Active</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Administrative Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">
+                        <i class="bi bi-tools me-2"></i>Administrative Actions
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card border-warning">
+                                <div class="card-body">
+                                    <h6 class="card-title text-warning">
+                                        <i class="bi bi-exclamation-triangle me-2"></i>Maintenance
+                                    </h6>
+                                    <p class="card-text small">System maintenance and cleanup operations.</p>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-warning btn-sm" disabled>
+                                            <i class="bi bi-tools me-2"></i>Database Maintenance
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" disabled>
+                                            <i class="bi bi-trash me-2"></i>Clean Temp Files
+                                        </button>
+                                    </div>
+                                    <small class="text-muted">Coming in future updates</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-info">
+                                <div class="card-body">
+                                    <h6 class="card-title text-info">
+                                        <i class="bi bi-download me-2"></i>Data Export
+                                    </h6>
+                                    <p class="card-text small">Export system data for backup or migration.</p>
+                                    <div class="d-grid gap-2">
+                                        <button class="btn btn-outline-info btn-sm" disabled>
+                                            <i class="bi bi-file-earmark-zip me-2"></i>Export All Data
+                                        </button>
+                                        <button class="btn btn-outline-info btn-sm" disabled>
+                                            <i class="bi bi-people me-2"></i>Export User Data
+                                        </button>
+                                    </div>
+                                    <small class="text-muted">Coming in future updates</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function refreshSystemInfo() {
+            location.reload();
+        }
+    </script>
+}

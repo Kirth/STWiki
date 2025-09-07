@@ -1,0 +1,52 @@
+/* 
+ * Search Page Styles
+ * Extracted from Search.cshtml inline styles
+ * Contains: search highlighting, result styling, snippet formatting, 
+ * badge sizing, pagination styling, and list group hover effects
+ */
+
+/* Search highlighting styles */
+.search-highlight mark {
+    background-color: #fff3cd;
+    color: #856404;
+    padding: 0.1em 0.2em;
+    border-radius: 0.25rem;
+    font-weight: 600;
+}
+
+[data-bs-theme="dark"] .search-highlight mark {
+    background-color: #664d03;
+    color: #fff3cd;
+}
+
+/* Search result snippet styling */
+.search-result-snippet {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    color: #6c757d;
+}
+
+/* Search match badge sizing */
+.search-match-badge {
+    font-size: 0.7rem;
+}
+
+/* Pagination styling */
+.pagination .page-link {
+    color: #495057;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+/* List group item hover effects */
+.list-group-item:hover {
+    background-color: #f8f9fa;
+    transition: background-color 0.15s ease-in-out;
+}
+
+[data-bs-theme="dark"] .list-group-item:hover {
+    background-color: #2d2d2d;
+}

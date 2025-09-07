@@ -2,15 +2,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using STWiki.Data;
+using STWiki.Helpers;
 using STWiki.Services;
 
 namespace STWiki.Pages.Wiki;
-
-public class BreadcrumbPart
-{
-    public string Slug { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-}
 
 public class ViewModel : PageModel
 {
@@ -18,19 +13,26 @@ public class ViewModel : PageModel
     private readonly MarkdownService _markdownService;
     private readonly TemplateService _templateService;
     private readonly IRedirectService _redirectService;
+    private readonly ActivityService _activityService;
 
-    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService, IRedirectService redirectService)
+    public ViewModel(AppDbContext context, MarkdownService markdownService, TemplateService templateService, IRedirectService redirectService, ActivityService activityService)
     {
         _context = context;
         _markdownService = markdownService;
         _templateService = templateService;
         _redirectService = redirectService;
+        _activityService = activityService;
     }
 
     public new STWiki.Data.Entities.Page? Page { get; set; }
+    public STWiki.Data.Entities.User? UpdatedByUser { get; set; }
     public string Slug { get; set; } = string.Empty;
     public string RenderedContent { get; set; } = string.Empty;
-    public List<BreadcrumbPart> BreadcrumbParts { get; set; } = new();
+    
+    // Draft status properties
+    public bool HasDraft { get; set; }
+    public DateTimeOffset? LastDraftAt { get; set; }
+    public DateTimeOffset? LastCommittedAt { get; set; }
 
     public async Task<IActionResult> OnGetAsync(string slug)
     {
@@ -52,42 +54,56 @@ public class ViewModel : PageModel
 
         if (Page != null)
         {
-            // Build breadcrumbs for hierarchical pages
-            await BuildBreadcrumbsAsync(slug);
+            // Check for user-specific draft (only for authenticated users)
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var currentUserId = User.Identity.Name ?? "Anonymous";
+                var userDraft = await _context.Drafts
+                    .FirstOrDefaultAsync(d => d.UserId == currentUserId && d.PageId == Page.Id);
+                
+                // Set draft status properties based on user's draft
+                HasDraft = userDraft != null;
+                LastDraftAt = userDraft?.UpdatedAt;
+                LastCommittedAt = Page.UpdatedAt;
+            }
+            else
+            {
+                // Anonymous users don't have drafts
+                HasDraft = false;
+                LastDraftAt = null;
+                LastCommittedAt = Page.UpdatedAt;
+            }
             
+            // Look up the user who last updated this page
+            if (!string.IsNullOrEmpty(Page.UpdatedBy))
+            {
+                UpdatedByUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.UserId == Page.UpdatedBy);
+            }
+
             // Render content based on format
             RenderedContent = Page.BodyFormat switch
             {
-                "markdown" => await _markdownService.RenderToHtmlAsync(Page.Body, _templateService),
-                "html" => await _templateService.ProcessTemplatesAsync(Page.Body), // Process templates in HTML too
+                "markdown" => await _markdownService.RenderToHtmlAsync(Page.Body, _templateService, Page),
+                "html" => await _templateService.ProcessTemplatesAsync(Page.Body, Page), // Process templates in HTML too
                 _ => $"<pre>{Page.Body}</pre>" // Plain text fallback
             };
+
+            // Log page view activity (only for authenticated users to avoid spam)
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var currentUser = User.Identity.Name ?? "Unknown";
+                var currentUserDisplayName = UserLinkHelper.GetUserDisplayName(User);
+                await _activityService.LogPageViewedAsync(
+                    currentUser, 
+                    currentUserDisplayName, 
+                    Page, 
+                    HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
+                    HttpContext.Request.Headers.UserAgent.ToString()
+                );
+            }
         }
 
         return Page();
-    }
-    
-    private async Task BuildBreadcrumbsAsync(string slug)
-    {
-        var parts = slug.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length <= 1) return; // No breadcrumbs needed for top-level pages
-        
-        BreadcrumbParts.Clear();
-        
-        var currentPath = "";
-        for (int i = 0; i < parts.Length; i++)
-        {
-            if (i > 0) currentPath += "/";
-            currentPath += parts[i];
-            
-            var page = await _context.Pages
-                .FirstOrDefaultAsync(p => p.Slug.ToLower() == currentPath.ToLower());
-            
-            BreadcrumbParts.Add(new BreadcrumbPart
-            {
-                Slug = currentPath,
-                Title = page?.Title ?? parts[i].Replace("-", " ").Replace("_", " ")
-            });
-        }
     }
 }

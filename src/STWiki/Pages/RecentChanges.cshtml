@@ -1,0 +1,271 @@
+@page "/recent-changes"
+@model STWiki.Pages.RecentChangesModel
+@{
+    ViewData["Title"] = "Recent Changes";
+    Layout = "_Layout";
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/activity-feed.css" asp-append-version="true" />
+}
+
+<div class="row">
+    <div class="col-12">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1">
+                    <i class="bi bi-clock-history me-2"></i>
+                    Recent Changes
+                </h1>
+                <p class="text-muted mb-0">Track the latest activity across the wiki</p>
+            </div>
+            
+            <!-- Filters -->
+            <div class="btn-group" role="group" aria-label="Activity filters">
+                <input type="radio" class="btn-check" name="activityFilter" id="filter-all" autocomplete="off" checked>
+                <label class="btn btn-outline-primary btn-sm" for="filter-all">All</label>
+
+                <input type="radio" class="btn-check" name="activityFilter" id="filter-edits" autocomplete="off">
+                <label class="btn btn-outline-primary btn-sm" for="filter-edits">Edits</label>
+
+                <input type="radio" class="btn-check" name="activityFilter" id="filter-creates" autocomplete="off">
+                <label class="btn btn-outline-primary btn-sm" for="filter-creates">New Pages</label>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="text-primary h4 mb-1">
+                            <i class="bi bi-file-text"></i>
+                        </div>
+                        <div class="fw-bold">@Model.Statistics.GetValueOrDefault("page_created", 0)</div>
+                        <div class="text-muted small">New Pages</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="text-success h4 mb-1">
+                            <i class="bi bi-pencil"></i>
+                        </div>
+                        <div class="fw-bold">@Model.Statistics.GetValueOrDefault("page_updated", 0)</div>
+                        <div class="text-muted small">Page Edits</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="text-info h4 mb-1">
+                            <i class="bi bi-eye"></i>
+                        </div>
+                        <div class="fw-bold">@Model.Statistics.GetValueOrDefault("page_viewed", 0)</div>
+                        <div class="text-muted small">Page Views</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <div class="text-warning h4 mb-1">
+                            <i class="bi bi-people"></i>
+                        </div>
+                        <div class="fw-bold">@Model.UniqueUsers</div>
+                        <div class="text-muted small">Active Users</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activity Feed -->
+        <div class="card">
+            <div class="card-header bg-transparent">
+                <h5 class="mb-0">
+                    <i class="bi bi-activity me-2"></i>
+                    Activity Feed
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                @if (Model.Activities.Any())
+                {
+                    <div class="list-group list-group-flush" id="activity-list">
+                        @foreach (var activity in Model.Activities)
+                        {
+                            <div class="list-group-item activity-item" data-activity-type="@activity.ActivityType">
+                                <div class="d-flex">
+                                    <!-- Activity Icon -->
+                                    <div class="flex-shrink-0 me-3">
+                                        <div class="activity-icon activity-@activity.ActivityType">
+                                            @switch (activity.ActivityType)
+                                            {
+                                                case "page_created":
+                                                    <i class="bi bi-file-plus text-primary"></i>
+                                                    break;
+                                                case "page_updated":
+                                                    <i class="bi bi-pencil-square text-success"></i>
+                                                    break;
+                                                case "page_viewed":
+                                                    <i class="bi bi-eye text-info"></i>
+                                                    break;
+                                                case "user_login":
+                                                    <i class="bi bi-person-check text-secondary"></i>
+                                                    break;
+                                                case "search_performed":
+                                                    <i class="bi bi-search text-warning"></i>
+                                                    break;
+                                                default:
+                                                    <i class="bi bi-activity text-muted"></i>
+                                                    break;
+                                            }
+                                        </div>
+                                    </div>
+
+                                    <!-- Activity Content -->
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex justify-content-between align-items-start mb-1">
+                                            <div class="activity-description">
+                                                @Html.UserLink(activity.UserId, activity.UserDisplayName)
+                                                
+                                                @switch (activity.ActivityType)
+                                                {
+                                                    case "page_created":
+                                                        <span>created</span>
+                                                        break;
+                                                    case "page_updated":
+                                                        <span>updated</span>
+                                                        break;
+                                                    case "page_viewed":
+                                                        <span>viewed</span>
+                                                        break;
+                                                    case "user_login":
+                                                        <span>logged in</span>
+                                                        break;
+                                                    case "search_performed":
+                                                        <span>searched for</span>
+                                                        break;
+                                                }
+                                                
+                                                @if (!string.IsNullOrEmpty(activity.PageSlug))
+                                                {
+                                                    <a href="/@activity.PageSlug" class="text-decoration-none fw-medium">
+                                                        @activity.PageTitle
+                                                    </a>
+                                                    @if (activity.ActivityType == "page_updated")
+                                                    {
+                                                        <small class="ms-2">
+                                                            <a href="@Model.GetDiffUrl(activity)" class="text-muted text-decoration-none" title="View diff">
+                                                                <i class="bi bi-eye-fill"></i> diff
+                                                            </a>
+                                                        </small>
+                                                    }
+                                                }
+                                                else if (activity.ActivityType == "search_performed")
+                                                {
+                                                    <span class="text-muted">"@activity.Description.Split('\'')[1].Split('\'')[0]"</span>
+                                                }
+                                            </div>
+                                            
+                                            <small class="text-muted" title="@activity.CreatedAt.ToString("F")">
+                                                @GetTimeAgo(activity.CreatedAt)
+                                            </small>
+                                        </div>
+                                        
+                                        @if (!string.IsNullOrEmpty(activity.Description) && activity.ActivityType != "search_performed")
+                                        {
+                                            <div class="text-muted small">
+                                                @activity.Description
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                    
+                    <!-- Load More Button -->
+                    @if (Model.Activities.Count >= 50)
+                    {
+                        <div class="text-center p-3 border-top">
+                            <button class="btn btn-outline-secondary" onclick="loadMoreActivities()">
+                                <i class="bi bi-arrow-down-circle me-2"></i>
+                                Load More
+                            </button>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-clock-history display-4 mb-3 d-block"></i>
+                        <h5>No recent activity</h5>
+                        <p>Activity will appear here as users interact with the wiki.</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private string GetTimeAgo(DateTimeOffset timestamp)
+    {
+        var timeSpan = DateTimeOffset.UtcNow - timestamp;
+        
+        if (timeSpan.TotalMinutes < 1)
+            return "just now";
+        if (timeSpan.TotalMinutes < 60)
+            return $"{(int)timeSpan.TotalMinutes}m ago";
+        if (timeSpan.TotalHours < 24)
+            return $"{(int)timeSpan.TotalHours}h ago";
+        if (timeSpan.TotalDays < 30)
+            return $"{(int)timeSpan.TotalDays}d ago";
+        
+        return timestamp.ToString("MMM d, yyyy");
+    }
+}
+
+@section Scripts {
+    <script>
+        // Activity filtering
+        document.addEventListener('DOMContentLoaded', function() {
+            const filterButtons = document.querySelectorAll('input[name="activityFilter"]');
+            const activityItems = document.querySelectorAll('.activity-item');
+            
+            filterButtons.forEach(button => {
+                button.addEventListener('change', function() {
+                    const filter = this.id.replace('filter-', '');
+                    
+                    activityItems.forEach(item => {
+                        const activityType = item.dataset.activityType;
+                        
+                        if (filter === 'all' || 
+                            (filter === 'edits' && (activityType === 'page_updated' || activityType === 'page_created')) ||
+                            (filter === 'creates' && activityType === 'page_created')) {
+                            item.style.display = '';
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+                });
+            });
+        });
+        
+        // Auto-refresh every 30 seconds
+        setInterval(function() {
+            // Only refresh if user is on the page and it's visible
+            if (!document.hidden) {
+                location.reload();
+            }
+        }, 30000);
+        
+        function loadMoreActivities() {
+            // TODO: Implement AJAX loading for pagination
+            console.log('Load more activities - implement AJAX pagination');
+        }
+    </script>
+}

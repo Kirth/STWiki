@@ -1,0 +1,165 @@
+/* Edit Page Styles - STWiki */
+/* This file contains styling specific to the wiki edit page */
+
+/* Prism.js Code Block Enhancements */
+.markdown-content pre[class*="language-"] {
+    margin: 1.5em 0;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow-x: auto;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.markdown-content code[class*="language-"] {
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+.markdown-content pre[class*="language-"]:before {
+    content: attr(data-language);
+    position: absolute;
+    top: 0.5em;
+    right: 1em;
+    font-size: 0.75em;
+    color: rgba(255,255,255,0.6);
+    text-transform: uppercase;
+    font-weight: bold;
+    letter-spacing: 0.1em;
+}
+
+/* Copy button styling */
+.markdown-content .copy-to-clipboard-button {
+    position: absolute;
+    top: 0.5em;
+    right: 0.5em;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.8);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.markdown-content .copy-to-clipboard-button:hover {
+    background: rgba(255,255,255,0.2);
+    color: white;
+}
+
+/* Line numbers styling */
+.markdown-content .line-numbers .line-numbers-rows {
+    border-right: 1px solid rgba(255,255,255,0.1);
+    margin-right: 1em;
+}
+
+/* Inline code styling */
+.markdown-content code:not([class*="language-"]) {
+    background: rgba(0,0,0,0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: #e83e8c;
+}
+
+[data-bs-theme="dark"] .markdown-content code:not([class*="language-"]) {
+    background: rgba(255,255,255,0.15);
+    color: #ff79c6;
+}
+
+/* Clean Edit Page Styles */
+.edit-header {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95) !important;
+}
+
+[data-bs-theme="dark"] .edit-header {
+    background: rgba(30, 30, 30, 0.95) !important;
+}
+
+.card {
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.card-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.card-title {
+    font-size: 0.95rem;
+    color: #495057;
+}
+
+.form-control:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
+    transform: translateY(-1px);
+    transition: all 0.2s ease;
+}
+
+.btn {
+    font-weight: 500;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+}
+
+.badge {
+    font-weight: 600;
+    letter-spacing: 0.5px;
+}
+
+/* Format conversion dialog */
+#format-conversion-options {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+[data-bs-theme="dark"] #format-conversion-options {
+    background: #2d2d2d;
+    border: 1px solid #404040;
+}
+
+.form-check-label {
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.form-check-label:hover {
+    background-color: rgba(13, 110, 253, 0.08);
+}
+
+.form-check-input:checked + .form-check-label {
+    background-color: rgba(25, 135, 84, 0.1);
+    border-left: 3px solid #198754;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .edit-header .row > div {
+        margin-bottom: 1rem;
+    }
+    
+    .edit-header .text-end {
+        text-align: left !important;
+    }
+    
+    .d-flex.flex-wrap {
+        justify-content: flex-start !important;
+    }
+}

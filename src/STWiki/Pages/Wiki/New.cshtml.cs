@@ -13,10 +13,12 @@ namespace STWiki.Pages.Wiki;
 public class NewModel : PageModel
 {
     private readonly AppDbContext _context;
+    private readonly IPageHierarchyService _pageHierarchyService;
 
-    public NewModel(AppDbContext context)
+    public NewModel(AppDbContext context, IPageHierarchyService pageHierarchyService)
     {
         _context = context;
+        _pageHierarchyService = pageHierarchyService;
     }
 
     [BindProperty]
@@ -39,10 +41,17 @@ public class NewModel : PageModel
     [Required]
     public string BodyFormat { get; set; } = "markdown";
 
-    public IActionResult OnGet()
+    public IActionResult OnGet(string? parent = null)
     {
         // Initialize defaults
         BodyFormat = "markdown";
+        
+        // Set parent path if provided in query string
+        if (!string.IsNullOrEmpty(parent))
+        {
+            ParentPath = parent;
+        }
+        
         return Page();
     }
 
@@ -90,6 +99,9 @@ public class NewModel : PageModel
             return Page();
         }
 
+        // Get parent ID based on slug hierarchy
+        var parentId = await _pageHierarchyService.GetParentIdFromSlugAsync(finalSlug);
+
         // Create new page with minimal placeholder content
         var placeholderContent = BodyFormat switch
         {
@@ -106,6 +118,7 @@ public class NewModel : PageModel
             Summary = Summary ?? string.Empty,
             Body = placeholderContent,
             BodyFormat = BodyFormat,
+            ParentId = parentId,
             CreatedAt = now,
             UpdatedAt = now,
             UpdatedBy = currentUser,
@@ -129,6 +142,6 @@ public class NewModel : PageModel
         await _context.SaveChangesAsync();
 
         // Redirect to edit the content
-        return RedirectToPage("/Wiki/Edit", new { slug = finalSlug });
+        return Redirect($"/{finalSlug}/edit");
     }
 }

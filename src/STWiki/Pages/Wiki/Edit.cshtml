@@ -1,13 +1,13 @@
-@page "/{slug}/edit"
+@page "{slug?}"
 @model STWiki.Pages.Wiki.EditModel
 @{
     ViewData["Title"] = Model.IsNew ? "Create New Page" : $"Edit {Model.Title}";
 }
 
 <div class="container-fluid px-4">
-    <form method="post" class="mb-4" id="edit-form">
+    <form method="post" class="mb-4" id="edit-form" asp-route-slug="@Model.OriginalSlug">
         <!-- Clean Header Section -->
-        <div class="edit-header bg-white rounded-3 shadow-sm border p-4 mb-4">
+        <div class="edit-header rounded-3 shadow-sm border p-4 mb-4">
             <div class="row align-items-center">
                 <div class="col-md-8">
                     <div class="mb-3">
@@ -38,7 +38,7 @@
                                 @(Model.IsLocked ? "Unlock" : "Lock")
                             </button>
                             
-                            <a asp-page="/Wiki/View" asp-route-slug="@Model.Slug" class="btn btn-outline-secondary">
+                            <a asp-page="/Wiki/View" asp-route-slug="@Model.OriginalSlug" class="btn btn-outline-secondary">
                                 <i class="bi bi-x-lg me-1"></i> Cancel
                             </a>
                         }
@@ -68,12 +68,19 @@
                             </span>
                             <span>
                                 <i class="bi bi-person text-info me-1"></i>
-                                by @Model.UpdatedBy
+                                by @if (Model.UpdatedByUser != null)
+                                {
+                                    @Html.UserLink(Model.UpdatedByUser)
+                                }
+                                else
+                                {
+                                    @Html.UserLink(Model.UpdatedBy, Model.UpdatedBy ?? "Unknown")
+                                }
                             </span>
                         </div>
                     </div>
                     <div class="col-md-4 text-end">
-                        <a asp-page="/Wiki/History" asp-route-slug="@Model.Slug" class="btn btn-outline-info btn-sm">
+                        <a asp-page="/Wiki/History" asp-route-slug="@Model.OriginalSlug" class="btn btn-outline-info btn-sm">
                             <i class="bi bi-clock-history me-1"></i>
                             History
                         </a>
@@ -81,6 +88,40 @@
                 </div>
             }
         </div>
+
+    @* Draft Status Indicator - Enhanced *@
+    @if (Model.HasDraft && !Model.IsNew)
+    {
+        <div class="alert alert-warning alert-dismissible fade show shadow" role="alert" id="draft-indicator" style="border-left: 5px solid #fd7e14;">
+            <div class="d-flex align-items-start justify-content-between">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-exclamation-triangle-fill text-warning me-3 mt-1" style="font-size: 1.5rem;"></i>
+                    <div>
+                        <h5 class="alert-heading mb-2">📝 Unsaved Draft Found!</h5>
+                        <p class="mb-2">You have unsaved changes from a previous editing session.</p>
+                        <div class="small text-muted">
+                            <strong>Draft saved:</strong> @if(Model.LastDraftAt.HasValue) { <text>@Model.LastDraftAt.Value.ToString("MMM dd, yyyy 'at' HH:mm")</text> }
+                            @if(Model.LastCommittedAt.HasValue) { <br/><strong>Last published:</strong> <text>@Model.LastCommittedAt.Value.ToString("MMM dd, yyyy 'at' HH:mm")</text> }
+                        </div>
+                        <div class="mt-3">
+                            <strong>What would you like to do?</strong>
+                            <div class="d-flex gap-2 mt-2">
+                                <button type="button" class="btn btn-sm btn-success" onclick="acceptDraft()">
+                                    <i class="bi bi-check-circle me-1"></i>Continue with Draft
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="discardDraft()">
+                                    <i class="bi bi-trash me-1"></i>Discard Draft & Start Fresh
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="hideDraftPrompt()">
+                                    <i class="bi bi-eye-slash me-1"></i>Hide This Message
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 
     @if (!ModelState.IsValid)
     {
@@ -108,11 +149,13 @@
         </div>
     }
 
-        <!-- Hidden field to track original slug for redirect creation -->
+        <!-- Hidden fields to track slug information -->
         @if (!Model.IsNew)
         {
             <input type="hidden" asp-for="OriginalSlug" />
         }
+        <input type="hidden" asp-for="ParentSlugPath" />
+        <input type="hidden" asp-for="PageSlugSegment" />
         
         <div class="row g-4">
             <!-- Main Content Area -->
@@ -135,9 +178,12 @@
                                        param-PageId="@(Model.PageId ?? Guid.Empty)"
                                        param-InitialContentRaw="@Model.Body"
                                        param-YjsRoomRaw="@(Model.Slug ?? "new-page")"
-                                       param-BodyFormat="@Model.BodyFormat" />
+                                       param-BodyFormat="@Model.BodyFormat"
+                                       param-HasDraft="@Model.HasDraft"
+                                       param-LastDraftAt="@Model.LastDraftAt"
+                                       param-LastCommittedAt="@Model.LastCommittedAt" />
                         </div>
-                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea"></textarea>
+                        <textarea asp-for="Body" class="form-control d-none" rows="20" id="body-textarea">@Model.Body</textarea>
                         <span asp-validation-for="Body" class="text-danger"></span>
                     </div>
                 </div>
@@ -155,22 +201,46 @@
                             <div class="col-md-6">
                                 @if (Model.IsNew)
                                 {
-                                    <label asp-for="Slug" class="form-label fw-medium">URL Slug</label>
-                                    <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                    <label asp-for="Slug" class="form-label fw-medium">Page Name</label>
+                                    @if (!string.IsNullOrEmpty(Model.ParentSlugPath))
+                                    {
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-light text-muted">@Model.ParentSlugPath/</span>
+                                            <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <input asp-for="Slug" class="form-control" placeholder="auto-generated-from-title" />
+                                    }
                                     <div class="form-text">
                                         <i class="bi bi-info-circle me-1"></i>
-                                        Leave blank to auto-generate from title
+                                        Enter just the page name. Leave blank to auto-generate from title.
                                     </div>
                                     <span asp-validation-for="Slug" class="text-danger small"></span>
                                 }
                                 else
                                 {
-                                    <label asp-for="Slug" class="form-label fw-medium">URL Slug</label>
-                                    <input asp-for="Slug" class="form-control" />
-                                    <div class="form-text">
-                                        <i class="bi bi-arrow-repeat text-success me-1"></i>
-                                        Changing the URL will create an automatic redirect
-                                    </div>
+                                    <label asp-for="Slug" class="form-label fw-medium">Page Name</label>
+                                    @if (!string.IsNullOrEmpty(Model.ParentSlugPath))
+                                    {
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-light text-muted">@Model.ParentSlugPath/</span>
+                                            <input asp-for="Slug" class="form-control" />
+                                        </div>
+                                        <div class="form-text">
+                                            <i class="bi bi-arrow-repeat text-success me-1"></i>
+                                            Edit just the page name. Full URL: <code>@Model.ParentSlugPath/@Model.Slug</code>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <input asp-for="Slug" class="form-control" />
+                                        <div class="form-text">
+                                            <i class="bi bi-arrow-repeat text-success me-1"></i>
+                                            This is a top-level page. Changing the name will create an automatic redirect.
+                                        </div>
+                                    }
                                     <span asp-validation-for="Slug" class="text-danger small"></span>
                                 }
                             </div>
@@ -277,755 +347,70 @@
     <script src="~/lib/prism/prism-sql.min.js"></script>
     <script src="~/lib/prism/prism-bash.min.js"></script>
     
-    <script>
-            // Blazor connection diagnostics and state monitoring
-            (function() {
-                console.log('🔧 Blazor diagnostics: Starting connection monitoring...');
-                
-                function logBlazorState() {
-                    const state = {
-                        blazor: typeof Blazor !== 'undefined' ? 'loaded' : 'not loaded',
-                        signalR: typeof signalR !== 'undefined' ? 'loaded' : 'not loaded',
-                        connection: null,
-                        circuit: null,
-                        connected: false
-                    };
-                    
-                    if (typeof Blazor !== 'undefined') {
-                        try {
-                            // Better detection: Blazor is connected if it exists and has handlers
-                            // The presence of Blazor object itself usually means it's functional
-                            state.circuit = 'available';
-                            state.connected = true;
-                            
-                            // Also check if we can access the internal circuit (optional)
-                            if (Blazor.defaultReconnectionHandler) {
-                                state.connection = 'with reconnection handler';
-                            }
-                        } catch (e) {
-                            state.circuit = 'error: ' + e.message;
-                            state.connected = false;
-                        }
-                    }
-                    
-                    console.log('🔧 Blazor State:', state);
-                    return state.connected;
-                }
-                
-                // Log initial state
-                document.addEventListener('DOMContentLoaded', () => {
-                    console.log('🔧 DOM loaded, checking Blazor state...');
-                    logBlazorState();
-                });
-                
-                // Monitor Blazor connection events - DON'T call Blazor.start() as it auto-starts
-                if (typeof Blazor !== 'undefined') {
-                    console.log('✅ Blazor already available');
-                    logBlazorState();
-                } else {
-                    // Blazor not ready yet, wait for it
-                    let attempts = 0;
-                    const waitForBlazor = setInterval(() => {
-                        attempts++;
-                        if (typeof Blazor !== 'undefined') {
-                            console.log(`✅ Blazor available after ${attempts} attempts`);
-                            clearInterval(waitForBlazor);
-                            logBlazorState();
-                        } else if (attempts > 50) { // 5 seconds max
-                            console.error('❌ Blazor failed to load after 5 seconds');
-                            clearInterval(waitForBlazor);
-                            logBlazorState();
-                        }
-                    }, 100);
-                }
-                
-                // Add a function for components to check connection
-                window.checkBlazorConnection = function() {
-                    const isConnected = logBlazorState();
-                    console.log('🔗 Connection check requested, result:', isConnected);
-                    return isConnected;
-                };
-                
-                window.blazorDiagnostics = { logBlazorState, checkBlazorConnection };
-            })();
-            
-            // Function to submit lock form with confirmation
-            function submitLockForm(confirmMessage) {
-                if (confirm(confirmMessage)) {
-                    document.getElementById('lock-form').submit();
-                }
-            }
-        </script>
+    <!-- New modular editor system -->
+    <script type="module" src="~/js/wiki-editor.js"></script>
+    <script type="module" src="~/js/wiki-editor-blazor-bridge.js"></script>
+    <script src="~/js/media-library.js"></script>
     
+    <!-- Page-specific functionality (extracted from inline scripts) -->
+    <script src="~/js/blazor-diagnostics.js"></script>
+    <script src="~/js/format-switching.js"></script>
+    <script src="~/js/fallback-drag-drop.js"></script>
+    <script src="~/js/editor-button-handlers.js"></script>
+    <script src="~/js/form-sync.js"></script>
+    <script src="~/js/dom-traps.js"></script>
+    <script src="~/js/draft-management.js"></script>
+    <script src="~/js/page-lock.js"></script>
+    
+    <!-- Initialize draft management with page ID -->
     <script>
-        // Format switching functionality
         document.addEventListener('DOMContentLoaded', function() {
-                console.log('🔧 DOM loaded, initializing format switching...');
-                
-                // Declare variables outside try-catch for proper scope
-                let switchToHtmlBtn, switchToMarkdownBtn, formatOptions, confirmBtn, cancelBtn, conversionDescription, bodyFormatSelect;
-                let targetFormat = '';
-                
-                try {
-                    switchToHtmlBtn = document.getElementById('switch-to-html-btn');
-                    switchToMarkdownBtn = document.getElementById('switch-to-markdown-btn');
-                    formatOptions = document.getElementById('format-conversion-options');
-                    confirmBtn = document.getElementById('confirm-format-switch');
-                    cancelBtn = document.getElementById('cancel-format-switch');
-                    conversionDescription = document.getElementById('conversion-description');
-                    bodyFormatSelect = document.querySelector('select[name="BodyFormat"]');
-                    
-                    // Comprehensive debug logging
-                    console.log('🔧 Elements found:');
-                    console.log('  switchToHtmlBtn:', switchToHtmlBtn, switchToHtmlBtn ? 'visible: ' + getComputedStyle(switchToHtmlBtn).display : 'null');
-                    console.log('  switchToMarkdownBtn:', switchToMarkdownBtn, switchToMarkdownBtn ? 'visible: ' + getComputedStyle(switchToMarkdownBtn).display : 'null');
-                    console.log('  formatOptions:', formatOptions);
-                    console.log('  confirmBtn:', confirmBtn);
-                    console.log('  bodyFormatSelect:', bodyFormatSelect, bodyFormatSelect ? 'current value: ' + bodyFormatSelect.value : 'null');
-                    
-                    // Show conversion options when switching to HTML
-                    if (switchToHtmlBtn) {
-                        console.log('🔧 Attaching click listener to switchToHtmlBtn');
-                        switchToHtmlBtn.addEventListener('click', function(e) {
-                            console.log('🔘 HTML button clicked!', e);
-                            e.preventDefault();
-                            targetFormat = 'html';
-                            conversionDescription.textContent = 'Convert Markdown syntax to HTML tags';
-                            formatOptions.style.display = 'block';
-                            this.style.display = 'none';
-                        });
-                        
-                        // Test click programmatically
-                        console.log('🧪 Testing HTML button click programmatically...');
-                    } else {
-                        console.warn('⚠️ switchToHtmlBtn not found');
-                    }
-                    
-                    // Show conversion options when switching to Markdown
-                    if (switchToMarkdownBtn) {
-                        console.log('🔧 Attaching click listener to switchToMarkdownBtn');
-                        switchToMarkdownBtn.addEventListener('click', function(e) {
-                            console.log('🔘 MARKDOWN BUTTON CLICKED!', e);
-                            e.preventDefault();
-                            try {
-                                targetFormat = 'markdown';
-                                console.log('🔧 Set targetFormat to:', targetFormat);
-                                
-                                if (conversionDescription) {
-                                    conversionDescription.textContent = 'Convert HTML tags to Markdown syntax';
-                                    console.log('🔧 Updated conversion description');
-                                } else {
-                                    console.error('❌ conversionDescription element not found');
-                                }
-                                
-                                if (formatOptions) {
-                                    formatOptions.style.display = 'block';
-                                    console.log('🔧 Showed format options');
-                                } else {
-                                    console.error('❌ formatOptions element not found');
-                                }
-                                
-                                this.style.display = 'none';
-                                console.log('🔧 Hid markdown button');
-                            } catch (error) {
-                                console.error('❌ Error in markdown button click handler:', error);
-                            }
-                        });
-                        
-                        // Add a test click listener to verify the button can be clicked
-                        switchToMarkdownBtn.addEventListener('mousedown', function() {
-                            console.log('🖱️ Mouse down on markdown button');
-                        });
-                        switchToMarkdownBtn.addEventListener('mouseup', function() {
-                            console.log('🖱️ Mouse up on markdown button');
-                        });
-                        
-                    } else {
-                        console.warn('⚠️ switchToMarkdownBtn not found');
-                    }
-                    
-                } catch (error) {
-                    console.error('❌ Error initializing format switching:', error);
-                }
-                
-                // Global test function to manually trigger markdown button
-                window.testMarkdownButton = function() {
-                    console.log('🧪 Manual test: Looking for markdown button...');
-                    const btn = document.getElementById('switch-to-markdown-btn');
-                    if (btn) {
-                        console.log('🧪 Found button, style display:', getComputedStyle(btn).display);
-                        console.log('🧪 Button disabled?', btn.disabled);
-                        console.log('🧪 Button visible?', btn.offsetParent !== null);
-                        console.log('🧪 Triggering click...');
-                        btn.click();
-                    } else {
-                        console.error('🧪 Button not found');
-                    }
-                };
-                
-                // Test for event conflicts - add a global click listener
-                document.addEventListener('click', function(e) {
-                    if (e.target.id === 'switch-to-markdown-btn') {
-                        console.log('🌍 Global click listener caught markdown button click', e);
-                    }
-                });
-                
-                // Confirm format switch
-                if (confirmBtn) {
-                    confirmBtn.addEventListener('click', function() {
-                        console.log('🔘 Confirm button clicked, targetFormat:', targetFormat);
-                        const convertContent = document.querySelector('input[name="conversionOption"]:checked').value === 'convert';
-                        
-                        if (convertContent) {
-                            // Call server-side conversion
-                            convertAndSwitchFormat(targetFormat);
-                        } else {
-                            // Just switch format without conversion
-                            switchFormatOnly(targetFormat);
-                        }
-                    });
-                } else {
-                    console.error('❌ confirmBtn not found');
-                }
-                
-                // Cancel format switch
-                if (cancelBtn) {
-                    cancelBtn.addEventListener('click', function() {
-                        console.log('🔘 Cancel button clicked');
-                        formatOptions.style.display = 'none';
-                        // Show the appropriate button again
-                        if (targetFormat === 'html') {
-                            switchToHtmlBtn.style.display = 'inline-block';
-                        } else {
-                            switchToMarkdownBtn.style.display = 'inline-block';
-                        }
-                    });
-                } else {
-                    console.error('❌ cancelBtn not found');
-                }
-                
-                function switchFormatOnly(newFormat) {
-                    console.log('🔧 switchFormatOnly called with:', newFormat);
-                    
-                    // Update the hidden select
-                    if (bodyFormatSelect) {
-                        bodyFormatSelect.value = newFormat;
-                        console.log('🔧 Updated hidden select to:', newFormat);
-                    } else {
-                        console.error('❌ bodyFormatSelect not found');
-                    }
-                    
-                    // Update UI
-                    updateFormatUI(newFormat);
-                    
-                    // Hide options
-                    if (formatOptions) {
-                        formatOptions.style.display = 'none';
-                        console.log('🔧 Hid format options');
-                    } else {
-                        console.error('❌ formatOptions not found when trying to hide');
-                    }
-                }
-                
-                function convertAndSwitchFormat(newFormat) {
-                    // Get current content from the enhanced editor
-                    const editorTextarea = document.querySelector('textarea[id*="simple-editor-"]');
-                    const bodyTextarea = document.getElementById('body-textarea');
-                    
-                    let currentContent = '';
-                    if (editorTextarea) {
-                        currentContent = editorTextarea.value || '';
-                    } else if (bodyTextarea) {
-                        currentContent = bodyTextarea.value || '';
-                    }
-                    
-                    if (!currentContent.trim()) {
-                        // No content to convert, just switch format
-                        switchFormatOnly(newFormat);
-                        return;
-                    }
-                    
-                    // Show loading state
-                    confirmBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Converting...';
-                    confirmBtn.disabled = true;
-                    
-                    // Call conversion API
-                    fetch('/api/convert-content', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            content: currentContent,
-                            fromFormat: bodyFormatSelect.value,
-                            toFormat: newFormat
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // Update content in the enhanced editor
-                            if (editorTextarea) {
-                                editorTextarea.value = data.convertedContent;
-                                // Trigger input event to update preview and sync
-                                editorTextarea.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
-                            if (bodyTextarea) {
-                                bodyTextarea.value = data.convertedContent;
-                            }
-                            
-                            // Switch format
-                            switchFormatOnly(newFormat);
-                        } else {
-                            alert('Conversion failed: ' + (data.error || 'Unknown error'));
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Conversion error:', error);
-                        alert('Conversion failed. Please try again or switch format without conversion.');
-                    })
-                    .finally(() => {
-                        // Restore button state
-                        confirmBtn.innerHTML = '<i class="bi bi-check-circle"></i> Confirm Format Switch';
-                        confirmBtn.disabled = false;
-                    });
-                }
-                
-                function updateFormatUI(newFormat) {
-                    // Update badge
-                    const badge = document.querySelector('.badge.bg-primary');
-                    badge.textContent = newFormat.toUpperCase();
-                    
-                    // Update editor format for preview rendering
-                    if (typeof updateEditorFormat !== 'undefined') {
-                        updateEditorFormat(newFormat);
-                    }
-                    
-                    // Show/hide buttons based on new format
-                    if (newFormat === 'markdown') {
-                        // Show "Change to HTML" button, hide "Change to Markdown" button
-                        if (switchToHtmlBtn) {
-                            switchToHtmlBtn.style.display = 'inline-block';
-                        }
-                        if (switchToMarkdownBtn) {
-                            switchToMarkdownBtn.style.display = 'none';
-                        }
-                    } else {
-                        // Show "Change to Markdown" button, hide "Change to HTML" button  
-                        if (switchToMarkdownBtn) {
-                            switchToMarkdownBtn.style.display = 'inline-block';
-                        }
-                        if (switchToHtmlBtn) {
-                            switchToHtmlBtn.style.display = 'none';
-                        }
-                    }
-                    
-                    // Note: We don't modify innerHTML to preserve event listeners
-                    // The buttons already have the correct text and icons
-                }
-            });
-        </script>
-    
-    
-    <script src="~/js/editor-enhanced.js"></script>
-    
-    <script>
-            // Handle EditorSimple button clicks via event delegation
-            document.addEventListener('click', function(e) {
-                const button = e.target.closest('button[data-action]');
-                if (!button || button.disabled) {
-                    console.log('Button click ignored - no action or disabled:', button);
-                    return;
-                }
-                
-                const action = button.dataset.action;
-                console.log('🔘 Button clicked with action:', action);
-                
-                const editorContainer = button.closest('.editor-container');
-                if (!editorContainer) {
-                    console.error('Editor container not found');
-                    return;
-                }
-                
-                // Find the .NET component reference (set by initEnhancedEditor)
-                const componentRef = editorContainer._blazorComponentRef;
-                if (!componentRef) {
-                    console.error('EditorSimple component reference not found');
-                    return;
-                }
-                
-                console.log('🚀 Calling .NET method for action:', action);
-                
-                // Call the appropriate .NET method
-                switch (action) {
-                    case 'save-draft':
-                        componentRef.invokeMethodAsync('HandleSaveDraft')
-                            .then(() => console.log('✅ HandleSaveDraft completed'))
-                            .catch(err => console.error('❌ HandleSaveDraft failed:', err));
-                        break;
-                    case 'commit-changes':
-                        componentRef.invokeMethodAsync('HandleCommitChanges')
-                            .then(() => console.log('✅ HandleCommitChanges completed'))
-                            .catch(err => console.error('❌ HandleCommitChanges failed:', err));
-                        break;
-                    case 'insert-bold':
-                        componentRef.invokeMethodAsync('HandleInsertBold')
-                            .then(() => console.log('✅ HandleInsertBold completed'))
-                            .catch(err => console.error('❌ HandleInsertBold failed:', err));
-                        break;
-                    default:
-                        console.warn('Unknown action:', action);
-                }
-            });
-        </script>
-        <script>
-            // Sync editor content with hidden textarea on form submission  
-            document.addEventListener('DOMContentLoaded', function() {
-                const form = document.querySelector('form');
-                if (form) {
-                    form.addEventListener('submit', function(e) {
-                        try {
-                            console.log('🔄 Form submission detected, syncing editor content...');
-                            
-                            const bodyTextarea = document.getElementById('body-textarea');
-                            if (!bodyTextarea) {
-                                console.error('❌ Body textarea not found');
-                                return;
-                            }
-                            
-                            console.log('📋 Current body textarea value before sync:', bodyTextarea.value.length, 'characters');
-                            
-                            // Try multiple methods to find the active editor content
-                            let editorContent = '';
-                            let syncMethod = '';
-                            
-                            // Method 1: Look for enhanced editor textarea in editor container
-                            const editorContainer = document.querySelector('.editor-container');
-                            if (editorContainer) {
-                                // Try various selectors for the editor textarea
-                                const selectors = [
-                                    'textarea[id*="simple-editor-"]',
-                                    'textarea[id*="editor-"]', 
-                                    'textarea.enhanced-editor',
-                                    'textarea:not(#body-textarea)',
-                                    'textarea'
-                                ];
-                                
-                                for (const selector of selectors) {
-                                    const activeEditor = editorContainer.querySelector(selector);
-                                    if (activeEditor && activeEditor.id !== 'body-textarea') {
-                                        editorContent = activeEditor.value || '';
-                                        syncMethod = `container selector: ${selector}`;
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            // Method 2: Use the enhanced editor global function if available
-                            if (!editorContent && typeof getEnhancedEditorContent === 'function') {
-                                // Try to find any editor instance
-                                const editorTextareas = document.querySelectorAll('textarea:not(#body-textarea)');
-                                for (const textarea of editorTextareas) {
-                                    if (textarea.id && textarea.id.includes('editor')) {
-                                        editorContent = getEnhancedEditorContent(textarea.id) || '';
-                                        syncMethod = `global function: ${textarea.id}`;
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            // Method 3: Try to get content from any visible textarea that's not the hidden one
-                            if (!editorContent) {
-                                const visibleTextareas = Array.from(document.querySelectorAll('textarea:not(#body-textarea)'))
-                                    .filter(ta => ta.offsetParent !== null && ta.value && ta.value.trim());
-                                    
-                                if (visibleTextareas.length > 0) {
-                                    editorContent = visibleTextareas[0].value;
-                                    syncMethod = `visible textarea: ${visibleTextareas[0].id || 'unnamed'}`;
-                                }
-                            }
-                            
-                            // Update the form textarea
-                            if (editorContent) {
-                                bodyTextarea.value = editorContent;
-                                console.log(`✅ Synced editor content to form textarea (${syncMethod}):`, editorContent.length, 'characters');
-                            } else {
-                                console.warn('⚠️ No editor content found to sync, form textarea remains:', bodyTextarea.value.length, 'characters');
-                                
-                                // Debug: list all textareas
-                                const allTextareas = document.querySelectorAll('textarea');
-                                console.log('📋 All textareas found:', Array.from(allTextareas).map(ta => ({
-                                    id: ta.id,
-                                    className: ta.className,
-                                    visible: ta.offsetParent !== null,
-                                    contentLength: ta.value?.length || 0
-                                })));
-                            }
-                        } catch (error) {
-                            console.error('❌ Error syncing editor content:', error);
-                        }
-                    });
-                }
-            });
-            
-            // Function called when Blazor editor commits changes
-            window.markContentAsCommitted = function() {
-                console.log('📝 Content committed via API - updating form button');
-                
-                const saveButton = document.querySelector('button[type="submit"]');
-                if (saveButton) {
-                    // Change button text to indicate content was already saved
-                    const originalText = saveButton.textContent;
-                    saveButton.textContent = 'Already Saved via Editor';
-                    saveButton.classList.add('btn-secondary');
-                    saveButton.classList.remove('btn-success');
-                    
-                    // Add warning class to form to indicate potential conflict
-                    const form = document.querySelector('form');
-                    if (form) {
-                        form.style.border = '2px solid orange';
-                        form.style.borderRadius = '5px';
-                        form.style.padding = '10px';
-                        
-                        // Add warning message if not already present
-                        let warningDiv = document.getElementById('commit-warning');
-                        if (!warningDiv) {
-                            warningDiv = document.createElement('div');
-                            warningDiv.id = 'commit-warning';
-                            warningDiv.className = 'alert alert-warning';
-                            warningDiv.innerHTML = '<strong>⚠️ Content already saved!</strong> You used "Commit Changes" in the editor. Using "Save Changes" again may overwrite your API changes.';
-                            form.insertBefore(warningDiv, form.firstChild);
-                        }
-                    }
-                    
-                    // Restore button after 10 seconds
-                    setTimeout(() => {
-                        saveButton.textContent = originalText;
-                        saveButton.classList.remove('btn-secondary');
-                        saveButton.classList.add('btn-success');
-                    }, 10000);
-                }
-            };
-        </script>
-        <script>
-            // DOM trap script - runs after Blazor initialization
-            (function(){
-                console.log('🔧 Installing DOM operation traps...');
-                
-                function hexify(s){
-                    if (typeof s !== "string") return s;
-                    return [...s].map(c => `U+${c.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')}(${c})`).join(' ');
-                }
-                function logFail(kind, obj){
-                    const pretty = {};
-                    for (const [k,v] of Object.entries(obj)) pretty[k] = typeof v === 'string' ? `${v}  [${hexify(v)}]` : v;
-                    console.error(`[trap] ${kind} failed`, pretty);
-                    
-                    // Also log Blazor state when errors occur
-                    if (window.blazorDiagnostics) {
-                        console.error('[trap] Blazor state at failure:', window.blazorDiagnostics.logBlazorState());
-                    }
-                }
-
-                const _sa  = Element.prototype.setAttribute;
-                Element.prototype.setAttribute = function(name, value){
-                    try { return _sa.call(this, name, value); }
-                    catch(e){ logFail('setAttribute', {el:this, name, value, e}); throw e; }
-                };
-
-                const _sans = Element.prototype.setAttributeNS;
-                Element.prototype.setAttributeNS = function(ns, name, value){
-                    try { return _sans.call(this, ns, name, value); }
-                    catch(e){ logFail('setAttributeNS', {el:this, ns, name, value, e}); throw e; }
-                };
-
-                const _ca = Document.prototype.createAttribute;
-                Document.prototype.createAttribute = function(name){
-                    try { return _ca.call(this, name); }
-                    catch(e){ logFail('createAttribute', {name, e}); throw e; }
-                };
-
-                const _ce = Document.prototype.createElement;
-                Document.prototype.createElement = function(name){
-                    try { return _ce.call(this, name); }
-                    catch(e){ logFail('createElement', {name, e}); throw e; }
-                };
-
-                const _cc = Document.prototype.createComment;
-                Document.prototype.createComment = function(data){
-                    try { return _cc.call(this, data); }
-                    catch(e){ logFail('createComment', {data, e}); throw e; }
-                };
-
-                const _add = DOMTokenList.prototype.add;
-                DOMTokenList.prototype.add = function(...tokens){
-                    try { return _add.apply(this, tokens); }
-                    catch(e){ logFail('classList.add', {el:this, tokens: tokens.map(t => `${t}  [${hexify(t)}]`), e}); throw e; }
-                };
-
-                // Optional: catch innerHTML too (invalid markup can also throw)
-                const _inner = Object.getOwnPropertyDescriptor(Element.prototype, "innerHTML");
-                Object.defineProperty(Element.prototype, "innerHTML", {
-                    set(html){ try { return _inner.set.call(this, html); }
-                        catch(e){ logFail('innerHTML', {el:this, html, e}); throw e; } },
-                    get(){ return _inner.get.call(this); }
-                });
-
-                window.addEventListener('error', ev => console.error('[trap] window.error', ev.error || ev));
-                window.addEventListener('unhandledrejection', ev => console.error('[trap] unhandledrejection', ev.reason || ev));
-                
-                console.log('✅ DOM operation traps installed');
-            })();
-        </script>
-        
-    <style>
-            /* Prism.js Code Block Enhancements */
-            .markdown-content pre[class*="language-"] {
-                margin: 1.5em 0;
-                border-radius: 8px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                overflow-x: auto;
-                font-size: 14px;
-                line-height: 1.5;
+            if (typeof initializeDraftManagement === 'function') {
+                initializeDraftManagement('@Model.PageId');
             }
-            
-            .markdown-content code[class*="language-"] {
-                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
-            }
-            
-            .markdown-content pre[class*="language-"]:before {
-                content: attr(data-language);
-                position: absolute;
-                top: 0.5em;
-                right: 1em;
-                font-size: 0.75em;
-                color: rgba(255,255,255,0.6);
-                text-transform: uppercase;
-                font-weight: bold;
-                letter-spacing: 0.1em;
-            }
-            
-            /* Copy button styling */
-            .markdown-content .copy-to-clipboard-button {
-                position: absolute;
-                top: 0.5em;
-                right: 0.5em;
-                background: rgba(255,255,255,0.1);
-                border: 1px solid rgba(255,255,255,0.2);
-                color: rgba(255,255,255,0.8);
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 11px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-            }
-            
-            .markdown-content .copy-to-clipboard-button:hover {
-                background: rgba(255,255,255,0.2);
-                color: white;
-            }
-            
-            /* Line numbers styling */
-            .markdown-content .line-numbers .line-numbers-rows {
-                border-right: 1px solid rgba(255,255,255,0.1);
-                margin-right: 1em;
-            }
-            
-            /* Inline code styling */
-            .markdown-content code:not([class*="language-"]) {
-                background: rgba(0,0,0,0.1);
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
-                font-size: 0.9em;
-                color: #e83e8c;
-            }
-            
-            /* Clean Edit Page Styles */
-            .edit-header {
-                backdrop-filter: blur(10px);
-                background: rgba(255, 255, 255, 0.95) !important;
-            }
-            
-            .card {
-                border: 1px solid rgba(0, 0, 0, 0.08);
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-                transition: all 0.3s ease;
-            }
-            
-            .card:hover {
-                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-            }
-            
-            .card-header {
-                border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-            }
-            
-            .card-title {
-                font-size: 0.95rem;
-                color: #495057;
-            }
-            
-            .form-control:focus {
-                border-color: #0d6efd;
-                box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.1);
-                transform: translateY(-1px);
-                transition: all 0.2s ease;
-            }
-            
-            .btn {
-                font-weight: 500;
-                border-radius: 6px;
-                transition: all 0.2s ease;
-            }
-            
-            .btn:hover {
-                transform: translateY(-1px);
-                box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
-            }
-            
-            .badge {
-                font-weight: 600;
-                letter-spacing: 0.5px;
-            }
-            
-            /* Format conversion dialog */
-            #format-conversion-options {
-                background: #f8f9fa;
-                border: 1px solid #e9ecef;
-                border-radius: 8px;
-                transition: all 0.3s ease;
-            }
-            
-            .form-check-label {
-                cursor: pointer;
-                padding: 8px 12px;
-                border-radius: 6px;
-                transition: background-color 0.2s ease;
-            }
-            
-            .form-check-label:hover {
-                background-color: rgba(13, 110, 253, 0.08);
-            }
-            
-            .form-check-input:checked + .form-check-label {
-                background-color: rgba(25, 135, 84, 0.1);
-                border-left: 3px solid #198754;
-            }
-            
-            /* Responsive adjustments */
-            @@media (max-width: 768px) {
-                .edit-header .row > div {
-                    margin-bottom: 1rem;
-                }
-                
-                .edit-header .text-end {
-                    text-align: left !important;
-                }
-                
-                .d-flex.flex-wrap {
-                    justify-content: flex-start !important;
-                }
-            }
-        </style>
+        });
+    </script>
+        <link href="~/css/edit-page.css" rel="stylesheet" />
 }
+
+<!-- Upload Modal for Drag & Drop Integration -->
+<div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">Upload Media Files</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Drag and Drop Zone -->
+                <div id="dropzone" class="border-2 border-dashed border-secondary rounded p-5 text-center mb-3">
+                    <i class="bi bi-cloud-upload display-4 text-muted mb-3 d-block"></i>
+                    <h5>Drag and drop files here</h5>
+                    <p class="text-muted">or click to browse files</p>
+                    <input type="file" id="fileInput" multiple class="form-control" style="display: none;" accept="image/*,.pdf,.txt,.md,.docx,.pptx">
+                    <button type="button" class="btn btn-outline-primary" onclick="document.getElementById('fileInput').click()">
+                        Choose Files
+                    </button>
+                </div>
+
+                <!-- Upload Progress -->
+                <div id="uploadProgress" style="display: none;">
+                    <div class="progress mb-3">
+                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                    </div>
+                    <div id="uploadStatus" class="text-center"></div>
+                </div>
+
+                <!-- File List -->
+                <div id="fileList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="uploadBtn" onclick="mediaLibrary.uploadFiles()" disabled>
+                    Upload Files
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+

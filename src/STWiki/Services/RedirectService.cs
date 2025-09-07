@@ -14,6 +14,7 @@ public interface IRedirectService
     Task<IEnumerable<Redirect>> GetRedirectsFromSlugAsync(string fromSlug);
     Task<IEnumerable<Redirect>> GetRedirectsToSlugAsync(string toSlug);
     Task CleanupRedirectChainAsync(string slug);
+    Task UpdateChildRedirectsAsync(string oldParentSlug, string newParentSlug);
 }
 
 public class RedirectService : IRedirectService
@@ -206,6 +207,52 @@ public class RedirectService : IRedirectService
             await _context.SaveChangesAsync();
             _logger.LogInformation("Cleaned up redirect chain for '{Slug}', updated {Count} redirects to point to '{Target}'", 
                 slug, redirectsToSlug.Count(), redirectFromSlug);
+        }
+    }
+
+    public async Task UpdateChildRedirectsAsync(string oldParentSlug, string newParentSlug)
+    {
+        if (string.IsNullOrWhiteSpace(oldParentSlug) || string.IsNullOrWhiteSpace(newParentSlug))
+            return;
+
+        var oldPrefix = oldParentSlug.ToLowerInvariant() + "/";
+        var newPrefix = newParentSlug.ToLowerInvariant() + "/";
+
+        // Find all redirects that point to child pages under the old parent slug
+        var childRedirects = await _context.Redirects
+            .Where(r => r.ToSlug.StartsWith(oldPrefix))
+            .ToListAsync();
+
+        var updatedCount = 0;
+        foreach (var redirect in childRedirects)
+        {
+            // Update the redirect target to use the new parent slug
+            var oldChildSlug = redirect.ToSlug;
+            var newChildSlug = newPrefix + oldChildSlug.Substring(oldPrefix.Length);
+            
+            // Verify the new target page exists
+            var targetExists = await _context.Pages
+                .AnyAsync(p => EF.Functions.ILike(p.Slug, newChildSlug));
+
+            if (targetExists)
+            {
+                redirect.ToSlug = newChildSlug;
+                redirect.CreatedAt = DateTimeOffset.UtcNow;
+                updatedCount++;
+            }
+            else
+            {
+                _logger.LogWarning("Child redirect target '{NewChildSlug}' does not exist, removing redirect from '{FromSlug}'", 
+                    newChildSlug, redirect.FromSlug);
+                _context.Redirects.Remove(redirect);
+            }
+        }
+
+        if (updatedCount > 0 || childRedirects.Count != updatedCount)
+        {
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Updated {UpdatedCount} child redirects from '{OldParent}/*' to '{NewParent}/*'", 
+                updatedCount, oldParentSlug, newParentSlug);
         }
     }
 }

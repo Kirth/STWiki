@@ -4,49 +4,87 @@
     ViewData["Title"] = "Search";
 }
 
-<style>
-    .search-highlight mark {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 0.1em 0.2em;
-        border-radius: 0.25rem;
-        font-weight: 600;
-    }
-    
-    .search-result-snippet {
-        font-size: 0.9rem;
-        line-height: 1.4;
-        color: #6c757d;
-    }
-    
-    .search-match-badge {
-        font-size: 0.7rem;
-    }
-    
-    .pagination .page-link {
-        color: #495057;
-    }
-    
-    .pagination .page-item.active .page-link {
-        background-color: #007bff;
-        border-color: #007bff;
-    }
-    
-    .list-group-item:hover {
-        background-color: #f8f9fa;
-        transition: background-color 0.15s ease-in-out;
-    }
-</style>
+@section Styles {
+    <link rel="stylesheet" href="~/css/search-page.css" />
+}
 
 <div class="wiki-container">
     <h1>Search Wiki</h1>
     
     <form method="get" class="mb-4">
-        <div class="input-group">
+        <div class="input-group mb-3">
             <input type="text" class="form-control" name="q" value="@Model.Query" placeholder="Search pages and content..." />
             <button class="btn btn-primary" type="submit">
                 <i class="bi bi-search"></i> Search
             </button>
+            <button class="btn btn-outline-secondary" type="button" onclick="toggleAdvancedFilters()">
+                <i class="bi bi-funnel"></i> Filters
+            </button>
+        </div>
+
+        <!-- Advanced Search Filters (Initially Hidden) -->
+        <div id="advancedFilters" class="card @(Model.UseAdvancedSearch ? "" : "d-none")" style="@(Model.UseAdvancedSearch ? "" : "display: none;")">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-primary mb-3">🎯 Search In:</h6>
+                        <div class="form-check">
+                            <input asp-for="SearchInTitle" class="form-check-input" type="checkbox" />
+                            <label asp-for="SearchInTitle" class="form-check-label">Page Titles</label>
+                        </div>
+                        <div class="form-check">
+                            <input asp-for="SearchInContent" class="form-check-input" type="checkbox" />
+                            <label asp-for="SearchInContent" class="form-check-label">Page Content</label>
+                        </div>
+                        <div class="form-check">
+                            <input asp-for="SearchInCode" class="form-check-input" type="checkbox" />
+                            <label asp-for="SearchInCode" class="form-check-label">
+                                <strong>Code Blocks Only</strong> ✨
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input asp-for="SearchInSummary" class="form-check-input" type="checkbox" />
+                            <label asp-for="SearchInSummary" class="form-check-label">Page Summaries</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-primary mb-3">🔧 Filters:</h6>
+                        <div class="mb-3" id="languageFilter" style="@(Model.SearchInCode ? "" : "display: none;")">
+                            <label asp-for="Language" class="form-label">Programming Language:</label>
+                            <select asp-for="Language" class="form-select form-select-sm">
+                                <option value="">Any Language</option>
+                                <option value="csharp">C#</option>
+                                <option value="javascript">JavaScript</option>
+                                <option value="python">Python</option>
+                                <option value="java">Java</option>
+                                <option value="cpp">C++</option>
+                                <option value="sql">SQL</option>
+                                <option value="html">HTML</option>
+                                <option value="css">CSS</option>
+                                <option value="json">JSON</option>
+                                <option value="xml">XML</option>
+                                <option value="bash">Bash</option>
+                                <option value="powershell">PowerShell</option>
+                                <option value="yaml">YAML</option>
+                                <option value="dockerfile">Dockerfile</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="Author" class="form-label">Author:</label>
+                            <input asp-for="Author" class="form-control form-control-sm" placeholder="Filter by author..." />
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-sm btn-primary">Apply Filters</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">Clear</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <strong>Pro tip:</strong> Use advanced syntax like <code>in:code python</code>, <code>title:security</code>, <code>lang:python</code>, or <code>"exact phrase"</code>
+                    </small>
+                </div>
+            </div>
         </div>
     </form>
     
@@ -68,12 +106,16 @@
                         <div class="d-flex w-100 justify-content-between align-items-start">
                             <div class="flex-grow-1">
                                 <h5 class="mb-1">
-                                    <a asp-page="/Wiki/View" asp-route-slug="@result.Page.Slug" class="text-decoration-none">
+                                    <a href="/@result.Page.Slug" class="text-decoration-none">
                                         @Html.Raw(result.HighlightedTitle)
                                     </a>
                                     @if (result.MatchType == "title")
                                     {
                                         <small class="badge bg-success ms-2 search-match-badge">Title Match</small>
+                                    }
+                                    @if (result.MatchType == "code" && !string.IsNullOrEmpty(result.CodeLanguage))
+                                    {
+                                        <small class="badge bg-warning ms-2 search-match-badge">Code (@result.CodeLanguage)</small>
                                     }
                                 </h5>
                                 
@@ -93,15 +135,22 @@
                                 
                                 @if (!string.IsNullOrWhiteSpace(result.BodySnippet))
                                 {
-                                    <p class="mb-1 search-result-snippet">
+                                    <div class="mb-1 search-result-snippet">
                                         @Html.Raw(result.BodySnippet)
-                                        <small class="badge bg-secondary ms-1 search-match-badge">Content Match</small>
-                                    </p>
+                                        @if (result.MatchType == "code")
+                                        {
+                                            <small class="badge bg-warning ms-1 search-match-badge">Code Match</small>
+                                        }
+                                        else
+                                        {
+                                            <small class="badge bg-secondary ms-1 search-match-badge">Content Match</small>
+                                        }
+                                    </div>
                                 }
                                 
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="text-muted">
-                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @result.Page.UpdatedBy
+                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Html.UserLink(result.Page.UpdatedBy, result.UpdatedByDisplayName)
                                         @if (result.Page.CreatedAt != result.Page.UpdatedAt)
                                         {
                                             <span class="ms-2">
@@ -204,12 +253,81 @@
     else
     {
         <div class="alert alert-secondary">
-            <h4>Search Tips</h4>
-            <ul>
-                <li>Search looks through page titles and content</li>
-                <li>Use specific keywords for better results</li>
-                <li>Search is case-insensitive</li>
-            </ul>
+            <h4>✨ Enhanced Search Features</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Basic Search:</h6>
+                    <ul>
+                        <li>Search looks through page titles and content</li>
+                        <li>Use specific keywords for better results</li>
+                        <li>Search is case-insensitive</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>🎯 Advanced Features:</h6>
+                    <ul>
+                        <li><strong>Search inside code blocks only</strong> - Use filters!</li>
+                        <li>Filter by programming language</li>
+                        <li>Use <code>"exact phrases"</code> for precise matches</li>
+                        <li>Advanced syntax: <code>in:code python</code>, <code>title:security</code></li>
+                    </ul>
+                </div>
+            </div>
         </div>
     }
 </div>
+
+<script>
+    function toggleAdvancedFilters() {
+        const filters = document.getElementById('advancedFilters');
+        if (filters.classList.contains('d-none')) {
+            filters.classList.remove('d-none');
+            filters.style.display = 'block';
+        } else {
+            filters.classList.add('d-none');
+            filters.style.display = 'none';
+        }
+    }
+
+    function clearFilters() {
+        // Clear all checkboxes
+        document.querySelectorAll('#advancedFilters input[type="checkbox"]').forEach(cb => cb.checked = false);
+        
+        // Clear select and text inputs
+        document.querySelectorAll('#advancedFilters select, #advancedFilters input[type="text"]').forEach(input => input.value = '');
+        
+        // Set content search as default
+        document.getElementById('SearchInContent').checked = true;
+        
+        // Hide language filter
+        document.getElementById('languageFilter').style.display = 'none';
+    }
+
+    // Show/hide language filter based on code search checkbox
+    document.addEventListener('DOMContentLoaded', function() {
+        const codeSearch = document.getElementById('SearchInCode');
+        const languageFilter = document.getElementById('languageFilter');
+        
+        function toggleLanguageFilter() {
+            if (codeSearch && codeSearch.checked) {
+                languageFilter.style.display = 'block';
+            } else {
+                languageFilter.style.display = 'none';
+            }
+        }
+        
+        // Initial state
+        toggleLanguageFilter();
+        
+        // Listen for changes
+        if (codeSearch) {
+            codeSearch.addEventListener('change', toggleLanguageFilter);
+        }
+        
+        // Focus search box
+        const searchBox = document.querySelector('input[name="q"]');
+        if (searchBox && !searchBox.value) {
+            searchBox.focus();
+        }
+    });
+</script>
