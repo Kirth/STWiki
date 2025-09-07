@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Minio;
 using STWiki.Data;
+using STWiki.Helpers;
 using STWiki.Models;
 using STWiki.Services;
 using System.Security.Claims;
@@ -140,10 +141,11 @@ builder.Services.AddAuthentication(options =>
                 {
                     var activityService = context.HttpContext.RequestServices.GetRequiredService<STWiki.Services.ActivityService>();
                     var userName = context.Principal?.Identity?.Name ?? "Unknown";
+                    var userDisplayName = UserLinkHelper.GetUserDisplayName(context.Principal);
                     var ipAddress = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "";
                     var userAgent = context.HttpContext.Request.Headers.UserAgent.ToString();
                     
-                    await activityService.LogUserLoginAsync(userName, userName, ipAddress, userAgent);
+                    await activityService.LogUserLoginAsync(userName, userDisplayName, ipAddress, userAgent);
                     logger.LogInformation("Logged login activity for user: {UserName}", userName);
                 }
                 catch (Exception ex)

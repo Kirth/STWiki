@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using STWiki.Data;
+using STWiki.Helpers;
 using STWiki.Services;
 
 namespace STWiki.Pages.Wiki;
@@ -92,9 +93,10 @@ public class ViewModel : PageModel
             if (User.Identity?.IsAuthenticated == true)
             {
                 var currentUser = User.Identity.Name ?? "Unknown";
+                var currentUserDisplayName = UserLinkHelper.GetUserDisplayName(User);
                 await _activityService.LogPageViewedAsync(
                     currentUser, 
-                    currentUser, 
+                    currentUserDisplayName, 
                     Page, 
                     HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
                     HttpContext.Request.Headers.UserAgent.ToString()

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using STWiki.Data;
 using STWiki.Data.Entities;
 using STWiki.Services;
+using STWiki.Helpers;
 using System.Text.RegularExpressions;
 
 namespace STWiki.Pages;
@@ -17,6 +18,7 @@ public class SearchResult
     public string MatchType { get; set; } = ""; // "title", "summary", "body", "code"
     public string? CodeLanguage { get; set; }
     public double Score { get; set; }
+    public string UpdatedByDisplayName { get; set; } = "";
 }
 
 public class SearchModel : PageModel
@@ -24,12 +26,14 @@ public class SearchModel : PageModel
     private readonly AppDbContext _context;
     private readonly ActivityService _activityService;
     private readonly AdvancedSearchService _advancedSearchService;
+    private readonly UserService _userService;
 
-    public SearchModel(AppDbContext context, ActivityService activityService, AdvancedSearchService advancedSearchService)
+    public SearchModel(AppDbContext context, ActivityService activityService, AdvancedSearchService advancedSearchService, UserService userService)
     {
         _context = context;
         _activityService = activityService;
         _advancedSearchService = advancedSearchService;
+        _userService = userService;
     }
 
     [BindProperty(SupportsGet = true, Name = "q")]
@@ -85,9 +89,10 @@ public class SearchModel : PageModel
                 if (User.Identity?.IsAuthenticated == true)
                 {
                     var currentUser = User.Identity.Name ?? "Unknown";
+                    var currentUserDisplayName = UserLinkHelper.GetUserDisplayName(User);
                     await _activityService.LogSearchAsync(
                         currentUser, 
-                        currentUser, 
+                        currentUserDisplayName, 
                         searchTerm, 
                         TotalResults, 
                         HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
@@ -150,6 +155,10 @@ public class SearchModel : PageModel
             var page = await _context.Pages.FindAsync(result.PageId);
             if (page != null)
             {
+                // Resolve user display name
+                var updatedByUser = await _userService.GetUserByUserIdAsync(page.UpdatedBy ?? "");
+                var updatedByDisplayName = updatedByUser?.DisplayName ?? page.UpdatedBy ?? "Unknown User";
+
                 var searchResult = new SearchResult
                 {
                     Page = page,
@@ -162,7 +171,8 @@ public class SearchModel : PageModel
                         : HighlightText(result.Snippet, searchTerm),
                     MatchType = result.MatchType.ToLower().Contains("code") ? "code" : result.MatchType.ToLower(),
                     CodeLanguage = result.CodeLanguage,
-                    Score = result.Score
+                    Score = result.Score,
+                    UpdatedByDisplayName = updatedByDisplayName
                 };
 
                 convertedResults.Add(searchResult);
@@ -202,8 +212,13 @@ public class SearchModel : PageModel
             .Take(PageSize)
             .ToListAsync();
             
-        // Create enhanced search results with highlighting
-        Results = pages.Select(page => CreateSearchResult(page, searchTerm)).ToList();
+        // Create enhanced search results with highlighting and user resolution
+        Results = new List<SearchResult>();
+        foreach (var page in pages)
+        {
+            var result = await CreateSearchResultAsync(page, searchTerm);
+            Results.Add(result);
+        }
     }
 
     private bool HasAdvancedFilters()
@@ -225,15 +240,20 @@ public class SearchModel : PageModel
         return hasCheckboxFilters || hasAdvancedSyntax;
     }
     
-    private SearchResult CreateSearchResult(STWiki.Data.Entities.Page page, string searchTerm)
+    private async Task<SearchResult> CreateSearchResultAsync(STWiki.Data.Entities.Page page, string searchTerm)
     {
+        // Resolve user display name
+        var updatedByUser = await _userService.GetUserByUserIdAsync(page.UpdatedBy ?? "");
+        var updatedByDisplayName = updatedByUser?.DisplayName ?? page.UpdatedBy ?? "Unknown User";
+
         var result = new SearchResult 
         { 
             Page = page,
             HighlightedTitle = HighlightText(page.Title, searchTerm),
             HighlightedSummary = !string.IsNullOrWhiteSpace(page.Summary) 
                 ? HighlightText(page.Summary, searchTerm)
-                : ""
+                : "",
+            UpdatedByDisplayName = updatedByDisplayName
         };
         
         // Determine match type and create snippet

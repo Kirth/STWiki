@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Html;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using System.Text.Encodings.Web;
+using System.Security.Claims;
 using STWiki.Data.Entities;
 
 namespace STWiki.Helpers;
@@ -63,6 +64,30 @@ public static class UserLinkHelper
         if (!string.IsNullOrEmpty(user.DisplayName))
             return user.DisplayName;
         return user.UserId;
+    }
+
+    /// <summary>
+    /// Gets the display name for a user from their claims
+    /// </summary>
+    /// <param name="user">The ClaimsPrincipal user</param>
+    /// <returns>User display name with fallback logic</returns>
+    public static string GetUserDisplayName(ClaimsPrincipal user)
+    {
+        if (user?.Identity?.IsAuthenticated != true)
+            return "Unknown User";
+
+        // Try display_name claim first
+        var displayName = user.FindFirst("display_name")?.Value;
+        if (!string.IsNullOrEmpty(displayName))
+            return displayName;
+
+        // Try name claim second
+        var name = user.FindFirst("name")?.Value;
+        if (!string.IsNullOrEmpty(name))
+            return name;
+
+        // Fall back to username
+        return user.Identity.Name ?? "Unknown User";
     }
 
     /// <summary>

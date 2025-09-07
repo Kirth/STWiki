@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using STWiki.Data;
 using STWiki.Data.Entities;
+using STWiki.Helpers;
 using STWiki.Services;
 using System.ComponentModel.DataAnnotations;
 
@@ -316,6 +317,7 @@ public class EditModel : PageModel
         }
 
         var currentUser = User.Identity?.Name ?? "Unknown";
+        var currentUserDisplayName = UserLinkHelper.GetUserDisplayName(User);
         var now = DateTime.UtcNow;
 
 
@@ -385,7 +387,7 @@ public class EditModel : PageModel
             // Log page creation activity
             await _activityService.LogPageCreatedAsync(
                 currentUser, 
-                currentUser, 
+                currentUserDisplayName, 
                 newPage, 
                 HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
                 HttpContext.Request.Headers.UserAgent.ToString()
@@ -440,7 +442,7 @@ public class EditModel : PageModel
                 // Log page creation activity
                 await _activityService.LogPageCreatedAsync(
                     currentUser, 
-                    currentUser, 
+                    currentUserDisplayName, 
                     newPage, 
                     HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
                     HttpContext.Request.Headers.UserAgent.ToString()
@@ -459,6 +461,12 @@ public class EditModel : PageModel
                 return Page();
             }
 
+            // Get the previous revision ID for diff linking
+            var previousRevision = await _context.Revisions
+                .Where(r => r.PageId == existingPage.Id)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefaultAsync();
+            
             // Create revision before updating the page
             var revision = new Revision
             {
@@ -471,6 +479,9 @@ public class EditModel : PageModel
             };
 
             _context.Revisions.Add(revision);
+            
+            // Save to get the revision ID
+            await _context.SaveChangesAsync();
 
             // Check if slug has changed and create redirect if needed
             Console.WriteLine($"🔍 Slug comparison: existing='{existingPage.Slug}', new='{Slug}'");
@@ -527,14 +538,16 @@ public class EditModel : PageModel
             await _context.SaveChangesAsync();
             Console.WriteLine($"✅ FORM SUBMIT - Page updated successfully");
 
-            // Log page update activity
+            // Log page update activity with revision IDs for diff linking
             await _activityService.LogPageUpdatedAsync(
                 currentUser, 
-                currentUser, 
+                currentUserDisplayName, 
                 existingPage, 
                 Summary ?? "Updated page content",
                 HttpContext.Connection.RemoteIpAddress?.ToString() ?? "", 
-                HttpContext.Request.Headers.UserAgent.ToString()
+                HttpContext.Request.Headers.UserAgent.ToString(),
+                revision.Id,
+                previousRevision?.Id
             );
 
             // Redirect to the new slug if it changed, otherwise the existing page slug

@@ -106,7 +106,7 @@
                         <div class="d-flex w-100 justify-content-between align-items-start">
                             <div class="flex-grow-1">
                                 <h5 class="mb-1">
-                                    <a asp-page="/Wiki/View" asp-route-slug="@result.Page.Slug" class="text-decoration-none">
+                                    <a href="/wiki/@result.Page.Slug" class="text-decoration-none">
                                         @Html.Raw(result.HighlightedTitle)
                                     </a>
                                     @if (result.MatchType == "title")
@@ -150,7 +150,7 @@
                                 
                                 <div class="d-flex justify-content-between align-items-center">
                                     <small class="text-muted">
-                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Html.UserLink(result.Page.UpdatedBy, result.Page.UpdatedBy)
+                                        <i class="bi bi-clock"></i> Updated @result.Page.UpdatedAt.ToString("yyyy-MM-dd HH:mm") by @Html.UserLink(result.Page.UpdatedBy, result.UpdatedByDisplayName)
                                         @if (result.Page.CreatedAt != result.Page.UpdatedAt)
                                         {
                                             <span class="ms-2">

@@ -74,7 +74,7 @@ public class ActivityService
         );
     }
 
-    public async Task LogPageUpdatedAsync(string userId, string userDisplayName, Page page, string editNote = "", string ipAddress = "", string userAgent = "")
+    public async Task LogPageUpdatedAsync(string userId, string userDisplayName, Page page, string editNote = "", string ipAddress = "", string userAgent = "", long? currentRevisionId = null, long? previousRevisionId = null)
     {
         await LogAsync(
             ActivityTypes.PageUpdated,
@@ -84,7 +84,7 @@ public class ActivityService
             page.Slug,
             page.Title,
             string.IsNullOrEmpty(editNote) ? $"Updated page '{page.Title}'" : editNote,
-            new { Format = page.BodyFormat, EditNote = editNote },
+            new { Format = page.BodyFormat, EditNote = editNote, CurrentRevisionId = currentRevisionId, PreviousRevisionId = previousRevisionId },
             ipAddress,
             userAgent
         );
@@ -147,6 +147,7 @@ public class ActivityService
         var query = _context.Activities
             .Include(a => a.Page)
             .Include(a => a.User)
+            .Where(a => a.ActivityType != ActivityTypes.PageViewed)
             .OrderByDescending(a => a.CreatedAt);
 
         if (!string.IsNullOrEmpty(activityType))

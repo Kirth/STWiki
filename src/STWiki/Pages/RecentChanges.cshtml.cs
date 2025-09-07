@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using STWiki.Data.Entities;
 using STWiki.Services;
+using System.Text.Json;
 
 namespace STWiki.Pages;
 
@@ -82,6 +83,33 @@ public class RecentChangesModel : PageModel
             Console.WriteLine($"Error loading activities API: {ex.Message}");
             return new JsonResult(new { activities = new object[0], hasMore = false });
         }
+    }
+
+    public string GetDiffUrl(Activity activity)
+    {
+        if (activity.ActivityType != "page_updated" || string.IsNullOrEmpty(activity.Details))
+            return $"/{activity.PageSlug}/history";
+
+        try
+        {
+            var details = JsonSerializer.Deserialize<JsonElement>(activity.Details);
+            
+            if (details.TryGetProperty("CurrentRevisionId", out var currentRevision) && 
+                details.TryGetProperty("PreviousRevisionId", out var previousRevision) &&
+                currentRevision.ValueKind != JsonValueKind.Null &&
+                previousRevision.ValueKind != JsonValueKind.Null)
+            {
+                var fromId = previousRevision.GetInt64();
+                var toId = currentRevision.GetInt64();
+                return $"/history?slug={Uri.EscapeDataString(activity.PageSlug)}&fromRevisionId={fromId}&toRevisionId={toId}&handler=Diff";
+            }
+        }
+        catch (JsonException)
+        {
+            // Fall back to history page if JSON parsing fails
+        }
+
+        return $"/{activity.PageSlug}/history";
     }
 
     private string GetTimeAgo(DateTimeOffset timestamp)
