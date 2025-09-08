@@ -662,6 +662,290 @@
             }
         </style>
         <link href="~/css/edit-page.css" rel="stylesheet" />
+
+        <!-- Collaborative Editing Scripts -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+        <script src="~/js/editor-collab.js"></script>
+        <script>
+            // Initialize collaborative editing
+            document.addEventListener('DOMContentLoaded', function() {
+                @if (!Model.IsNew && Model.PageId.HasValue)
+                {
+                    <text>
+                    const pageId = '@Model.PageId.Value';
+                    const clientId = '@Guid.NewGuid()';
+                    const userName = '@(User.Identity?.Name ?? "Anonymous")';
+                    
+                    // Initialize collaborative client
+                    window.collabClient = new CollabClient(pageId, clientId, userName);
+                    
+                    // Add collaborative status indicator with retry mechanism
+                    function addCollaborativeStatus() {
+                        console.log('🔍 Looking for .editor-status container...');
+                        const statusContainer = document.querySelector('.editor-status');
+                        console.log('🔍 Found statusContainer:', statusContainer);
+                        
+                        if (statusContainer) {
+                            const collabStatus = document.createElement('span');
+                            collabStatus.className = 'badge bg-secondary';
+                            collabStatus.id = 'collab-status';
+                            collabStatus.innerHTML = '<i class="bi bi-wifi me-1"></i>Connecting...';
+                            statusContainer.appendChild(collabStatus);
+                            console.log('✅ Added collaborative status badge');
+                            return true;
+                        }
+                        return false;
+                    }
+                    
+                    // Try immediately, then retry if needed
+                    if (!addCollaborativeStatus()) {
+                        console.log('⏳ Retrying status container in 500ms...');
+                        setTimeout(() => {
+                            if (!addCollaborativeStatus()) {
+                                console.log('⏳ Retrying status container in 1000ms...');
+                                setTimeout(addCollaborativeStatus, 1000);
+                            }
+                        }, 500);
+                    }
+                    
+                    // Add collaborative mode toggle
+                    function addCollaborativeModeToggle() {
+                        const toolbar = document.querySelector('.editor-toolbar .btn-group');
+                        if (toolbar) {
+                            const toggleBtn = document.createElement('button');
+                            toggleBtn.type = 'button';
+                            toggleBtn.className = 'btn btn-outline-info btn-sm';
+                            toggleBtn.id = 'collab-mode-toggle';
+                            toggleBtn.innerHTML = '<i class="bi bi-people me-1"></i>Collaborative Mode';
+                            toggleBtn.title = 'Toggle between single-user and collaborative editing';
+                            
+                            toolbar.appendChild(toggleBtn);
+                            
+                            // Add test button for debugging
+                            const testBtn = document.createElement('button');
+                            testBtn.type = 'button';
+                            testBtn.className = 'btn btn-outline-warning btn-sm';
+                            testBtn.innerHTML = '<i class="bi bi-bug me-1"></i>Test Update';
+                            testBtn.title = 'Send test collaborative update';
+                            testBtn.addEventListener('click', async () => {
+                                console.log('🧪 Running comprehensive collaborative test...');
+                                try {
+                                    await window.collabClient.testPushMethod();
+                                } catch (error) {
+                                    console.error('❌ Comprehensive test failed:', error);
+                                }
+                            });
+                            
+                            toolbar.appendChild(testBtn);
+                            
+                            // Toggle functionality
+                            let isCollaborativeMode = true; // Start in collaborative mode
+                            
+                            toggleBtn.addEventListener('click', () => {
+                                isCollaborativeMode = !isCollaborativeMode;
+                                
+                                if (isCollaborativeMode) {
+                                    toggleBtn.innerHTML = '<i class="bi bi-people me-1"></i>Collaborative Mode';
+                                    toggleBtn.className = 'btn btn-outline-info btn-sm';
+                                    console.log('🤝 Switched to collaborative mode');
+                                    
+                                    // Re-enable collaborative features
+                                    setupCollaborativeIntegration();
+                                } else {
+                                    toggleBtn.innerHTML = '<i class="bi bi-person me-1"></i>Single User Mode';
+                                    toggleBtn.className = 'btn btn-outline-secondary btn-sm';
+                                    console.log('👤 Switched to single-user mode');
+                                }
+                            });
+                            
+                            console.log('✅ Added collaborative mode toggle');
+                            return true;
+                        }
+                        return false;
+                    }
+                    
+                    // Add the toggle with retry
+                    setTimeout(() => {
+                        if (!addCollaborativeModeToggle()) {
+                            setTimeout(addCollaborativeModeToggle, 1000);
+                        }
+                    }, 500);
+                    
+                    // Handle connection events
+                    window.collabClient.on('connected', () => {
+                        const status = document.getElementById('collab-status');
+                        if (status) {
+                            status.className = 'badge bg-success';
+                            status.innerHTML = '<i class="bi bi-wifi me-1"></i>Collaborative';
+                        }
+                        console.log('📡 Collaborative editing connected');
+                    });
+                    
+                    window.collabClient.on('disconnected', () => {
+                        const status = document.getElementById('collab-status');
+                        if (status) {
+                            status.className = 'badge bg-danger';
+                            status.innerHTML = '<i class="bi bi-wifi-off me-1"></i>Disconnected';
+                        }
+                        console.log('📡 Collaborative editing disconnected');
+                    });
+                    
+                    window.collabClient.on('reconnecting', () => {
+                        const status = document.getElementById('collab-status');
+                        if (status) {
+                            status.className = 'badge bg-warning';
+                            status.innerHTML = '<i class="bi bi-wifi me-1"></i>Reconnecting...';
+                        }
+                        console.log('📡 Collaborative editing reconnecting...');
+                    });
+                    
+                    window.collabClient.on('error', (error) => {
+                        console.error('📡 Collaborative editing error:', error);
+                        const status = document.getElementById('collab-status');
+                        if (status) {
+                            status.className = 'badge bg-danger';
+                            status.innerHTML = '<i class="bi bi-wifi-off me-1"></i>Error';
+                        }
+                    });
+                    
+                    // Initialize with current content
+                    window.collabClient.on('initialized', () => {
+                        console.log('📡 Collaborative editing initialized');
+                        // If no collaborative content exists, initialize with current page content
+                        if (window.collabClient.blocks.length === 0) {
+                            const bodyTextarea = document.getElementById('body-textarea');
+                            if (bodyTextarea && bodyTextarea.value) {
+                                window.collabClient.fromMarkdown(bodyTextarea.value);
+                            }
+                        }
+                        
+                        // Hook into WikiEditor changes after initialization
+                        setupCollaborativeIntegration();
+                    });
+                    
+                    // Function to integrate with existing WikiEditor
+                    function setupCollaborativeIntegration() {
+                        console.log('🔗 Setting up collaborative integration with WikiEditor...');
+                        
+                        // Find the actual editor textarea (from EditorSimple component)
+                        const editorTextarea = document.querySelector('#body-textarea') || 
+                                              document.querySelector('textarea[name="Body"]') ||
+                                              document.querySelector('textarea[data-role="body"]');
+                        console.log('🔍 Found editor textarea:', editorTextarea);
+                        
+                        if (!editorTextarea) {
+                            console.log('⏳ Editor textarea not found, retrying in 500ms...');
+                            setTimeout(setupCollaborativeIntegration, 500);
+                            return;
+                        }
+                        
+                        let lastContent = editorTextarea.value;
+                        let isUpdatingFromCollaboration = false;
+                        
+                        // Monitor text changes and broadcast them
+                        async function onTextChange() {
+                            if (isUpdatingFromCollaboration) {
+                                console.log('🚫 Skipping change - updating from collaboration');
+                                return;
+                            }
+                            
+                            const currentContent = editorTextarea.value;
+                            if (currentContent !== lastContent) {
+                                console.log('📝 Text changed, broadcasting collaborative update');
+                                console.log('📝 Content length changed from', lastContent.length, 'to', currentContent.length);
+                                
+                                // Convert content to simple blocks and send collaborative update
+                                try {
+                                    // Clear existing blocks and recreate from content
+                                    window.collabClient.blocks = [];
+                                    window.collabClient.fromMarkdown(currentContent);
+                                    
+                                    // Create a simple block update
+                                    const update = {
+                                        type: 'content_update',
+                                        content: currentContent,
+                                        timestamp: Date.now(),
+                                        clientId: window.collabClient.clientId
+                                    };
+                                    
+                                    // Check connection state first
+                                    console.log('🔍 CollabClient connection state:', window.collabClient.isConnected);
+                                    console.log('🔍 Update to send:', update);
+                                    
+                                    // Send through collaborative client using existing API
+                                    await window.collabClient.sendUpdate(update);
+                                    console.log('✅ Collaborative update sent successfully');
+                                } catch (error) {
+                                    console.error('❌ Failed to send collaborative update:', error);
+                                }
+                                
+                                lastContent = currentContent;
+                            }
+                        }
+                        
+                        // Listen for input events
+                        editorTextarea.addEventListener('input', onTextChange);
+                        editorTextarea.addEventListener('paste', () => setTimeout(onTextChange, 10));
+                        editorTextarea.addEventListener('keyup', onTextChange);
+                        
+                        console.log('✅ Collaborative integration set up');
+                    }
+                    
+                    // Handle content changes from other users
+                    window.collabClient.on('content_change', (newContent) => {
+                        console.log('📥 Received content change from another user');
+                        
+                        const editorTextarea = document.querySelector('#body-textarea') || 
+                                              document.querySelector('textarea[name="Body"]') ||
+                                              document.querySelector('textarea[data-role="body"]');
+                        
+                        if (editorTextarea && newContent !== editorTextarea.value) {
+                            console.log('📝 Applying collaborative content change to local editor');
+                            
+                            // Temporarily disable our change listener to prevent loops
+                            const isUpdatingFromCollaboration = true;
+                            
+                            // Update the textarea
+                            editorTextarea.value = newContent;
+                            
+                            // Trigger input event to update the UI
+                            editorTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+                            
+                            // Re-enable change listener after a brief delay
+                            setTimeout(() => {
+                                isUpdatingFromCollaboration = false;
+                            }, 100);
+                        }
+                    });
+                    
+                    // Handle generic updates (for debugging)
+                    window.collabClient.on('update', () => {
+                        console.log('📥 Received generic update from collaborative system');
+                    });
+                    
+                    // Handle commit button for collaborative editing
+                    const commitButton = document.querySelector('[data-action="commit-changes"]');
+                    if (commitButton) {
+                        commitButton.addEventListener('click', async (e) => {
+                            e.preventDefault();
+                            try {
+                                const commitMessage = prompt('Enter commit message:') || 'Updated content';
+                                const revisionId = await window.collabClient.commit(commitMessage);
+                                if (revisionId) {
+                                    alert('Changes committed successfully!');
+                                    // Optionally redirect to view page
+                                    window.location.href = '/wiki/@Model.Slug';
+                                }
+                            } catch (error) {
+                                console.error('Failed to commit:', error);
+                                alert('Failed to commit changes: ' + error.message);
+                            }
+                        });
+                    }
+                    </text>
+                }
+            });
+        </script>
 }
 
 <!-- Upload Modal for Drag & Drop Integration -->

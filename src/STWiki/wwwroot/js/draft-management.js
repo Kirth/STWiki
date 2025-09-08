@@ -1,9 +1,12 @@
 // draft-management.js
 // Draft discard functionality and unsaved changes detection
 
+(function() {
+'use strict';
+
 console.log('🚀 Script block started - setting up draft management...');
 
-// Global state for tracking unsaved changes
+// Local state for tracking unsaved changes
 let hasUnsavedChanges = false;
 let originalContent = '';
 let currentPageId = null;
@@ -299,3 +302,5 @@ if (!document.getElementById('draft-animations')) {
     `;
     document.head.appendChild(style);
 }
+
+})(); // End of IIFE

@@ -18,6 +18,9 @@ public class AppDbContext : DbContext
     public DbSet<MediaFile> MediaFiles { get; set; } = default!;
     public DbSet<MediaThumbnail> MediaThumbnails { get; set; } = default!;
     public DbSet<PageMediaReference> PageMediaReferences { get; set; } = default!;
+    public DbSet<CollabSession> CollabSessions { get; set; } = default!;
+    public DbSet<CollabUpdate> CollabUpdates { get; set; } = default!;
+    public DbSet<CollabCheckpoint> CollabCheckpoints { get; set; } = default!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -198,6 +201,61 @@ public class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.BaseRevisionId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // CollabSession configuration and indexes
+        modelBuilder.Entity<CollabSession>(entity =>
+        {
+            entity.HasIndex(e => e.PageId)
+                .HasDatabaseName("IX_CollabSessions_PageId");
+
+            entity.HasIndex(e => new { e.PageId, e.ClosedAt })
+                .HasDatabaseName("IX_CollabSessions_PageId_ClosedAt");
+
+            entity.Property(e => e.CheckpointBytes)
+                .HasColumnType("bytea");
+
+            entity.HasOne(s => s.Page)
+                .WithMany()
+                .HasForeignKey(s => s.PageId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CollabUpdate configuration and indexes
+        modelBuilder.Entity<CollabUpdate>(entity =>
+        {
+            entity.Property(e => e.Id)
+                .UseSerialColumn();
+
+            entity.HasIndex(e => new { e.SessionId, e.Id })
+                .HasDatabaseName("IX_CollabUpdates_SessionId_Id");
+
+            entity.HasIndex(e => e.CreatedAt)
+                .HasDatabaseName("IX_CollabUpdates_CreatedAt");
+
+            entity.Property(e => e.UpdateBytes)
+                .HasColumnType("bytea");
+
+            entity.HasOne(u => u.Session)
+                .WithMany(s => s.Updates)
+                .HasForeignKey(u => u.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // CollabCheckpoint configuration and indexes
+        modelBuilder.Entity<CollabCheckpoint>(entity =>
+        {
+            entity.HasIndex(e => new { e.SessionId, e.Version })
+                .IsUnique()
+                .HasDatabaseName("IX_CollabCheckpoints_SessionId_Version");
+
+            entity.Property(e => e.SnapshotBytes)
+                .HasColumnType("bytea");
+
+            entity.HasOne(c => c.Session)
+                .WithMany(s => s.Checkpoints)
+                .HasForeignKey(c => c.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

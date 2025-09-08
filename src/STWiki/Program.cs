@@ -25,6 +25,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AddPageRoute("/Wiki/History", "/history");
 });
 builder.Services.AddServerSideBlazor();
+builder.Services.AddSignalR();
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 
@@ -40,6 +41,12 @@ builder.Services.AddScoped<STWiki.Services.AdvancedSearchService>();
 builder.Services.AddScoped<STWiki.Services.UserService>();
 builder.Services.AddScoped<STWiki.Services.AdminService>();
 builder.Services.AddScoped<STWiki.Services.IDiffCacheService, STWiki.Services.DiffCacheService>();
+
+// Add collaborative editing services
+builder.Services.AddScoped<STWiki.Services.ICollabStore, STWiki.Services.CollabStore>();
+builder.Services.AddScoped<STWiki.Services.ICollabMaterializer, STWiki.Services.CollabMaterializer>();
+builder.Services.AddHostedService<STWiki.Services.CollabCheckpointService>();
+
 builder.Services.AddHttpClient();
 builder.Services.AddTransient<IClaimsTransformation, ClaimsTransformation>();
 
@@ -50,6 +57,8 @@ builder.Services.Configure<MediaConfiguration>(
     builder.Configuration.GetSection(MediaConfiguration.SectionName));
 builder.Services.Configure<STWiki.Services.DiffCacheOptions>(
     builder.Configuration.GetSection(STWiki.Services.DiffCacheOptions.SectionName));
+builder.Services.Configure<STWiki.Services.CollabOptions>(
+    builder.Configuration.GetSection("Collab"));
 
 // Add media services
 var storageConfig = builder.Configuration.GetSection(ObjectStorageConfiguration.SectionName).Get<ObjectStorageConfiguration>() 
@@ -225,6 +234,7 @@ app.UseAuthorization();
 
 app.MapRazorPages();
 app.MapBlazorHub();
+app.MapHub<STWiki.Hubs.CollabHub>("/hubs/collab");
 app.MapControllers();
 
 // Default redirect to home page
