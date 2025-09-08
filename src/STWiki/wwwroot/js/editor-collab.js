@@ -149,7 +149,18 @@ class CollabClient {
             // Handle different data formats
             let text;
             if (typeof bytes === 'string') {
-                text = bytes;
+                // Check if it's base64 encoded
+                if (bytes.match(/^[A-Za-z0-9+/=]+$/)) {
+                    try {
+                        text = atob(bytes);
+                        console.log('🔓 Decoded base64 checkpoint:', text);
+                    } catch (e) {
+                        console.warn('Not valid base64, treating as plain text');
+                        text = bytes;
+                    }
+                } else {
+                    text = bytes;
+                }
             } else if (bytes instanceof ArrayBuffer || bytes instanceof Uint8Array) {
                 text = new TextDecoder().decode(bytes);
             } else if (Array.isArray(bytes)) {

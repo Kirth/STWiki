@@ -106,35 +106,40 @@ window.initWikiEditor = function(containerId, initialContent, format, dotNetRef)
             }
         }
 
-        // Enhanced CollabPlugin that bridges to Blazor SignalR
+        // Enhanced CollabPlugin that bridges directly to CollabClient (bypassing Blazor)
         class STWikiCollabPlugin extends CollabPlugin {
             constructor(editor, dotNetRef) {
                 super(editor, {
                     send: (operation) => {
-                        // Bridge to existing Blazor collaboration system
-                        console.log(`📡 [V2] Sending operation via Blazor:`, operation);
+                        // Bridge directly to CollabClient instead of Blazor
+                        console.log(`📡 [V2] Sending operation via CollabClient:`, operation);
                         
-                        // Convert to format expected by existing system
-                        if (dotNetRef) {
+                        // Check if CollabClient exists and is connected
+                        if (window.collabClient && window.collabClient.isConnected) {
                             try {
-                                switch(operation.type) {
-                                    case 'insert':
-                                        dotNetRef.invokeMethodAsync('OnTextChange', this.editor.value, operation.position, 'insert', operation.content || operation.text || '');
-                                        break;
-                                    case 'delete':
-                                        dotNetRef.invokeMethodAsync('OnTextChange', this.editor.value, operation.position, 'delete', '');
-                                        break;
-                                    case 'replace':
-                                        dotNetRef.invokeMethodAsync('OnTextReplace', operation.selectionStart || operation.start, operation.selectionEnd || operation.end, operation.content || operation.text || '');
-                                        break;
-                                    case 'set':
-                                        // Treat as replace operation for full content updates
-                                        dotNetRef.invokeMethodAsync('OnTextReplace', 0, this.lastValue?.length || 0, operation.value || this.editor.value);
-                                        break;
-                                }
+                                // Convert WikiEditor operation to CollabClient update format
+                                const update = {
+                                    type: 'content_update',
+                                    content: this.editor.value,
+                                    timestamp: Date.now(),
+                                    clientId: window.collabClient.clientId,
+                                    operation: {
+                                        type: operation.type,
+                                        position: operation.position,
+                                        content: operation.content || operation.text || operation.value || '',
+                                        start: operation.selectionStart || operation.start,
+                                        end: operation.selectionEnd || operation.end
+                                    }
+                                };
+                                
+                                // Send through CollabClient
+                                window.collabClient.sendUpdate(update);
+                                console.log('✅ [V2] Operation sent via CollabClient successfully');
                             } catch (e) {
-                                console.error('Failed to send operation to Blazor:', e);
+                                console.error('❌ [V2] Failed to send operation via CollabClient:', e);
                             }
+                        } else {
+                            console.warn('⚠️ [V2] CollabClient not available or not connected, operation not sent:', operation);
                         }
                     }
                 });
@@ -155,6 +160,34 @@ window.initWikiEditor = function(containerId, initialContent, format, dotNetRef)
                 });
                 this.lastValue = v;
             }
+            
+            // Method to receive updates from CollabClient
+            applyRemoteUpdate(content) {
+                console.log('📥 [V2] Applying remote update to WikiEditor:', content.substring(0, 100) + '...');
+                
+                // Prevent triggering our own onInput handler
+                this.editor.state.isRemote = true;
+                
+                // Get current cursor position
+                const cursorPosition = this.editor.textarea.selectionStart;
+                const cursorEnd = this.editor.textarea.selectionEnd;
+                
+                // Update editor content using the correct WikiEditor API
+                this.editor.value = content;
+                
+                // Restore cursor position (approximate)
+                const newLength = content.length;
+                const adjustedCursor = Math.min(cursorPosition, newLength);
+                const adjustedEnd = Math.min(cursorEnd, newLength);
+                this.editor.textarea.setSelectionRange(adjustedCursor, adjustedEnd);
+                
+                // Re-enable local input handling after a brief delay
+                setTimeout(() => {
+                    this.editor.state.isRemote = false;
+                }, 100);
+                
+                console.log('✅ [V2] Remote update applied to WikiEditor');
+            }
         }
 
         // Initialize editor with all plugins
@@ -173,10 +206,12 @@ window.initWikiEditor = function(containerId, initialContent, format, dotNetRef)
             ]
         });
 
-        // Store editor reference for later cleanup
+        // Store editor reference and collaboration plugin for later use
+        const collabPlugin = editor.plugins.find(p => p instanceof STWikiCollabPlugin);
         window.wikiEditors.set(containerId, {
             editor,
-            dotNetRef
+            dotNetRef,
+            collabPlugin
         });
 
         console.log(`✅ [V2] Modular editor initialized successfully for ${containerId}`);
