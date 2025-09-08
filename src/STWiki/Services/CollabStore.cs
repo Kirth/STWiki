@@ -84,12 +84,34 @@ public class CollabStore : ICollabStore
         if (activeSession != null)
             return activeSession;
 
+        // Get the current saved page content to initialize the session
+        var page = await _context.Pages.FindAsync(pageId);
+        byte[]? initialCheckpoint = null;
+        
+        if (page != null && !string.IsNullOrEmpty(page.Body))
+        {
+            // Convert page content to collaborative format (simple JSON structure)
+            var initialContent = new
+            {
+                type = "content_update",
+                content = page.Body,
+                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                clientId = "system"
+            };
+            
+            initialCheckpoint = System.Text.Encoding.UTF8.GetBytes(JsonSerializer.Serialize(initialContent));
+            
+            _logger.LogInformation("Initializing new collaboration session with saved page content ({ContentLength} characters)",
+                page.Body.Length);
+        }
+
         var newSession = new CollabSession
         {
             Id = Guid.NewGuid(),
             PageId = pageId,
             CreatedAt = DateTimeOffset.UtcNow,
-            CheckpointVersion = 0
+            CheckpointVersion = 0,
+            CheckpointBytes = initialCheckpoint
         };
 
         _context.CollabSessions.Add(newSession);
@@ -245,11 +267,38 @@ public class CollabStore : ICollabStore
         if (!updates.Any()) return;
 
         // Apply updates to create new checkpoint
-        // TODO: Implement CRDT folding logic here
-        // For now, just use the last update as checkpoint
+        // Since our updates are full content replacements (content_update), 
+        // the latest update contains the complete current state
         var latestUpdate = updates.Last();
         
-        session.CheckpointBytes = latestUpdate.UpdateBytes;
+        // Verify this is a content update with full state
+        try
+        {
+            var updateJson = System.Text.Encoding.UTF8.GetString(latestUpdate.UpdateBytes);
+            var updateObj = JsonSerializer.Deserialize<JsonElement>(updateJson);
+            
+            if (updateObj.TryGetProperty("type", out var typeElement) && 
+                typeElement.GetString() == "content_update" &&
+                updateObj.TryGetProperty("content", out var contentElement))
+            {
+                // This is a valid content update - use it as checkpoint
+                session.CheckpointBytes = latestUpdate.UpdateBytes;
+                _logger.LogInformation("Created checkpoint for session {SessionId} from {UpdateCount} updates", 
+                    sessionId, updates.Count);
+            }
+            else
+            {
+                _logger.LogWarning("Latest update for session {SessionId} is not a content_update, keeping existing checkpoint", 
+                    sessionId);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse latest update for session {SessionId}, keeping existing checkpoint", 
+                sessionId);
+            return;
+        }
         session.CheckpointVersion = latestUpdate.Id;
 
         await _context.SaveChangesAsync(ct);

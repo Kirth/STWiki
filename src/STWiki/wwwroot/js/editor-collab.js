@@ -117,8 +117,18 @@ class CollabClient {
     // Apply checkpoint data
     applyCheckpoint(checkpointBytes) {
         try {
-            const checkpointData = this.bytesToBlocks(checkpointBytes);
-            this.blocks = checkpointData;
+            const checkpointData = this.parseUpdateData(checkpointBytes);
+            console.log('📥 Applying checkpoint:', checkpointData);
+            
+            // Handle checkpoint similar to updates
+            if (checkpointData.type === 'content_update') {
+                // Initialize with content and emit to listeners (like WikiEditor)
+                this.emit('content_change', checkpointData.content);
+            } else {
+                // Fallback: try to convert to blocks for legacy checkpoints
+                const blocks = this.bytesToBlocks(checkpointBytes);
+                this.blocks = blocks;
+            }
         } catch (error) {
             console.error("Failed to apply checkpoint:", error);
         }
@@ -186,11 +196,23 @@ class CollabClient {
         }
     }
 
-    // Parse update data (now expects string directly)
+    // Parse update data (handles both JSON strings and base64-encoded strings)
     parseUpdateData(data) {
         try {
             if (typeof data === 'string') {
-                return JSON.parse(data);
+                // Check if it's base64 encoded
+                if (data.match(/^[A-Za-z0-9+/=]+$/)) {
+                    try {
+                        const decoded = atob(data);
+                        console.log('🔓 Decoded base64 update:', decoded);
+                        return JSON.parse(decoded);
+                    } catch (e) {
+                        console.warn('Not valid base64, treating as plain JSON');
+                        return JSON.parse(data);
+                    }
+                } else {
+                    return JSON.parse(data);
+                }
             } else if (typeof data === 'object') {
                 // Already parsed object
                 return data;

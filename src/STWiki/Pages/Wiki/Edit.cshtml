@@ -694,8 +694,12 @@
                             console.log('WikiEditor current content preview:', 
                                 window.wikiEditorCollabPlugin.editor.value.substring(0, 100) + '...');
                         }
+                        console.log('Pending initial content:', !!pendingInitialContent);
                         console.log('=== END DEBUG INFO ===');
                     };
+                    
+                    // Variable to track if we need to apply initial collaborative content
+                    let pendingInitialContent = null;
                     
                     // Add collaborative status indicator with retry mechanism
                     function addCollaborativeStatus() {
@@ -870,17 +874,30 @@
                         // Store reference for easier access
                         window.wikiEditorCollabPlugin = editorInstance.collabPlugin;
                         
-                        // The WikiEditor collaboration plugin will now send updates directly to CollabClient
-                        // when users type - no manual event listeners needed!
+                        // Apply any pending initial content that was processed before WikiEditor was ready
+                        if (pendingInitialContent) {
+                            console.log('📝 Applying pending initial collaborative content to WikiEditor');
+                            window.wikiEditorCollabPlugin.applyRemoteUpdate(pendingInitialContent);
+                            
+                            // Sync to hidden textarea
+                            const hiddenTextarea = document.querySelector('#body-textarea') || 
+                                                 document.querySelector('textarea[name="Body"]');
+                            if (hiddenTextarea) {
+                                hiddenTextarea.value = pendingInitialContent;
+                                console.log('🔄 Synced initial collaborative content to hidden textarea');
+                            }
+                            
+                            pendingInitialContent = null;
+                        }
                         
                         console.log('✅ WikiEditor collaboration integration complete');
                     }
                     
-                    // Handle content changes from other users
+                    // Handle content changes from other users (including initial content)
                     window.collabClient.on('content_change', (newContent) => {
-                        console.log('📥 Received content change from another user');
+                        console.log('📥 Received content change:', newContent.substring(0, 50) + '...');
                         
-                        // Apply update through WikiEditor collaboration plugin
+                        // Apply update through WikiEditor collaboration plugin if ready
                         if (window.wikiEditorCollabPlugin) {
                             window.wikiEditorCollabPlugin.applyRemoteUpdate(newContent);
                             
@@ -892,7 +909,9 @@
                                 console.log('🔄 Synced content to hidden textarea for form submission');
                             }
                         } else {
-                            console.warn('⚠️ WikiEditor collaboration plugin not available, cannot apply remote update');
+                            // WikiEditor not ready yet - store content to apply later
+                            console.log('⏳ WikiEditor not ready, storing content for later application');
+                            pendingInitialContent = newContent;
                         }
                     });
                     
